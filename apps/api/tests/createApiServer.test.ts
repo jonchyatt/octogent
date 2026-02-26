@@ -16,6 +16,10 @@ class FakeTmuxClient implements TmuxClient {
     return this.sessions.has(sessionName);
   }
 
+  capturePane(sessionName: string): string {
+    return this.sessions.has(sessionName) ? "fake tmux snapshot\n" : "";
+  }
+
   createSession({
     sessionName,
     cwd,

@@ -57,6 +57,7 @@ type TentacleRegistryDocument = {
 export type TmuxClient = {
   assertAvailable(): void;
   hasSession(sessionName: string): boolean;
+  capturePane(sessionName: string): string;
   createSession(options: { sessionName: string; cwd: string; command: string }): void;
   killSession(sessionName: string): void;
 };
@@ -211,6 +212,24 @@ const createDefaultTmuxClient = (): TmuxClient => ({
     } catch (error) {
       if (isMissingTmuxSessionError(error)) {
         return false;
+      }
+      throw error;
+    }
+  },
+
+  capturePane(sessionName) {
+    try {
+      return execFileSync(
+        "tmux",
+        ["capture-pane", "-a", "-e", "-p", "-S", "-32768", "-t", sessionName],
+        {
+          encoding: "utf8",
+          stdio: "pipe",
+        },
+      );
+    } catch (error) {
+      if (isMissingTmuxSessionError(error)) {
+        return "";
       }
       throw error;
     }
@@ -524,10 +543,6 @@ export const createTerminalRuntime = ({
     return session;
   };
 
-  for (const tentacleId of tentacles.keys()) {
-    ensureSession(tentacleId);
-  }
-
   const createTentacle = (tentacleName?: string): AgentSnapshot => {
     const tentacleId = allocateTentacleId();
     const tentacle: PersistedTentacle = {
@@ -540,7 +555,7 @@ export const createTerminalRuntime = ({
     persistRegistry();
 
     try {
-      ensureSession(tentacleId);
+      ensureTmuxSession(tentacleId);
     } catch (error) {
       tentacles.delete(tentacleId);
       persistRegistry();
@@ -602,6 +617,13 @@ export const createTerminalRuntime = ({
 
         session.clients.add(websocket);
         appendDebugLog(session, `ws-open tentacle=${tentacleId} clients=${session.clients.size}`);
+        const paneSnapshot = tmuxClient.capturePane(tmuxSessionNameForTentacle(tentacleId));
+        if (paneSnapshot.length > 0) {
+          sendMessage(websocket, {
+            type: "output",
+            data: paneSnapshot,
+          });
+        }
         sendMessage(websocket, {
           type: "state",
           state: session.codexState,
@@ -652,6 +674,9 @@ export const createTerminalRuntime = ({
             session,
             `ws-close tentacle=${tentacleId} clients=${session.clients.size}`,
           );
+          if (session.clients.size === 0) {
+            closeSession(tentacleId);
+          }
         });
       });
 
