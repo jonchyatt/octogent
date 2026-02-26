@@ -12,7 +12,9 @@
   --term-warning: #ffb020;
   --control-border-strong: #121212;
   --control-bg-strong: #000000;
-  --control-font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  --font-main: "PP Neue Machina Plain", "PP Neue Machina", "JetBrains Mono", "IBM Plex Mono",
+    monospace;
+  --control-font-family: var(--font-main);
   --control-letter-spacing: 0.06em;
   --control-line-height: 1.2;
   --ui-base-font-size: 18px;
@@ -41,7 +43,7 @@ html {
 }
 
 body {
-  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-family: var(--font-main);
   background: radial-gradient(circle at top right, #111111, var(--bg-canvas) 50%);
   color: var(--text-primary);
   overflow: hidden;
@@ -84,7 +86,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-secondary);
-  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-family: var(--font-main);
   font-size: 0.8rem;
   font-weight: 700;
   line-height: 1.2;
@@ -369,7 +371,7 @@ body {
   letter-spacing: 0.07em;
   font-size: 0.54rem;
   color: var(--accent-primary);
-  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-family: var(--font-main);
   font-weight: 700;
   line-height: 1.2;
 }
@@ -807,7 +809,7 @@ body {
   min-width: 0;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-family: var(--font-main);
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1.25;
@@ -850,7 +852,7 @@ body {
   border-radius: 0;
   background: color-mix(in srgb, var(--accent-primary) 92%, #ffffff 8%);
   color: #121212;
-  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-family: var(--font-main);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -868,7 +870,7 @@ body {
   border: 1px solid color-mix(in srgb, #121212 35%, transparent);
   background: color-mix(in srgb, #ffffff 28%, var(--accent-primary));
   color: #121212;
-  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-family: var(--font-main);
   font-size: 0.56rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -935,7 +937,7 @@ body {
 .delete-confirm-header h2 {
   margin: 0;
   color: #ff8f8f;
-  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-family: var(--font-main);
   font-weight: 700;
   font-size: 0.66rem;
   text-transform: uppercase;
@@ -1051,7 +1053,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-family: var(--font-main);
   font-weight: 700;
   font-size: 0.75rem;
   line-height: 1.25;

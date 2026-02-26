@@ -95,7 +95,7 @@ When refining the web visual system in `test-page.html`, keep using shared desig
 
 ### Brand Typography Preference
 
-Use `Press Start 2P` for brand/header labels in the web UI (the chrome `Octogent` title, `Active Agents`, `New tentacle`, tentacle column headers, and terminal window headers). Keep body/content typography on more readable monospace fonts.
+Use `PP Neue Machina Plain` as the primary UI font for web chrome, controls, and headers. Keep terminal/session output on readable monospace fonts for alignment-sensitive content.
 
 ### UI Legibility Preference
 

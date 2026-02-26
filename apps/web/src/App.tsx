@@ -8,7 +8,7 @@ import type {
 
 import { ActiveAgentsSidebar } from "./components/ActiveAgentsSidebar";
 import type { CodexState } from "./components/CodexStateBadge";
-import { EmptyOctopus, OctopusGlyph } from "./components/EmptyOctopus";
+import { EmptyOctopus } from "./components/EmptyOctopus";
 import { TentacleTerminal } from "./components/TentacleTerminal";
 import { ActionButton } from "./components/ui/ActionButton";
 import {
@@ -760,10 +760,7 @@ export const App = () => {
           </button>
         </div>
 
-        <div className="chrome-brand" aria-label="Octogent brand">
-          <OctopusGlyph className="chrome-octopus" />
-          <h1>Octogent</h1>
-        </div>
+        <div className="chrome-brand" aria-hidden="true" />
 
         <div className="chrome-right">
           <ActionButton
