@@ -6,10 +6,11 @@ import {
   type CodexUsageSnapshot,
   readCodexUsageSnapshot as readCodexUsageSnapshotDefault,
 } from "./codexUsage";
-import { createTerminalRuntime } from "./terminalRuntime";
+import { createTerminalRuntime, type TmuxClient } from "./terminalRuntime";
 
 type CreateApiServerOptions = {
   workspaceCwd?: string;
+  tmuxClient?: TmuxClient;
   readCodexUsageSnapshot?: () => Promise<CodexUsageSnapshot>;
 };
 
@@ -86,11 +87,17 @@ const parseTentacleName = (payload: unknown) => {
 
 export const createApiServer = ({
   workspaceCwd,
+  tmuxClient,
   readCodexUsageSnapshot = readCodexUsageSnapshotDefault,
 }: CreateApiServerOptions = {}) => {
-  const runtime = createTerminalRuntime({
+  const runtimeOptions: Parameters<typeof createTerminalRuntime>[0] = {
     workspaceCwd: workspaceCwd ?? resolve(process.cwd(), "../.."),
-  });
+  };
+  if (tmuxClient) {
+    runtimeOptions.tmuxClient = tmuxClient;
+  }
+
+  const runtime = createTerminalRuntime(runtimeOptions);
 
   const server = createServer(async (request, response) => {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");

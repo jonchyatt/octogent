@@ -5,6 +5,7 @@
 - If `pnpm test` fails with missing browser APIs, ensure the `jsdom` dependency is installed.
 - If workspace package resolution fails, run `pnpm install` from the repository root (not inside a subpackage).
 - If Node version is older than 22, switch runtime before running commands.
+- If API startup fails with a tmux error, install `tmux` and verify `tmux -V` works in your shell.
 
 ## Quality gates
 
@@ -12,14 +13,14 @@
 - Triggered on push to `main` and on pull requests.
 - Runs `pnpm lint`, `pnpm test`, and `pnpm build`.
 
+## Runtime persistence notes
+
+- Tentacle metadata is persisted at `.octogent/state/tentacles.json`.
+- Runtime restores tentacles from that registry on startup and does not auto-create a default tentacle.
+- Each tentacle maps to a tmux session named `octogent.<tentacleId>`.
+- Orphan tmux sessions without a registry entry are ignored.
+- `DELETE /api/tentacles/:tentacleId` removes both registry state and the associated tmux session.
+
 ## Known limitations (scratch baseline)
 
-- Runtime API is non-persistent (all state is in-memory).
-  - `GET /api/agent-snapshots` returns active in-memory tentacle root agents (with optional `tentacleName` display labels).
-  - `POST /api/tentacles` creates a new tentacle session, optionally with `{ "name": string }`.
-  - `PATCH /api/tentacles/:tentacleId` renames an existing tentacle display name.
-  - `DELETE /api/tentacles/:tentacleId` deletes an existing tentacle session.
-  - `WS /api/terminals/:tentacleId/ws` streams interactive shell sessions.
-  - Tentacle sessions remain alive when no websocket clients are attached; explicit delete closes them.
 - Production backend API and auth are not implemented yet.
-- No persistence or auth layer yet.

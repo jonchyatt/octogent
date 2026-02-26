@@ -35,6 +35,7 @@ In dev mode:
 
 - `apps/api` runs on `http://127.0.0.1:8787`.
 - `apps/web` runs on `http://localhost:5173` and proxies `/api` and terminal websocket traffic to `apps/api`.
+- `apps/api` requires `tmux` on `PATH` for terminal persistence.
 - Runtime endpoints:
   - `GET /api/agent-snapshots`
   - `POST /api/tentacles` (`{ "name"?: string }`)
@@ -58,7 +59,7 @@ GitHub Actions runs the same `lint`, `test`, and `build` checks on pushes to `ma
 ## Repo layout
 
 - `apps/web` - web UI shell
-- `apps/api` - runtime API service (currently in-memory, no persistence yet)
+- `apps/api` - runtime API service with tmux-backed persistent tentacle terminals
 - `packages/core` - application/domain/ports/adapters core logic
 - `docs` - contributor and architecture documentation
 - `context` - long-term project context and decisions

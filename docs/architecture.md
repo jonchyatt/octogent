@@ -7,7 +7,7 @@ Octogent is organized with a ports-and-adapters approach.
 - Domain and application logic live in `packages/core/src/domain` and `packages/core/src/application`.
 - System boundaries are expressed as interfaces in `packages/core/src/ports`.
 - Concrete implementations for tests/local execution live in `packages/core/src/adapters`.
-- API runtime service in `apps/api` handles HTTP/WS transport and runtime orchestration (`node-pty` sessions).
+- API runtime service in `apps/api` handles HTTP/WS transport and runtime orchestration (`node-pty` attached to `tmux` sessions).
 - UI in `apps/web` consumes use-cases from `@octogent/core` and calls runtime APIs through dedicated adapters.
 
 ## Current scratch scope
@@ -23,7 +23,9 @@ Octogent is organized with a ports-and-adapters approach.
   - `PATCH /api/tentacles/:tentacleId` (rename tentacle display name while keeping id stable)
   - `DELETE /api/tentacles/:tentacleId` (delete a tentacle session and remove it from active snapshots)
   - `WS /api/terminals/:tentacleId/ws` (interactive shell stream via `node-pty`)
-- Runtime bootstraps one default tentacle on startup and initializes created tentacles with `codex`
+- Runtime requires `tmux` and persists tentacle registry state to `.octogent/state/tentacles.json`
+- Runtime restores tentacles from registry on startup (no implicit default tentacle)
+- Tentacles attach to stable `tmux` sessions (`octogent.<tentacleId>`) and initialize newly created sessions with `codex`
 - Snapshot payloads include stable `tentacleId` plus optional `tentacleName` for UI display
 - Minimized tentacles are hidden from the board in client state and restored from sidebar actions
 - Shared runtime endpoint builders in `apps/web/src/runtime/runtimeEndpoints.ts` with optional `VITE_OCTOGENT_API_ORIGIN` override for external backends

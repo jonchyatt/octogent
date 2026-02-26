@@ -1,12 +1,13 @@
+import { execFileSync } from "node:child_process";
 import {
-  constants,
   type WriteStream,
-  accessSync,
   chmodSync,
   createWriteStream,
   existsSync,
   mkdirSync,
+  readFileSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import type { IncomingMessage } from "node:http";
 import { createRequire } from "node:module";
@@ -35,17 +36,41 @@ type TerminalServerMessage = TerminalStateMessage | TerminalOutputMessage;
 type TerminalSession = {
   pty: IPty;
   clients: Set<WebSocket>;
-  createdAt: string;
-  tentacleName: string;
   codexState: CodexRuntimeState;
   stateTracker: CodexStateTracker;
   statePollTimer?: ReturnType<typeof setInterval>;
   debugLog?: WriteStream;
 };
 
+type PersistedTentacle = {
+  tentacleId: string;
+  tentacleName: string;
+  createdAt: string;
+};
+
+type TentacleRegistryDocument = {
+  version: 1;
+  nextTentacleNumber: number;
+  tentacles: PersistedTentacle[];
+};
+
+export type TmuxClient = {
+  assertAvailable(): void;
+  hasSession(sessionName: string): boolean;
+  createSession(options: { sessionName: string; cwd: string; command: string }): void;
+  killSession(sessionName: string): void;
+};
+
 type CreateTerminalRuntimeOptions = {
   workspaceCwd: string;
+  tmuxClient?: TmuxClient;
 };
+
+const TENTACLE_ID_PREFIX = "tentacle-";
+const TMUX_SESSION_PREFIX = "octogent.";
+const TENTACLE_REGISTRY_VERSION = 1;
+const TENTACLE_REGISTRY_RELATIVE_PATH = ".octogent/state/tentacles.json";
+const TENTACLE_BOOTSTRAP_COMMAND = "codex";
 
 const createShellEnvironment = () => {
   const env: Record<string, string> = {};
@@ -87,35 +112,6 @@ const ensureNodePtySpawnHelperExecutable = () => {
   }
 };
 
-const canExecute = (path: string) => {
-  try {
-    accessSync(path, constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const resolveShellCommand = () => {
-  if (process.platform === "win32") {
-    return {
-      shell: process.env.COMSPEC || "powershell.exe",
-      args: ["-NoLogo"],
-    };
-  }
-
-  const candidates = [process.env.SHELL, "/bin/zsh", "/bin/bash", "/bin/sh"].filter(
-    (value): value is string => typeof value === "string" && value.length > 0,
-  );
-  const shell = candidates.find((candidate) => canExecute(candidate)) ?? "/bin/sh";
-  const args = shell.endsWith("/sh") ? [] : ["-i"];
-
-  return {
-    shell,
-    args,
-  };
-};
-
 const getTentacleId = (request: IncomingMessage) => {
   if (!request.url) {
     return null;
@@ -144,8 +140,6 @@ const broadcastMessage = (session: TerminalSession, message: TerminalServerMessa
   }
 };
 
-const TENTACLE_ID_PREFIX = "tentacle-";
-
 const parseTentacleNumber = (tentacleId: string): number | null => {
   if (!tentacleId.startsWith(TENTACLE_ID_PREFIX)) {
     return null;
@@ -164,13 +158,201 @@ const parseTentacleNumber = (tentacleId: string): number | null => {
   return parsed;
 };
 
-export const createTerminalRuntime = ({ workspaceCwd }: CreateTerminalRuntimeOptions) => {
+const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+const tmuxSessionNameForTentacle = (tentacleId: string) => `${TMUX_SESSION_PREFIX}${tentacleId}`;
+
+const readCommandErrorOutput = (error: unknown) => {
+  if (!error || typeof error !== "object") {
+    return "";
+  }
+
+  const stderr = (error as { stderr?: unknown }).stderr;
+  if (typeof stderr === "string") {
+    return stderr;
+  }
+  if (stderr instanceof Buffer) {
+    return stderr.toString("utf8");
+  }
+  return "";
+};
+
+const isMissingTmuxSessionError = (error: unknown) => {
+  if (
+    error &&
+    typeof error === "object" &&
+    typeof (error as { status?: unknown }).status === "number" &&
+    (error as { status: number }).status === 1
+  ) {
+    return true;
+  }
+
+  const output = readCommandErrorOutput(error).toLowerCase();
+  return output.includes("can't find session") || output.includes("no server running");
+};
+
+const createDefaultTmuxClient = (): TmuxClient => ({
+  assertAvailable() {
+    try {
+      execFileSync("tmux", ["-V"], { stdio: "ignore" });
+    } catch (error) {
+      throw new Error(`tmux is required for terminal runtime: ${toErrorMessage(error)}`);
+    }
+  },
+
+  hasSession(sessionName) {
+    try {
+      execFileSync("tmux", ["has-session", "-t", sessionName], { stdio: "pipe" });
+      return true;
+    } catch (error) {
+      if (isMissingTmuxSessionError(error)) {
+        return false;
+      }
+      throw error;
+    }
+  },
+
+  createSession({ sessionName, cwd, command }) {
+    execFileSync("tmux", ["new-session", "-d", "-s", sessionName, "-c", cwd, command], {
+      stdio: "pipe",
+    });
+  },
+
+  killSession(sessionName) {
+    try {
+      execFileSync("tmux", ["kill-session", "-t", sessionName], { stdio: "pipe" });
+    } catch (error) {
+      if (isMissingTmuxSessionError(error)) {
+        return;
+      }
+      throw error;
+    }
+  },
+});
+
+const parseRegistryDocument = (
+  raw: string,
+  registryPath: string,
+): { tentacles: Map<string, PersistedTentacle>; nextTentacleNumber: number } => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`Invalid tentacle registry JSON (${registryPath}): ${toErrorMessage(error)}`);
+  }
+
+  if (parsed === null || typeof parsed !== "object") {
+    throw new Error(`Invalid tentacle registry shape (${registryPath}).`);
+  }
+
+  const record = parsed as Record<string, unknown>;
+  if (record.version !== TENTACLE_REGISTRY_VERSION) {
+    throw new Error(
+      `Unsupported tentacle registry version in ${registryPath}: ${String(record.version)}`,
+    );
+  }
+
+  const rawTentacles = record.tentacles;
+  if (!Array.isArray(rawTentacles)) {
+    throw new Error(`Invalid tentacle registry tentacles array (${registryPath}).`);
+  }
+
+  const tentacles = new Map<string, PersistedTentacle>();
+  let maxTentacleNumber = 0;
+
+  for (const item of rawTentacles) {
+    if (item === null || typeof item !== "object") {
+      throw new Error(`Invalid tentacle entry in registry (${registryPath}).`);
+    }
+
+    const entry = item as Record<string, unknown>;
+    const tentacleId = typeof entry.tentacleId === "string" ? entry.tentacleId : null;
+    const tentacleName = typeof entry.tentacleName === "string" ? entry.tentacleName : null;
+    const createdAt = typeof entry.createdAt === "string" ? entry.createdAt : null;
+
+    if (!tentacleId || !tentacleName || !createdAt) {
+      throw new Error(`Incomplete tentacle entry in registry (${registryPath}).`);
+    }
+
+    const tentacleNumber = parseTentacleNumber(tentacleId);
+    if (tentacleNumber === null) {
+      throw new Error(`Invalid tentacle id in registry (${registryPath}): ${tentacleId}`);
+    }
+
+    if (tentacles.has(tentacleId)) {
+      throw new Error(`Duplicate tentacle id in registry (${registryPath}): ${tentacleId}`);
+    }
+
+    maxTentacleNumber = Math.max(maxTentacleNumber, tentacleNumber);
+    tentacles.set(tentacleId, {
+      tentacleId,
+      tentacleName,
+      createdAt,
+    });
+  }
+
+  const rawNextTentacleNumber = record.nextTentacleNumber;
+  const nextTentacleNumber =
+    typeof rawNextTentacleNumber === "number" &&
+    Number.isInteger(rawNextTentacleNumber) &&
+    rawNextTentacleNumber >= 1
+      ? rawNextTentacleNumber
+      : 1;
+
+  return {
+    tentacles,
+    nextTentacleNumber: Math.max(nextTentacleNumber, maxTentacleNumber + 1, 1),
+  };
+};
+
+const loadTentacleRegistry = (registryPath: string) => {
+  if (!existsSync(registryPath)) {
+    return {
+      tentacles: new Map<string, PersistedTentacle>(),
+      nextTentacleNumber: 1,
+    };
+  }
+
+  const raw = readFileSync(registryPath, "utf8");
+  return parseRegistryDocument(raw, registryPath);
+};
+
+const persistTentacleRegistry = (registryPath: string, state: {
+  tentacles: Map<string, PersistedTentacle>;
+  nextTentacleNumber: number;
+}) => {
+  const document: TentacleRegistryDocument = {
+    version: TENTACLE_REGISTRY_VERSION,
+    nextTentacleNumber: state.nextTentacleNumber,
+    tentacles: [...state.tentacles.values()],
+  };
+
+  mkdirSync(dirname(registryPath), { recursive: true });
+  writeFileSync(registryPath, `${JSON.stringify(document, null, 2)}\n`, "utf8");
+};
+
+export const createTerminalRuntime = ({
+  workspaceCwd,
+  tmuxClient = createDefaultTmuxClient(),
+}: CreateTerminalRuntimeOptions) => {
   const sessions = new Map<string, TerminalSession>();
   const websocketServer = new WebSocketServer({ noServer: true });
-  let nextTentacleNumber = 1;
+  const registryPath = join(workspaceCwd, TENTACLE_REGISTRY_RELATIVE_PATH);
+  const registryState = loadTentacleRegistry(registryPath);
+  const tentacles = registryState.tentacles;
+  let nextTentacleNumber = registryState.nextTentacleNumber;
   const isDebugPtyLogsEnabled = process.env.OCTOGENT_DEBUG_PTY_LOGS === "1";
   const ptyLogDir =
     process.env.OCTOGENT_DEBUG_PTY_LOG_DIR ?? join(workspaceCwd, ".octogent", "logs");
+
+  tmuxClient.assertAvailable();
+
+  const persistRegistry = () => {
+    persistTentacleRegistry(registryPath, {
+      tentacles,
+      nextTentacleNumber,
+    });
+  };
 
   const createDebugLog = (tentacleId: string) => {
     if (!isDebugPtyLogsEnabled) {
@@ -206,17 +388,8 @@ export const createTerminalRuntime = ({ workspaceCwd }: CreateTerminalRuntimeOpt
     });
   };
 
-  const reserveTentacleNumber = (tentacleId: string) => {
-    const parsed = parseTentacleNumber(tentacleId);
-    if (parsed === null) {
-      return;
-    }
-
-    nextTentacleNumber = Math.max(nextTentacleNumber, parsed + 1);
-  };
-
   const allocateTentacleId = () => {
-    while (sessions.has(`${TENTACLE_ID_PREFIX}${nextTentacleNumber}`)) {
+    while (tentacles.has(`${TENTACLE_ID_PREFIX}${nextTentacleNumber}`)) {
       nextTentacleNumber += 1;
     }
 
@@ -225,13 +398,13 @@ export const createTerminalRuntime = ({ workspaceCwd }: CreateTerminalRuntimeOpt
     return tentacleId;
   };
 
-  const buildRootSnapshot = (tentacleId: string, session: TerminalSession): AgentSnapshot => ({
-    agentId: `${tentacleId}-root`,
-    label: `${tentacleId}-root`,
+  const buildRootSnapshot = (tentacle: PersistedTentacle): AgentSnapshot => ({
+    agentId: `${tentacle.tentacleId}-root`,
+    label: `${tentacle.tentacleId}-root`,
     state: "live",
-    tentacleId,
-    tentacleName: session.tentacleName,
-    createdAt: session.createdAt,
+    tentacleId: tentacle.tentacleId,
+    tentacleName: tentacle.tentacleName,
+    createdAt: tentacle.createdAt,
   });
 
   const closeSession = (tentacleId: string): boolean => {
@@ -254,19 +427,35 @@ export const createTerminalRuntime = ({ workspaceCwd }: CreateTerminalRuntimeOpt
     return true;
   };
 
-  const ensureSession = (tentacleId: string, bootstrapCommand?: string, tentacleName?: string) => {
+  const ensureTmuxSession = (tentacleId: string) => {
+    const tmuxSessionName = tmuxSessionNameForTentacle(tentacleId);
+    if (tmuxClient.hasSession(tmuxSessionName)) {
+      return;
+    }
+
+    tmuxClient.createSession({
+      sessionName: tmuxSessionName,
+      cwd: workspaceCwd,
+      command: TENTACLE_BOOTSTRAP_COMMAND,
+    });
+  };
+
+  const ensureSession = (tentacleId: string) => {
     const existingSession = sessions.get(tentacleId);
     if (existingSession) {
       return existingSession;
     }
-    reserveTentacleNumber(tentacleId);
 
+    if (!tentacles.has(tentacleId)) {
+      throw new Error(`Unknown tentacle: ${tentacleId}`);
+    }
+
+    ensureTmuxSession(tentacleId);
     ensureNodePtySpawnHelperExecutable();
-    const shellCommand = resolveShellCommand();
 
     let pty: IPty;
     try {
-      pty = spawn(shellCommand.shell, shellCommand.args, {
+      pty = spawn("tmux", ["attach-session", "-t", tmuxSessionNameForTentacle(tentacleId)], {
         cols: 120,
         rows: 35,
         cwd: workspaceCwd,
@@ -274,8 +463,7 @@ export const createTerminalRuntime = ({ workspaceCwd }: CreateTerminalRuntimeOpt
         name: "xterm-256color",
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Unable to start terminal shell (${shellCommand.shell}): ${message}`);
+      throw new Error(`Unable to attach terminal to tmux: ${toErrorMessage(error)}`);
     }
 
     const stateTracker = new CodexStateTracker();
@@ -283,14 +471,13 @@ export const createTerminalRuntime = ({ workspaceCwd }: CreateTerminalRuntimeOpt
     const session: TerminalSession = {
       pty,
       clients: new Set(),
-      createdAt: new Date().toISOString(),
-      tentacleName: tentacleName ?? tentacleId,
       codexState: stateTracker.currentState,
       stateTracker,
     };
     if (debugLog) {
       session.debugLog = debugLog;
     }
+
     appendDebugLog(session, `session-start tentacle=${tentacleId}`);
     session.statePollTimer = setInterval(() => {
       emitStateIfChanged(session, tentacleId, session.stateTracker.poll(Date.now()));
@@ -330,48 +517,69 @@ export const createTerminalRuntime = ({ workspaceCwd }: CreateTerminalRuntimeOpt
     });
 
     sessions.set(tentacleId, session);
-
-    if (bootstrapCommand) {
-      session.pty.write(`${bootstrapCommand}\r`);
-    }
-
     return session;
   };
 
+  for (const tentacleId of tentacles.keys()) {
+    ensureSession(tentacleId);
+  }
+
   const createTentacle = (tentacleName?: string): AgentSnapshot => {
     const tentacleId = allocateTentacleId();
-    const session = ensureSession(tentacleId, "codex", tentacleName);
-    return buildRootSnapshot(tentacleId, session);
-  };
+    const tentacle: PersistedTentacle = {
+      tentacleId,
+      tentacleName: tentacleName ?? tentacleId,
+      createdAt: new Date().toISOString(),
+    };
 
-  createTentacle();
+    tentacles.set(tentacleId, tentacle);
+    persistRegistry();
+
+    try {
+      ensureSession(tentacleId);
+    } catch (error) {
+      tentacles.delete(tentacleId);
+      persistRegistry();
+      throw error;
+    }
+
+    return buildRootSnapshot(tentacle);
+  };
 
   return {
     listAgentSnapshots(): AgentSnapshot[] {
-      return [...sessions.entries()].map(([tentacleId, session]) =>
-        buildRootSnapshot(tentacleId, session),
-      );
+      return [...tentacles.values()].map((tentacle) => buildRootSnapshot(tentacle));
     },
 
     createTentacle,
 
     renameTentacle(tentacleId: string, tentacleName: string): AgentSnapshot | null {
-      const session = sessions.get(tentacleId);
-      if (!session) {
+      const tentacle = tentacles.get(tentacleId);
+      if (!tentacle) {
         return null;
       }
 
-      session.tentacleName = tentacleName;
-      return buildRootSnapshot(tentacleId, session);
+      tentacle.tentacleName = tentacleName;
+      persistRegistry();
+      return buildRootSnapshot(tentacle);
     },
 
     deleteTentacle(tentacleId: string): boolean {
-      return closeSession(tentacleId);
+      const tentacle = tentacles.get(tentacleId);
+      if (!tentacle) {
+        return false;
+      }
+
+      closeSession(tentacleId);
+      tmuxClient.killSession(tmuxSessionNameForTentacle(tentacleId));
+      tentacles.delete(tentacleId);
+      persistRegistry();
+      return true;
     },
 
     handleUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer): boolean {
       const tentacleId = getTentacleId(request);
-      if (!tentacleId) {
+      if (!tentacleId || !tentacles.has(tentacleId)) {
         return false;
       }
 
@@ -380,10 +588,9 @@ export const createTerminalRuntime = ({ workspaceCwd }: CreateTerminalRuntimeOpt
         try {
           session = ensureSession(tentacleId);
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
           sendMessage(websocket, {
             type: "output",
-            data: `\r\n[terminal failed to start: ${message}]\r\n`,
+            data: `\r\n[terminal failed to start: ${toErrorMessage(error)}]\r\n`,
           });
           websocket.close();
           return;

@@ -10,6 +10,7 @@ pnpm dev
 Then open `http://localhost:5173`.
 
 `pnpm dev` starts both the web app and API service. By default the API listens on `127.0.0.1:8787` and the web app proxies `/api` traffic to it.
+Terminal persistence requires `tmux` to be installed and available on `PATH`.
 
 ## Active Agents dashboard deck
 
@@ -23,6 +24,7 @@ Then open `http://localhost:5173`.
 ## Create tentacles
 
 - Use the top bar `New tentacle` button to spawn a new tentacle.
+- Fresh workspaces start with no tentacles; create the first tentacle from the top bar.
 - Tentacles keep unique incremental ids (`tentacle-1`, `tentacle-2`, ...) for internal routing, plus a separate display name you can edit.
 - New tentacles appear with the default name selected inline so you can type a new name immediately.
 - Rename by clicking a tentacle header name or the right-side `Rename` button, then edit inline (`Enter` to save, `Escape` to cancel).
@@ -30,6 +32,7 @@ Then open `http://localhost:5173`.
 - Maximize minimized tentacles from `Maximize` buttons in the `Active Agents` sidebar.
 - Delete from the right-side `Delete` button in the tentacle header (with an in-app confirmation dialog).
 - Each new tentacle starts with a root coding terminal session bootstrapped with `codex`.
+- Tentacle metadata and tmux sessions persist across API restarts, so existing tentacles reconnect to the same terminal session.
 - The board keeps each tentacle column above a minimum width and scrolls horizontally when columns exceed available space.
 - Resize neighboring tentacles with the divider between columns (drag with pointer or use focused divider with arrow keys).
 

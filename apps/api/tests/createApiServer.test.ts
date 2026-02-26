@@ -1,22 +1,69 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createApiServer } from "../src/createApiServer";
+import type { TmuxClient } from "../src/terminalRuntime";
+
+class FakeTmuxClient implements TmuxClient {
+  private readonly sessions = new Map<string, { cwd: string; command: string }>();
+
+  assertAvailable(): void {}
+
+  hasSession(sessionName: string): boolean {
+    return this.sessions.has(sessionName);
+  }
+
+  createSession({
+    sessionName,
+    cwd,
+    command,
+  }: {
+    sessionName: string;
+    cwd: string;
+    command: string;
+  }): void {
+    if (this.sessions.has(sessionName)) {
+      throw new Error(`Session already exists: ${sessionName}`);
+    }
+    this.sessions.set(sessionName, { cwd, command });
+  }
+
+  killSession(sessionName: string): void {
+    this.sessions.delete(sessionName);
+  }
+}
 
 describe("createApiServer", () => {
   let stopServer: (() => Promise<void>) | null = null;
+  const temporaryDirectories: string[] = [];
 
   afterEach(async () => {
     if (stopServer) {
       await stopServer();
       stopServer = null;
     }
+
+    for (const directory of temporaryDirectories) {
+      rmSync(directory, { recursive: true, force: true });
+    }
+    temporaryDirectories.length = 0;
   });
 
   const startServer = async (
     options: Partial<Parameters<typeof createApiServer>[0]> = {},
   ) => {
+    const workspaceCwd =
+      options.workspaceCwd ??
+      (() => {
+        const directory = mkdtempSync(join(tmpdir(), "octogent-api-test-"));
+        temporaryDirectories.push(directory);
+        return directory;
+      })();
     const apiServer = createApiServer({
-      workspaceCwd: process.cwd(),
+      workspaceCwd,
+      tmuxClient: options.tmuxClient ?? new FakeTmuxClient(),
       ...options,
     });
     const address = await apiServer.start(0, "127.0.0.1");
@@ -24,7 +71,7 @@ describe("createApiServer", () => {
     return `http://${address.host}:${address.port}`;
   };
 
-  it("returns in-memory snapshots for GET /api/agent-snapshots", async () => {
+  it("returns snapshots for GET /api/agent-snapshots", async () => {
     const baseUrl = await startServer();
 
     const response = await fetch(`${baseUrl}/api/agent-snapshots`, {
@@ -35,15 +82,7 @@ describe("createApiServer", () => {
     });
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual([
-      expect.objectContaining({
-        agentId: "tentacle-1-root",
-        label: "tentacle-1-root",
-        state: "live",
-        tentacleId: "tentacle-1",
-        tentacleName: "tentacle-1",
-      }),
-    ]);
+    await expect(response.json()).resolves.toEqual([]);
   });
 
   it("returns 405 for unsupported methods on /api/agent-snapshots", async () => {
@@ -114,10 +153,10 @@ describe("createApiServer", () => {
     expect(createFirstResponse.status).toBe(201);
     await expect(createFirstResponse.json()).resolves.toEqual(
       expect.objectContaining({
-        agentId: "tentacle-2-root",
-        label: "tentacle-2-root",
+        agentId: "tentacle-1-root",
+        label: "tentacle-1-root",
         state: "live",
-        tentacleId: "tentacle-2",
+        tentacleId: "tentacle-1",
         tentacleName: "planner",
       }),
     );
@@ -132,15 +171,15 @@ describe("createApiServer", () => {
     expect(createSecondResponse.status).toBe(201);
     await expect(createSecondResponse.json()).resolves.toEqual(
       expect.objectContaining({
-        agentId: "tentacle-3-root",
-        label: "tentacle-3-root",
+        agentId: "tentacle-2-root",
+        label: "tentacle-2-root",
         state: "live",
-        tentacleId: "tentacle-3",
-        tentacleName: "tentacle-3",
+        tentacleId: "tentacle-2",
+        tentacleName: "tentacle-2",
       }),
     );
 
-    const renameResponse = await fetch(`${baseUrl}/api/tentacles/tentacle-3`, {
+    const renameResponse = await fetch(`${baseUrl}/api/tentacles/tentacle-2`, {
       method: "PATCH",
       headers: {
         Accept: "application/json",
@@ -152,7 +191,7 @@ describe("createApiServer", () => {
     expect(renameResponse.status).toBe(200);
     await expect(renameResponse.json()).resolves.toEqual(
       expect.objectContaining({
-        tentacleId: "tentacle-3",
+        tentacleId: "tentacle-2",
         tentacleName: "reviewer",
       }),
     );
@@ -166,9 +205,8 @@ describe("createApiServer", () => {
 
     expect(listResponse.status).toBe(200);
     await expect(listResponse.json()).resolves.toEqual([
-      expect.objectContaining({ tentacleId: "tentacle-1", tentacleName: "tentacle-1" }),
-      expect.objectContaining({ tentacleId: "tentacle-2", tentacleName: "planner" }),
-      expect.objectContaining({ tentacleId: "tentacle-3", tentacleName: "reviewer" }),
+      expect.objectContaining({ tentacleId: "tentacle-1", tentacleName: "planner" }),
+      expect.objectContaining({ tentacleId: "tentacle-2", tentacleName: "reviewer" }),
     ]);
   });
 
@@ -185,6 +223,14 @@ describe("createApiServer", () => {
     });
 
     expect(createResponse.status).toBe(400);
+
+    const validCreateResponse = await fetch(`${baseUrl}/api/tentacles`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+    expect(validCreateResponse.status).toBe(201);
 
     const renameResponse = await fetch(`${baseUrl}/api/tentacles/tentacle-1`, {
       method: "PATCH",
@@ -209,7 +255,7 @@ describe("createApiServer", () => {
     });
     expect(createResponse.status).toBe(201);
 
-    const deleteResponse = await fetch(`${baseUrl}/api/tentacles/tentacle-2`, {
+    const deleteResponse = await fetch(`${baseUrl}/api/tentacles/tentacle-1`, {
       method: "DELETE",
       headers: {
         Accept: "application/json",
@@ -224,16 +270,85 @@ describe("createApiServer", () => {
       },
     });
     expect(listResponse.status).toBe(200);
-    await expect(listResponse.json()).resolves.toEqual([
-      expect.objectContaining({ tentacleId: "tentacle-1" }),
-    ]);
+    await expect(listResponse.json()).resolves.toEqual([]);
 
-    const missingResponse = await fetch(`${baseUrl}/api/tentacles/tentacle-2`, {
+    const missingResponse = await fetch(`${baseUrl}/api/tentacles/tentacle-1`, {
       method: "DELETE",
       headers: {
         Accept: "application/json",
       },
     });
     expect(missingResponse.status).toBe(404);
+  });
+
+  it("restores tentacles across API restarts using persisted registry", async () => {
+    const workspaceCwd = mkdtempSync(join(tmpdir(), "octogent-api-test-"));
+    temporaryDirectories.push(workspaceCwd);
+    const tmuxClient = new FakeTmuxClient();
+
+    const firstBaseUrl = await startServer({
+      workspaceCwd,
+      tmuxClient,
+    });
+
+    const createResponse = await fetch(`${firstBaseUrl}/api/tentacles`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "planner" }),
+    });
+    expect(createResponse.status).toBe(201);
+
+    if (stopServer) {
+      await stopServer();
+      stopServer = null;
+    }
+
+    const secondBaseUrl = await startServer({
+      workspaceCwd,
+      tmuxClient,
+    });
+
+    const listResponse = await fetch(`${secondBaseUrl}/api/agent-snapshots`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    expect(listResponse.status).toBe(200);
+    await expect(listResponse.json()).resolves.toEqual([
+      expect.objectContaining({
+        tentacleId: "tentacle-1",
+        tentacleName: "planner",
+      }),
+    ]);
+  });
+
+  it("ignores existing tmux sessions when no registry file exists", async () => {
+    const workspaceCwd = mkdtempSync(join(tmpdir(), "octogent-api-test-"));
+    temporaryDirectories.push(workspaceCwd);
+    const tmuxClient = new FakeTmuxClient();
+    tmuxClient.createSession({
+      sessionName: "octogent.tentacle-99",
+      cwd: workspaceCwd,
+      command: "codex",
+    });
+
+    const baseUrl = await startServer({
+      workspaceCwd,
+      tmuxClient,
+    });
+
+    const listResponse = await fetch(`${baseUrl}/api/agent-snapshots`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+    expect(listResponse.status).toBe(200);
+    await expect(listResponse.json()).resolves.toEqual([]);
   });
 });
