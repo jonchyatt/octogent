@@ -14,6 +14,15 @@ Terminal persistence requires `tmux` to be installed and available on `PATH`.
 
 ## Active Agents dashboard deck
 
+- The web UI uses a persistent 5-zone terminal shell:
+  - red top header (`product`, `context | page` breadcrumb, `LIVE`, tentacle actions)
+  - runtime/status strip (active context, utilization metric, dummy delta, compact telemetry stats, sparkline)
+  - blue numbered nav bar (`[0]`..`[6]`)
+  - main canvas (context input + sidebar + tentacle board)
+  - bottom telemetry tape (compact stream of engineering dummy metrics)
+- Keyboard shortcuts in shell:
+  - press `0`..`6` to switch primary nav section
+  - press `/` to focus the context input
 - The left sidebar shows `Active Agents` grouped by tentacle.
 - Each tentacle section lists its current agents and state badges.
 - Show/hide from the top bar sidebar icon toggle button.

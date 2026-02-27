@@ -52,6 +52,14 @@ When implementing features, identify shared parent components rather than creati
 
 For pane-based UI layout, keep each tentacle as a full-height column. Spawned agents for that tentacle should stack vertically within the same column (below the tentacle/root pane), while other tentacle columns remain on the left and right sides.
 
+### Main Board Consistency Preference
+
+In major UI redesigns, keep the main content board as identical side-by-side tentacle windows. Preserve horizontal scrolling and divider-based resizing behavior across redesigns.
+
+### Product Domain Copy Preference
+
+UI language should match an agent coding/engineering dashboard (agents, sessions, worktrees, logs, pipelines), not finance-specific terminology. If a shell section needs live-like telemetry that is not yet wired to real backend data, use clearly dummy placeholder values.
+
 ### Tentacle Naming Preference
 
 Treat `tentacleId` as a stable internal identifier (routing, keys, websocket paths) and keep user-facing labels editable via a separate display name field.

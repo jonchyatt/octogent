@@ -1,7 +1,7 @@
 import { buildTentacleColumns } from "@octogent/core";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
-  KeyboardEvent,
+  KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
   WheelEvent as ReactWheelEvent,
 } from "react";
@@ -45,6 +45,28 @@ const UI_STATE_SAVE_DEBOUNCE_MS = 250;
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 520;
 const DEFAULT_SIDEBAR_WIDTH = MIN_SIDEBAR_WIDTH;
+const PRIMARY_NAV_ITEMS = [
+  { index: 0, label: "Board" },
+  { index: 1, label: "Agents" },
+  { index: 2, label: "Sessions" },
+  { index: 3, label: "Worktrees" },
+  { index: 4, label: "Pipelines" },
+  { index: 5, label: "Logs" },
+  { index: 6, label: "Settings" },
+] as const;
+const TELEMETRY_TAPE_ITEMS = [
+  { symbol: "QUEUE", change: 1.92 },
+  { symbol: "CPU", change: -0.37 },
+  { symbol: "TOKENS", change: 0.66 },
+  { symbol: "LATENCY", change: -2.12 },
+  { symbol: "WORKTREE", change: 0.73 },
+  { symbol: "RETRIES", change: 1.31 },
+  { symbol: "ERRORS", change: -0.44 },
+  { symbol: "THROUGHPUT", change: 0.29 },
+] as const;
+const QUOTE_SPARKLINE = [22, 19, 23, 24, 21, 26, 27, 25, 29, 31, 30, 33];
+
+type PrimaryNavIndex = (typeof PRIMARY_NAV_ITEMS)[number]["index"];
 
 type FrontendUiStateSnapshot = {
   isAgentsSidebarVisible?: boolean;
@@ -170,8 +192,11 @@ export const App = () => {
   const [tentacleWidths, setTentacleWidths] = useState<Record<string, number>>({});
   const [tentacleViewportWidth, setTentacleViewportWidth] = useState<number | null>(null);
   const [codexUsageSnapshot, setCodexUsageSnapshot] = useState<CodexUsageSnapshot | null>(null);
+  const [activePrimaryNav, setActivePrimaryNav] = useState<PrimaryNavIndex>(1);
+  const [tickerQuery, setTickerQuery] = useState("MAIN");
   const tentaclesRef = useRef<HTMLElement | null>(null);
   const tentacleNameInputRef = useRef<HTMLInputElement | null>(null);
+  const tickerInputRef = useRef<HTMLInputElement | null>(null);
   const cancelTentacleNameSubmitRef = useRef(false);
   const visibleColumns = useMemo(
     () => columns.filter((column) => !minimizedTentacleIds.includes(column.tentacleId)),
@@ -469,6 +494,69 @@ export const App = () => {
     });
   }, [columns]);
 
+  const activeNavItem = useMemo(
+    () => PRIMARY_NAV_ITEMS.find((item) => item.index === activePrimaryNav) ?? PRIMARY_NAV_ITEMS[1],
+    [activePrimaryNav],
+  );
+  const normalizedTicker = useMemo(() => {
+    const trimmed = tickerQuery.trim().toUpperCase();
+    return trimmed.length > 0 ? trimmed : "----";
+  }, [tickerQuery]);
+  const quotePrice = useMemo(() => {
+    const base = 132.45 + columns.length * 0.83;
+    return Number.parseFloat((base + activePrimaryNav * 0.47).toFixed(2));
+  }, [activePrimaryNav, columns.length]);
+  const quoteChange = useMemo(() => {
+    const directionalDelta = ((columns.length % 2 === 0 ? 1 : -1) * 0.38 + activePrimaryNav * 0.07)
+      .toFixed(2);
+    return Number.parseFloat(directionalDelta);
+  }, [activePrimaryNav, columns.length]);
+  const sparklinePoints = useMemo(() => {
+    const width = 148;
+    const height = 36;
+    const minValue = Math.min(...QUOTE_SPARKLINE);
+    const maxValue = Math.max(...QUOTE_SPARKLINE);
+    const valueRange = Math.max(1, maxValue - minValue);
+
+    return QUOTE_SPARKLINE.map((value, index) => {
+      const x = (index / Math.max(1, QUOTE_SPARKLINE.length - 1)) * width;
+      const y = height - ((value - minValue) / valueRange) * height;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+  }, []);
+  const quoteChangePrefix = quoteChange > 0 ? "+" : "";
+
+  useEffect(() => {
+    const handleWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (/^[0-6]$/.test(event.key)) {
+        setActivePrimaryNav(Number.parseInt(event.key, 10) as PrimaryNavIndex);
+        event.preventDefault();
+        return;
+      }
+
+      if (event.key === "/") {
+        event.preventDefault();
+        tickerInputRef.current?.focus();
+        tickerInputRef.current?.select();
+      }
+    };
+
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, []);
+
   const beginTentacleNameEdit = (tentacleId: string, currentTentacleName: string) => {
     setLoadError(null);
     setEditingTentacleId(tentacleId);
@@ -686,7 +774,7 @@ export const App = () => {
   };
 
   const handleTentacleDividerKeyDown = (leftTentacleId: string, rightTentacleId: string) => {
-    return (event: KeyboardEvent<HTMLDivElement>) => {
+    return (event: ReactKeyboardEvent<HTMLDivElement>) => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
         return;
       }
@@ -724,9 +812,12 @@ export const App = () => {
 
   const renderTentacleWorkspaceLabel = (workspaceMode: TentacleWorkspaceMode) =>
     workspaceMode === "worktree" ? "WORKTREE" : "MAIN";
+  const dummyCpuPercent = Math.min(99, Math.round(42 + activePrimaryNav * 4 + columns.length * 2));
+  const dummyMemoryGb = (9.8 + activePrimaryNav * 0.7 + columns.length * 0.35).toFixed(1);
+  const dummyQueueDepth = (12 + activePrimaryNav * 3 + columns.length * 5).toString();
 
   return (
-    <div className="page">
+    <div className="page console-shell">
       <header className="chrome">
         <div className="chrome-left">
           <button
@@ -758,11 +849,17 @@ export const App = () => {
               <rect height="12" width="6" x="2" y="2" />
             </svg>
           </button>
+          <h1>Octogent Engineering Console</h1>
         </div>
 
-        <div className="chrome-brand" aria-hidden="true" />
+        <div className="chrome-brand">{`${normalizedTicker} | ${activeNavItem.label.toUpperCase()}`}</div>
 
         <div className="chrome-right">
+          <span className="console-platform-label">Agent Runtime</span>
+          <span className="console-live-indicator">
+            <span className="console-live-dot" aria-hidden="true" />
+            LIVE
+          </span>
           <ActionButton
             aria-label="Create tentacle in main codebase"
             className="chrome-create-tentacle chrome-create-tentacle--shared"
@@ -792,191 +889,285 @@ export const App = () => {
         </div>
       </header>
 
-      <div className={`workspace-shell${isAgentsSidebarVisible ? "" : " workspace-shell--full"}`}>
-        {isAgentsSidebarVisible && (
-          <ActiveAgentsSidebar
-            columns={columns}
-            codexUsageSnapshot={codexUsageSnapshot}
-            codexUsageStatus={codexUsageSnapshot?.status ?? "loading"}
-            isLoading={isLoading}
-            loadError={loadError}
-            sidebarWidth={sidebarWidth}
-            onSidebarWidthChange={(width) => {
-              setSidebarWidth(clampSidebarWidth(width));
+      <section className="console-status-strip" aria-label="Runtime status strip">
+        <div className="console-status-main">
+          <span className="console-status-symbol">{normalizedTicker}</span>
+          <strong className="console-status-metric">{quotePrice.toFixed(2)}%</strong>
+          <span className={`console-status-delta ${quoteChange >= 0 ? "is-up" : "is-down"}`}>
+            {`${quoteChangePrefix}${quoteChange.toFixed(2)}% dummy delta`}
+          </span>
+          <span className="console-status-pill">SIMULATED</span>
+        </div>
+        <div className="console-status-sparkline" aria-hidden="true">
+          <svg viewBox="0 0 148 36" role="presentation">
+            <polyline points={sparklinePoints} />
+          </svg>
+        </div>
+        <dl className="console-status-stats">
+          <div>
+            <dt>CPU</dt>
+            <dd>{dummyCpuPercent}%</dd>
+          </div>
+          <div>
+            <dt>MEM</dt>
+            <dd>{dummyMemoryGb}GB</dd>
+          </div>
+          <div>
+            <dt>QUEUE</dt>
+            <dd>{dummyQueueDepth}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <nav className="console-primary-nav" aria-label="Primary navigation">
+        <div className="console-primary-nav-tabs">
+          {PRIMARY_NAV_ITEMS.map((item) => (
+            <button
+              aria-current={item.index === activePrimaryNav ? "page" : undefined}
+              className="console-primary-nav-tab"
+              data-active={item.index === activePrimaryNav ? "true" : "false"}
+              key={item.index}
+              onClick={() => {
+                setActivePrimaryNav(item.index);
+              }}
+              type="button"
+            >
+              [{item.index}] {item.label}
+            </button>
+          ))}
+        </div>
+        <p className="console-primary-nav-hint">Press 0-6 to navigate · Type context to search</p>
+      </nav>
+
+      <section className="console-main-canvas" aria-label="Main content canvas">
+        <div className="console-canvas-controls">
+          <label className="console-context-label" htmlFor="console-context-input">
+            Context
+          </label>
+          <input
+            id="console-context-input"
+            ref={tickerInputRef}
+            aria-label="Context search input"
+            autoComplete="off"
+            className="console-context-input"
+            onChange={(event) => {
+              setTickerQuery(
+                event.target.value.toUpperCase().replace(/[^A-Z0-9._/-]/g, "").slice(0, 16),
+              );
             }}
-            isActiveAgentsSectionExpanded={isActiveAgentsSectionExpanded}
-            onActiveAgentsSectionExpandedChange={setIsActiveAgentsSectionExpanded}
-            isCodexUsageSectionExpanded={isCodexUsageSectionExpanded}
-            onCodexUsageSectionExpandedChange={setIsCodexUsageSectionExpanded}
-            tentacleStates={tentacleStates}
-            minimizedTentacleIds={minimizedTentacleIds}
-            onMaximizeTentacle={handleMaximizeTentacle}
+            placeholder="Type agent, repo, or branch..."
+            type="text"
+            value={tickerQuery}
           />
-        )}
+          <div className="console-page-chips" aria-hidden="true">
+            <span className="console-chip console-chip--active">{activeNavItem.label}</span>
+            <span className="console-chip">1D</span>
+            <span className="console-chip">1H</span>
+            <span className="console-chip">6H</span>
+            <span className="console-chip">24H</span>
+          </div>
+        </div>
 
-        <main
-          ref={tentaclesRef}
-          className="tentacles"
-          aria-label="Tentacle board"
-          onWheel={handleTentacleHeaderWheel}
-        >
-          {isLoading && (
-            <section className="empty-state" aria-label="Loading">
-              <h2>Loading tentacles...</h2>
-            </section>
+        <div className={`workspace-shell${isAgentsSidebarVisible ? "" : " workspace-shell--full"}`}>
+          {isAgentsSidebarVisible && (
+            <ActiveAgentsSidebar
+              columns={columns}
+              codexUsageSnapshot={codexUsageSnapshot}
+              codexUsageStatus={codexUsageSnapshot?.status ?? "loading"}
+              isLoading={isLoading}
+              loadError={loadError}
+              sidebarWidth={sidebarWidth}
+              onSidebarWidthChange={(width) => {
+                setSidebarWidth(clampSidebarWidth(width));
+              }}
+              isActiveAgentsSectionExpanded={isActiveAgentsSectionExpanded}
+              onActiveAgentsSectionExpandedChange={setIsActiveAgentsSectionExpanded}
+              isCodexUsageSectionExpanded={isCodexUsageSectionExpanded}
+              onCodexUsageSectionExpandedChange={setIsCodexUsageSectionExpanded}
+              tentacleStates={tentacleStates}
+              minimizedTentacleIds={minimizedTentacleIds}
+              onMaximizeTentacle={handleMaximizeTentacle}
+            />
           )}
 
-          {!isLoading && columns.length === 0 && (
-            <section className="empty-state" aria-label="Empty state">
-              <EmptyOctopus />
-              <h2>No active tentacles</h2>
-              <p>When agents start, tentacles will appear here.</p>
-              {loadError && <p className="empty-state-subtle">{loadError}</p>}
-            </section>
-          )}
+          <main
+            ref={tentaclesRef}
+            className="tentacles"
+            aria-label="Tentacle board"
+            onWheel={handleTentacleHeaderWheel}
+          >
+            {isLoading && (
+              <section className="empty-state" aria-label="Loading">
+                <h2>Loading tentacles...</h2>
+              </section>
+            )}
 
-          {!isLoading && columns.length > 0 && visibleColumns.length === 0 && (
-            <section className="empty-state" aria-label="All minimized">
-              <h2>All tentacles minimized</h2>
-              <p>Use the Active Agents sidebar to maximize a tentacle.</p>
-              {loadError && <p className="empty-state-subtle">{loadError}</p>}
-            </section>
-          )}
+            {!isLoading && columns.length === 0 && (
+              <section className="empty-state" aria-label="Empty state">
+                <EmptyOctopus />
+                <h2>No active tentacles</h2>
+                <p>When agents start, tentacles will appear here.</p>
+                {loadError && <p className="empty-state-subtle">{loadError}</p>}
+              </section>
+            )}
 
-          {visibleColumns.map((column, index) => {
-            const rightNeighbor = visibleColumns[index + 1];
-            return (
-              <Fragment key={column.tentacleId}>
-                <section
-                  className="tentacle-column"
-                  aria-label={column.tentacleId}
-                  style={{
-                    width: `${tentacleWidths[column.tentacleId] ?? TENTACLE_MIN_WIDTH}px`,
-                  }}
-                >
-                  <div className="tentacle-column-header">
-                    <div className="tentacle-column-heading">
-                      {editingTentacleId === column.tentacleId ? (
-                        <>
-                          <input
-                            ref={tentacleNameInputRef}
-                            aria-label={`Tentacle name for ${column.tentacleId}`}
-                            className="tentacle-name-editor"
-                            onBlur={() => {
-                              void submitTentacleRename(column.tentacleId, column.tentacleName);
-                            }}
-                            onChange={(event) => {
-                              setTentacleNameDraft(event.target.value);
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.preventDefault();
+            {!isLoading && columns.length > 0 && visibleColumns.length === 0 && (
+              <section className="empty-state" aria-label="All minimized">
+                <h2>All tentacles minimized</h2>
+                <p>Use the Active Agents sidebar to maximize a tentacle.</p>
+                {loadError && <p className="empty-state-subtle">{loadError}</p>}
+              </section>
+            )}
+
+            {visibleColumns.map((column, index) => {
+              const rightNeighbor = visibleColumns[index + 1];
+              return (
+                <Fragment key={column.tentacleId}>
+                  <section
+                    className="tentacle-column"
+                    aria-label={column.tentacleId}
+                    style={{
+                      width: `${tentacleWidths[column.tentacleId] ?? TENTACLE_MIN_WIDTH}px`,
+                    }}
+                  >
+                    <div className="tentacle-column-header">
+                      <div className="tentacle-column-heading">
+                        {editingTentacleId === column.tentacleId ? (
+                          <>
+                            <input
+                              ref={tentacleNameInputRef}
+                              aria-label={`Tentacle name for ${column.tentacleId}`}
+                              className="tentacle-name-editor"
+                              onBlur={() => {
                                 void submitTentacleRename(column.tentacleId, column.tentacleName);
-                              }
-                              if (event.key === "Escape") {
-                                event.preventDefault();
-                                cancelTentacleNameSubmitRef.current = true;
-                                setEditingTentacleId(null);
-                                setTentacleNameDraft("");
-                              }
+                              }}
+                              onChange={(event) => {
+                                setTentacleNameDraft(event.target.value);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  void submitTentacleRename(column.tentacleId, column.tentacleName);
+                                }
+                                if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  cancelTentacleNameSubmitRef.current = true;
+                                  setEditingTentacleId(null);
+                                  setTentacleNameDraft("");
+                                }
+                              }}
+                              type="text"
+                              value={tentacleNameDraft}
+                            />
+                            <span
+                              className={`tentacle-workspace-badge tentacle-workspace-badge--${column.tentacleWorkspaceMode}`}
+                            >
+                              {renderTentacleWorkspaceLabel(column.tentacleWorkspaceMode)}
+                            </span>
+                          </>
+                        ) : (
+                          <h2>
+                            <button
+                              className="tentacle-name-display"
+                              onClick={() => {
+                                beginTentacleNameEdit(column.tentacleId, column.tentacleName);
+                              }}
+                              type="button"
+                            >
+                              {column.tentacleName}
+                            </button>
+                            <span
+                              className={`tentacle-workspace-badge tentacle-workspace-badge--${column.tentacleWorkspaceMode}`}
+                            >
+                              {renderTentacleWorkspaceLabel(column.tentacleWorkspaceMode)}
+                            </span>
+                          </h2>
+                        )}
+                      </div>
+                      {editingTentacleId !== column.tentacleId && (
+                        <div className="tentacle-header-actions">
+                          <ActionButton
+                            aria-label={`Minimize tentacle ${column.tentacleId}`}
+                            className="tentacle-minimize"
+                            onClick={() => {
+                              handleMinimizeTentacle(column.tentacleId);
                             }}
-                            type="text"
-                            value={tentacleNameDraft}
-                          />
-                          <span
-                            className={`tentacle-workspace-badge tentacle-workspace-badge--${column.tentacleWorkspaceMode}`}
+                            size="dense"
+                            variant="info"
                           >
-                            {renderTentacleWorkspaceLabel(column.tentacleWorkspaceMode)}
-                          </span>
-                        </>
-                      ) : (
-                        <h2>
-                          <button
-                            className="tentacle-name-display"
+                            Minimize
+                          </ActionButton>
+                          <ActionButton
+                            aria-label={`Rename tentacle ${column.tentacleId}`}
+                            className="tentacle-rename"
                             onClick={() => {
                               beginTentacleNameEdit(column.tentacleId, column.tentacleName);
                             }}
-                            type="button"
+                            size="dense"
+                            variant="accent"
                           >
-                            {column.tentacleName}
-                          </button>
-                          <span
-                            className={`tentacle-workspace-badge tentacle-workspace-badge--${column.tentacleWorkspaceMode}`}
+                            Rename
+                          </ActionButton>
+                          <ActionButton
+                            aria-label={`Delete tentacle ${column.tentacleId}`}
+                            className="tentacle-delete"
+                            disabled={isDeletingTentacleId === column.tentacleId}
+                            onClick={() => {
+                              requestDeleteTentacle(column.tentacleId, column.tentacleName);
+                            }}
+                            size="dense"
+                            variant="danger"
                           >
-                            {renderTentacleWorkspaceLabel(column.tentacleWorkspaceMode)}
-                          </span>
-                        </h2>
+                            {isDeletingTentacleId === column.tentacleId ? "Deleting..." : "Delete"}
+                          </ActionButton>
+                        </div>
                       )}
                     </div>
-                    {editingTentacleId !== column.tentacleId && (
-                      <div className="tentacle-header-actions">
-                        <ActionButton
-                          aria-label={`Minimize tentacle ${column.tentacleId}`}
-                          className="tentacle-minimize"
-                          onClick={() => {
-                            handleMinimizeTentacle(column.tentacleId);
-                          }}
-                          size="dense"
-                          variant="info"
-                        >
-                          Minimize
-                        </ActionButton>
-                        <ActionButton
-                          aria-label={`Rename tentacle ${column.tentacleId}`}
-                          className="tentacle-rename"
-                          onClick={() => {
-                            beginTentacleNameEdit(column.tentacleId, column.tentacleName);
-                          }}
-                          size="dense"
-                          variant="accent"
-                        >
-                          Rename
-                        </ActionButton>
-                        <ActionButton
-                          aria-label={`Delete tentacle ${column.tentacleId}`}
-                          className="tentacle-delete"
-                          disabled={isDeletingTentacleId === column.tentacleId}
-                          onClick={() => {
-                            requestDeleteTentacle(column.tentacleId, column.tentacleName);
-                          }}
-                          size="dense"
-                          variant="danger"
-                        >
-                          {isDeletingTentacleId === column.tentacleId ? "Deleting..." : "Delete"}
-                        </ActionButton>
-                      </div>
-                    )}
-                  </div>
-                  <TentacleTerminal
-                    tentacleId={column.tentacleId}
-                    onCodexStateChange={(state) => {
-                      handleTentacleStateChange(column.tentacleId, state);
-                    }}
-                  />
-                </section>
+                    <TentacleTerminal
+                      tentacleId={column.tentacleId}
+                      onCodexStateChange={(state) => {
+                        handleTentacleStateChange(column.tentacleId, state);
+                      }}
+                    />
+                  </section>
 
-                {rightNeighbor && (
-                  <div
-                    aria-label={`Resize between ${column.tentacleId} and ${rightNeighbor.tentacleId}`}
-                    aria-orientation="vertical"
-                    className="tentacle-divider"
-                    onKeyDown={handleTentacleDividerKeyDown(
-                      column.tentacleId,
-                      rightNeighbor.tentacleId,
-                    )}
-                    onPointerDown={handleTentacleDividerPointerDown(
-                      column.tentacleId,
-                      rightNeighbor.tentacleId,
-                    )}
-                    role="separator"
-                    tabIndex={0}
-                  />
-                )}
-              </Fragment>
-            );
-          })}
-        </main>
-      </div>
+                  {rightNeighbor && (
+                    <div
+                      aria-label={`Resize between ${column.tentacleId} and ${rightNeighbor.tentacleId}`}
+                      aria-orientation="vertical"
+                      className="tentacle-divider"
+                      onKeyDown={handleTentacleDividerKeyDown(
+                        column.tentacleId,
+                        rightNeighbor.tentacleId,
+                      )}
+                      onPointerDown={handleTentacleDividerPointerDown(
+                        column.tentacleId,
+                        rightNeighbor.tentacleId,
+                      )}
+                      role="separator"
+                      tabIndex={0}
+                    />
+                  )}
+                </Fragment>
+              );
+            })}
+          </main>
+        </div>
+      </section>
+
+      <section className="console-telemetry-tape" aria-label="Telemetry ticker tape">
+        <div className="console-telemetry-track">
+          {[...TELEMETRY_TAPE_ITEMS, ...TELEMETRY_TAPE_ITEMS].map((item, index) => (
+            <span
+              className={`console-telemetry-item ${item.change >= 0 ? "is-up" : "is-down"}`}
+              key={`${item.symbol}-${index}`}
+            >
+              <strong>{item.symbol}</strong>
+              <span>{item.change >= 0 ? `+${item.change.toFixed(2)}%` : `${item.change.toFixed(2)}%`}</span>
+            </span>
+          ))}
+        </div>
+      </section>
 
       {pendingDeleteTentacle && (
         <div className="delete-confirm-backdrop" role="presentation">

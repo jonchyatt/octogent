@@ -59,6 +59,49 @@ describe("App", () => {
     expect(screen.getByTestId("empty-octopus")).toBeInTheDocument();
   });
 
+  it("renders the persistent 5-zone shell with navigation hints", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }),
+    );
+
+    render(<App />);
+
+    await screen.findByText("No active tentacles");
+    expect(screen.getByLabelText("Runtime status strip")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Primary navigation" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Main content canvas")).toBeInTheDocument();
+    expect(screen.getByLabelText("Telemetry ticker tape")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Context search input" })).toBeInTheDocument();
+    expect(screen.getByText("Press 0-6 to navigate · Type context to search")).toBeInTheDocument();
+  });
+
+  it("supports keyboard-first primary navigation with number keys 0-6", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }),
+    );
+
+    render(<App />);
+    await screen.findByText("No active tentacles");
+
+    fireEvent.keyDown(window, { key: "4" });
+
+    expect(
+      screen.getByRole("button", {
+        name: "[4] Pipelines",
+      }),
+    ).toHaveAttribute("aria-current", "page");
+  });
+
   it("shows codex usage in the active agents sidebar footer", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
