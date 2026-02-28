@@ -48,6 +48,14 @@ To avoid forgetting parts of the implementation and missing important steps, mai
 
 When implementing features, identify shared parent components rather than creating variations. If multiple UI components share similar structure (windows, panels, cards), implement the base component once and compose variations from it. The same applies to programmatic logic — extract common patterns into shared utilities or base classes. Before writing new code, check if existing components can be extended or composed to achieve the same goal.
 
+### Frontend File Modularity Preference
+
+Keep top-level React containers focused on orchestration. Move pure constants/types/parsers into `src/app/*` modules and move large JSX blocks into dedicated `src/components/*` files with typed props. Avoid growing single files into multi-responsibility modules.
+
+### Stylesheet Modularity Preference
+
+Keep `src/styles.css` as an import manifest and split CSS into focused modules under `src/styles/*` (foundation, chrome, sidebar, board, terminal, console overrides). Use semantic file names (not numbered prefixes) and preserve import order to avoid unintended cascade changes.
+
 ### Tentacle Layout Preference
 
 For pane-based UI layout, keep each tentacle as a full-height column. Spawned agents for that tentacle should stack vertically within the same column (below the tentacle/root pane), while other tentacle columns remain on the left and right sides.

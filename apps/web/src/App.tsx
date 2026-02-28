@@ -1,15 +1,53 @@
 import { buildTentacleColumns } from "@octogent/core";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
   WheelEvent as ReactWheelEvent,
 } from "react";
 
+import {
+  CODEX_USAGE_SCAN_INTERVAL_MS,
+  DEFAULT_SIDEBAR_WIDTH,
+  GITHUB_OVERVIEW_GRAPH_HEIGHT,
+  GITHUB_OVERVIEW_GRAPH_WIDTH,
+  GITHUB_SPARKLINE_HEIGHT,
+  GITHUB_SPARKLINE_WIDTH,
+  GITHUB_SUMMARY_SCAN_INTERVAL_MS,
+  type GitHubSubtabId,
+  PRIMARY_NAV_ITEMS,
+  type PrimaryNavIndex,
+  UI_STATE_SAVE_DEBOUNCE_MS,
+} from "./app/constants";
+import {
+  buildGitHubCommitCount,
+  buildGitHubCommitSeries,
+  buildGitHubCommitSparkPoints,
+  buildGitHubSparkPolylinePoints,
+  buildGitHubStatusPill,
+  formatGitHubCommitHoverLabel,
+} from "./app/githubMetrics";
+import {
+  clampSidebarWidth,
+  normalizeCodexUsageSnapshot,
+  normalizeFrontendUiStateSnapshot,
+  normalizeGitHubRepoSummarySnapshot,
+} from "./app/normalizers";
+import type {
+  CodexUsageSnapshot,
+  FrontendUiStateSnapshot,
+  GitHubCommitSparkPoint,
+  GitHubRepoSummarySnapshot,
+  TentacleView,
+  TentacleWorkspaceMode,
+} from "./app/types";
 import { ActiveAgentsSidebar } from "./components/ActiveAgentsSidebar";
 import type { CodexState } from "./components/CodexStateBadge";
-import { EmptyOctopus } from "./components/EmptyOctopus";
-import { TentacleTerminal } from "./components/TentacleTerminal";
+import { DeleteTentacleDialog } from "./components/DeleteTentacleDialog";
+import { GitHubPrimaryView } from "./components/GitHubPrimaryView";
+import { RuntimeStatusStrip } from "./components/RuntimeStatusStrip";
+import { TelemetryTape } from "./components/TelemetryTape";
+import { TentacleBoard } from "./components/TentacleBoard";
 import { ActionButton } from "./components/ui/ActionButton";
 import {
   TENTACLE_DIVIDER_WIDTH,
@@ -27,235 +65,6 @@ import {
   buildTentaclesUrl,
   buildUiStateUrl,
 } from "./runtime/runtimeEndpoints";
-
-type TentacleView = Awaited<ReturnType<typeof buildTentacleColumns>>;
-type CodexUsageSnapshot = {
-  status: "ok" | "unavailable" | "error";
-  fetchedAt: string;
-  source: "oauth-api" | "none";
-  message?: string | null;
-  planType?: string | null;
-  primaryUsedPercent?: number | null;
-  secondaryUsedPercent?: number | null;
-  creditsBalance?: number | null;
-  creditsUnlimited?: boolean | null;
-};
-
-type GitHubCommitPoint = {
-  date: string;
-  count: number;
-};
-
-type GitHubCommitSparkPoint = GitHubCommitPoint & {
-  x: number;
-  y: number;
-};
-
-type GitHubRepoSummarySnapshot = {
-  status: "ok" | "unavailable" | "error";
-  fetchedAt: string;
-  source: "gh-cli" | "none";
-  message?: string | null;
-  repo?: string | null;
-  stargazerCount?: number | null;
-  openIssueCount?: number | null;
-  openPullRequestCount?: number | null;
-  commitsPerDay?: GitHubCommitPoint[];
-};
-
-const CODEX_USAGE_SCAN_INTERVAL_MS = 60_000;
-const GITHUB_SUMMARY_SCAN_INTERVAL_MS = 60_000;
-const UI_STATE_SAVE_DEBOUNCE_MS = 250;
-const MIN_SIDEBAR_WIDTH = 240;
-const MAX_SIDEBAR_WIDTH = 520;
-const DEFAULT_SIDEBAR_WIDTH = MIN_SIDEBAR_WIDTH;
-const PRIMARY_NAV_ITEMS = [
-  { index: 0, label: "Board" },
-  { index: 1, label: "Agents" },
-  { index: 2, label: "Sessions" },
-  { index: 3, label: "GitHub" },
-  { index: 4, label: "Pipelines" },
-  { index: 5, label: "Logs" },
-  { index: 6, label: "Settings" },
-] as const;
-const GITHUB_SUBTABS = [{ id: "overview", label: "Overview" }] as const;
-const TELEMETRY_TAPE_ITEMS = [
-  { symbol: "QUEUE", change: 1.92 },
-  { symbol: "CPU", change: -0.37 },
-  { symbol: "TOKENS", change: 0.66 },
-  { symbol: "LATENCY", change: -2.12 },
-  { symbol: "WORKTREE", change: 0.73 },
-  { symbol: "RETRIES", change: 1.31 },
-  { symbol: "ERRORS", change: -0.44 },
-  { symbol: "THROUGHPUT", change: 0.29 },
-] as const;
-const GITHUB_COMMIT_SERIES_LENGTH = 30;
-const GITHUB_SPARKLINE_WIDTH = 148;
-const GITHUB_SPARKLINE_HEIGHT = 36;
-const GITHUB_OVERVIEW_GRAPH_WIDTH = 640;
-const GITHUB_OVERVIEW_GRAPH_HEIGHT = 180;
-
-type PrimaryNavIndex = (typeof PRIMARY_NAV_ITEMS)[number]["index"];
-type GitHubSubtabId = (typeof GITHUB_SUBTABS)[number]["id"];
-
-type FrontendUiStateSnapshot = {
-  isAgentsSidebarVisible?: boolean;
-  sidebarWidth?: number;
-  isActiveAgentsSectionExpanded?: boolean;
-  isCodexUsageSectionExpanded?: boolean;
-  minimizedTentacleIds?: string[];
-  tentacleWidths?: Record<string, number>;
-};
-
-type TentacleWorkspaceMode = "shared" | "worktree";
-
-const asRecord = (value: unknown): Record<string, unknown> | null =>
-  value !== null && typeof value === "object" ? (value as Record<string, unknown>) : null;
-
-const asNumber = (value: unknown): number | null => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  return null;
-};
-
-const asString = (value: unknown): string | null => (typeof value === "string" ? value : null);
-
-const formatGitHubCommitHoverLabel = (point: GitHubCommitPoint) => {
-  if (point.date.startsWith("n/a-")) {
-    return point.count === 1 ? "No date · 1 commit" : `No date · ${point.count} commits`;
-  }
-
-  return point.count === 1
-    ? `${point.date} · 1 commit`
-    : `${point.date} · ${point.count} commits`;
-};
-
-const clampSidebarWidth = (width: number) =>
-  Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
-
-const normalizeCodexUsageSnapshot = (value: unknown): CodexUsageSnapshot | null => {
-  const record = asRecord(value);
-  if (!record) {
-    return null;
-  }
-
-  const status = record.status;
-  if (status !== "ok" && status !== "unavailable" && status !== "error") {
-    return null;
-  }
-
-  const source = record.source === "oauth-api" ? "oauth-api" : "none";
-  return {
-    status,
-    source,
-    fetchedAt: asString(record.fetchedAt) ?? new Date().toISOString(),
-    message: asString(record.message),
-    planType: asString(record.planType),
-    primaryUsedPercent: asNumber(record.primaryUsedPercent),
-    secondaryUsedPercent: asNumber(record.secondaryUsedPercent),
-    creditsBalance: asNumber(record.creditsBalance),
-    creditsUnlimited: typeof record.creditsUnlimited === "boolean" ? record.creditsUnlimited : null,
-  };
-};
-
-const normalizeGitHubCommitPoint = (value: unknown): GitHubCommitPoint | null => {
-  const record = asRecord(value);
-  if (!record) {
-    return null;
-  }
-
-  const date = asString(record.date);
-  const count = asNumber(record.count);
-  if (!date || count === null) {
-    return null;
-  }
-
-  return {
-    date,
-    count: Math.max(0, Math.round(count)),
-  };
-};
-
-const normalizeGitHubRepoSummarySnapshot = (value: unknown): GitHubRepoSummarySnapshot | null => {
-  const record = asRecord(value);
-  if (!record) {
-    return null;
-  }
-
-  const status = record.status;
-  if (status !== "ok" && status !== "unavailable" && status !== "error") {
-    return null;
-  }
-
-  const rawCommitsPerDay = Array.isArray(record.commitsPerDay) ? record.commitsPerDay : [];
-  const commitsPerDay = rawCommitsPerDay
-    .map((point) => normalizeGitHubCommitPoint(point))
-    .filter((point): point is GitHubCommitPoint => point !== null);
-
-  return {
-    status,
-    source: record.source === "gh-cli" ? "gh-cli" : "none",
-    fetchedAt: asString(record.fetchedAt) ?? new Date().toISOString(),
-    message: asString(record.message),
-    repo: asString(record.repo),
-    stargazerCount: asNumber(record.stargazerCount),
-    openIssueCount: asNumber(record.openIssueCount),
-    openPullRequestCount: asNumber(record.openPullRequestCount),
-    commitsPerDay,
-  };
-};
-
-const normalizeFrontendUiStateSnapshot = (value: unknown): FrontendUiStateSnapshot | null => {
-  const record = asRecord(value);
-  if (!record) {
-    return null;
-  }
-
-  const nextState: FrontendUiStateSnapshot = {};
-  if (typeof record.isAgentsSidebarVisible === "boolean") {
-    nextState.isAgentsSidebarVisible = record.isAgentsSidebarVisible;
-  }
-
-  if (typeof record.sidebarWidth === "number" && Number.isFinite(record.sidebarWidth)) {
-    nextState.sidebarWidth = clampSidebarWidth(record.sidebarWidth);
-  }
-
-  if (typeof record.isActiveAgentsSectionExpanded === "boolean") {
-    nextState.isActiveAgentsSectionExpanded = record.isActiveAgentsSectionExpanded;
-  }
-
-  if (typeof record.isCodexUsageSectionExpanded === "boolean") {
-    nextState.isCodexUsageSectionExpanded = record.isCodexUsageSectionExpanded;
-  }
-
-  if (Array.isArray(record.minimizedTentacleIds)) {
-    nextState.minimizedTentacleIds = [...new Set(record.minimizedTentacleIds)].filter(
-      (tentacleId): tentacleId is string => typeof tentacleId === "string",
-    );
-  }
-
-  const rawTentacleWidths = asRecord(record.tentacleWidths);
-  if (rawTentacleWidths) {
-    nextState.tentacleWidths = Object.entries(rawTentacleWidths).reduce<Record<string, number>>(
-      (acc, [tentacleId, width]) => {
-        if (typeof width === "number" && Number.isFinite(width)) {
-          acc[tentacleId] = width;
-        }
-        return acc;
-      },
-      {},
-    );
-  }
-
-  return nextState;
-};
 
 export const App = () => {
   const [columns, setColumns] = useState<TentacleView>([]);
@@ -279,7 +88,9 @@ export const App = () => {
   const [tentacleWidths, setTentacleWidths] = useState<Record<string, number>>({});
   const [tentacleViewportWidth, setTentacleViewportWidth] = useState<number | null>(null);
   const [codexUsageSnapshot, setCodexUsageSnapshot] = useState<CodexUsageSnapshot | null>(null);
-  const [githubRepoSummary, setGithubRepoSummary] = useState<GitHubRepoSummarySnapshot | null>(null);
+  const [githubRepoSummary, setGithubRepoSummary] = useState<GitHubRepoSummarySnapshot | null>(
+    null,
+  );
   const [isRefreshingGitHubSummary, setIsRefreshingGitHubSummary] = useState(false);
   const [activePrimaryNav, setActivePrimaryNav] = useState<PrimaryNavIndex>(1);
   const [activeGitHubSubtab, setActiveGitHubSubtab] = useState<GitHubSubtabId>("overview");
@@ -650,78 +461,38 @@ export const App = () => {
     const trimmed = tickerQuery.trim().toUpperCase();
     return trimmed.length > 0 ? trimmed : "----";
   }, [tickerQuery]);
-  const githubCommitSeries = useMemo(() => {
-    const fallbackSeries = Array.from({ length: GITHUB_COMMIT_SERIES_LENGTH }, (_, index) => ({
-      date: `n/a-${index}`,
-      count: 0,
-    }));
-
-    if (!githubRepoSummary?.commitsPerDay || githubRepoSummary.commitsPerDay.length === 0) {
-      return fallbackSeries;
-    }
-
-    const sorted = [...githubRepoSummary.commitsPerDay]
-      .sort((left, right) => left.date.localeCompare(right.date))
-      .slice(-GITHUB_COMMIT_SERIES_LENGTH);
-
-    if (sorted.length === GITHUB_COMMIT_SERIES_LENGTH) {
-      return sorted;
-    }
-
-    const missing = GITHUB_COMMIT_SERIES_LENGTH - sorted.length;
-    return [...fallbackSeries.slice(0, missing), ...sorted];
-  }, [githubRepoSummary]);
+  const githubCommitSeries = useMemo(
+    () => buildGitHubCommitSeries(githubRepoSummary),
+    [githubRepoSummary],
+  );
   const githubCommitCount30d = useMemo(
-    () => githubCommitSeries.reduce((total, point) => total + point.count, 0),
+    () => buildGitHubCommitCount(githubCommitSeries),
     [githubCommitSeries],
   );
-  const sparklineSeries = useMemo<GitHubCommitSparkPoint[]>(() => {
-    const values = githubCommitSeries.map((point) => point.count);
-    const minValue = Math.min(...values);
-    const maxValue = Math.max(...values);
-    const valueRange = Math.max(1, maxValue - minValue);
-
-    return githubCommitSeries.map((point, index) => {
-      const x = (index / Math.max(1, githubCommitSeries.length - 1)) * GITHUB_SPARKLINE_WIDTH;
-      const y =
-        GITHUB_SPARKLINE_HEIGHT - ((point.count - minValue) / valueRange) * GITHUB_SPARKLINE_HEIGHT;
-      return {
-        date: point.date,
-        count: point.count,
-        x,
-        y,
-      };
-    });
-  }, [githubCommitSeries]);
+  const sparklineSeries = useMemo<GitHubCommitSparkPoint[]>(
+    () =>
+      buildGitHubCommitSparkPoints(
+        githubCommitSeries,
+        GITHUB_SPARKLINE_WIDTH,
+        GITHUB_SPARKLINE_HEIGHT,
+      ),
+    [githubCommitSeries],
+  );
   const sparklinePoints = useMemo(
-    () => sparklineSeries.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" "),
+    () => buildGitHubSparkPolylinePoints(sparklineSeries),
     [sparklineSeries],
   );
-  const githubOverviewGraphSeries = useMemo<GitHubCommitSparkPoint[]>(() => {
-    const values = githubCommitSeries.map((point) => point.count);
-    const minValue = Math.min(...values);
-    const maxValue = Math.max(...values);
-    const valueRange = Math.max(1, maxValue - minValue);
-
-    return githubCommitSeries.map((point, index) => {
-      const x =
-        (index / Math.max(1, githubCommitSeries.length - 1)) * GITHUB_OVERVIEW_GRAPH_WIDTH;
-      const y =
-        GITHUB_OVERVIEW_GRAPH_HEIGHT -
-        ((point.count - minValue) / valueRange) * GITHUB_OVERVIEW_GRAPH_HEIGHT;
-      return {
-        date: point.date,
-        count: point.count,
-        x,
-        y,
-      };
-    });
-  }, [githubCommitSeries]);
-  const githubOverviewGraphPolylinePoints = useMemo(
+  const githubOverviewGraphSeries = useMemo<GitHubCommitSparkPoint[]>(
     () =>
-      githubOverviewGraphSeries
-        .map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
-        .join(" "),
+      buildGitHubCommitSparkPoints(
+        githubCommitSeries,
+        GITHUB_OVERVIEW_GRAPH_WIDTH,
+        GITHUB_OVERVIEW_GRAPH_HEIGHT,
+      ),
+    [githubCommitSeries],
+  );
+  const githubOverviewGraphPolylinePoints = useMemo(
+    () => buildGitHubSparkPolylinePoints(githubOverviewGraphSeries),
     [githubOverviewGraphSeries],
   );
   const hoveredGitHubOverviewPoint = useMemo(() => {
@@ -738,21 +509,10 @@ export const App = () => {
     return "Hover points for date and commit count";
   }, [hoveredGitHubOverviewPoint]);
   const isGitHubPrimaryView = activePrimaryNav === 3;
-  const githubStatusPill = useMemo(() => {
-    if (!githubRepoSummary) {
-      return "GitHub loading";
-    }
-
-    if (githubRepoSummary.status === "ok") {
-      return "GitHub live";
-    }
-
-    if (githubRepoSummary.status === "unavailable") {
-      return "GitHub unavailable";
-    }
-
-    return "GitHub error";
-  }, [githubRepoSummary]);
+  const githubStatusPill = useMemo(
+    () => buildGitHubStatusPill(githubRepoSummary),
+    [githubRepoSummary],
+  );
 
   useEffect(() => {
     if (hoveredGitHubOverviewPointIndex === null) {
@@ -1047,8 +807,6 @@ export const App = () => {
     event.preventDefault();
   };
 
-  const renderTentacleWorkspaceLabel = (workspaceMode: TentacleWorkspaceMode) =>
-    workspaceMode === "worktree" ? "WORKTREE" : "MAIN";
   const githubRepoLabel = githubRepoSummary?.repo ?? "GitHub repository";
   const githubStarCountLabel =
     githubRepoSummary?.stargazerCount !== null && githubRepoSummary?.stargazerCount !== undefined
@@ -1137,40 +895,15 @@ export const App = () => {
         </div>
       </header>
 
-      <section className="console-status-strip" aria-label="Runtime status strip">
-        <div className="console-status-main">
-          <span className="console-status-symbol">{githubRepoLabel}</span>
-          <span className="console-status-stars" aria-label={`GitHub stars ${githubStarCountLabel}`}>
-            <svg aria-hidden="true" className="console-status-star-icon" viewBox="0 0 16 16">
-              <path d="M8 .25l2.2 4.69 5.18.8-3.73 3.82.88 5.44L8 12.62 3.47 15l.88-5.44L.62 5.74l5.18-.8L8 .25z" />
-            </svg>
-            <strong className="console-status-metric">{githubStarCountLabel}</strong>
-          </span>
-          <span className="console-status-pill">{githubStatusPill}</span>
-        </div>
-        <div className="console-status-sparkline" aria-label="Commits per day over last 30 days">
-          <div className="console-status-sparkline-chart">
-            <svg viewBox={`0 0 ${GITHUB_SPARKLINE_WIDTH} ${GITHUB_SPARKLINE_HEIGHT}`} role="presentation">
-              <polyline points={sparklinePoints} />
-            </svg>
-          </div>
-          <span className="console-status-sparkline-label">COMMITS/DAY · LAST 30 DAYS</span>
-        </div>
-        <dl className="console-status-stats">
-          <div>
-            <dd>{githubOpenIssuesLabel}</dd>
-            <dt>ISSUES</dt>
-          </div>
-          <div>
-            <dd>{githubOpenPrsLabel}</dd>
-            <dt>PRS</dt>
-          </div>
-          <div>
-            <dd>{githubCommitCount30d}</dd>
-            <dt>COMMITS 30D</dt>
-          </div>
-        </dl>
-      </section>
+      <RuntimeStatusStrip
+        githubCommitCount30d={githubCommitCount30d}
+        githubOpenIssuesLabel={githubOpenIssuesLabel}
+        githubOpenPrsLabel={githubOpenPrsLabel}
+        githubRepoLabel={githubRepoLabel}
+        githubStarCountLabel={githubStarCountLabel}
+        githubStatusPill={githubStatusPill}
+        sparklinePoints={sparklinePoints}
+      />
 
       <nav className="console-primary-nav" aria-label="Primary navigation">
         <div className="console-primary-nav-tabs">
@@ -1205,7 +938,10 @@ export const App = () => {
             className="console-context-input"
             onChange={(event) => {
               setTickerQuery(
-                event.target.value.toUpperCase().replace(/[^A-Z0-9._/-]/g, "").slice(0, 16),
+                event.target.value
+                  .toUpperCase()
+                  .replace(/[^A-Z0-9._/-]/g, "")
+                  .slice(0, 16),
               );
             }}
             placeholder="Type agent, repo, or branch..."
@@ -1244,349 +980,71 @@ export const App = () => {
           )}
 
           {isGitHubPrimaryView ? (
-            <section className="github-view" aria-label="GitHub primary view">
-            <nav className="github-subtabs" aria-label="GitHub subtabs">
-              {GITHUB_SUBTABS.map((subtab) => (
-                <button
-                  aria-current={activeGitHubSubtab === subtab.id ? "page" : undefined}
-                  className="github-subtab"
-                  data-active={activeGitHubSubtab === subtab.id ? "true" : "false"}
-                  key={subtab.id}
-                  onClick={() => {
-                    setActiveGitHubSubtab(subtab.id);
-                  }}
-                  type="button"
-                >
-                  {subtab.label}
-                </button>
-              ))}
-            </nav>
-
-            {activeGitHubSubtab === "overview" && (
-              <section className="github-overview" aria-label="GitHub overview">
-                <header className="github-overview-header">
-                  <h2>{githubRepoLabel}</h2>
-                  <div className="github-overview-header-actions">
-                    <span className="console-status-pill">{githubStatusPill}</span>
-                    <ActionButton
-                      aria-label="Refresh GitHub overview data"
-                      className="github-overview-refresh"
-                      disabled={isRefreshingGitHubSummary}
-                      onClick={() => {
-                        void refreshGitHubRepoSummary();
-                      }}
-                      size="dense"
-                      variant="accent"
-                    >
-                      {isRefreshingGitHubSummary ? "Refreshing..." : "Refresh"}
-                    </ActionButton>
-                  </div>
-                </header>
-                <dl className="github-overview-stats">
-                  <div>
-                    <dt>Stars</dt>
-                    <dd>{githubStarCountLabel}</dd>
-                  </div>
-                  <div>
-                    <dt>Open issues</dt>
-                    <dd>{githubOpenIssuesLabel}</dd>
-                  </div>
-                  <div>
-                    <dt>Open PRs</dt>
-                    <dd>{githubOpenPrsLabel}</dd>
-                  </div>
-                  <div>
-                    <dt>Commits (30d)</dt>
-                    <dd>{githubCommitCount30d}</dd>
-                  </div>
-                </dl>
-                <section className="github-overview-graph" aria-label="GitHub commits graph">
-                  <div className="github-overview-graph-meta">
-                    <strong>Commits Per Day</strong>
-                    <span>{githubOverviewHoverLabel}</span>
-                  </div>
-                  <div className="github-overview-graph-surface">
-                    <svg
-                      onMouseLeave={() => {
-                        setHoveredGitHubOverviewPointIndex(null);
-                      }}
-                      viewBox={`0 0 ${GITHUB_OVERVIEW_GRAPH_WIDTH} ${GITHUB_OVERVIEW_GRAPH_HEIGHT}`}
-                      role="presentation"
-                    >
-                      <polyline points={githubOverviewGraphPolylinePoints} />
-                      {githubOverviewGraphSeries.map((point, index) => (
-                        <circle
-                          aria-label={formatGitHubCommitHoverLabel(point)}
-                          className={`github-overview-graph-point${
-                            hoveredGitHubOverviewPointIndex === index ? " is-active" : ""
-                          }`}
-                          cx={point.x}
-                          cy={point.y}
-                          key={`${point.date}-${index}`}
-                          onFocus={() => {
-                            setHoveredGitHubOverviewPointIndex(index);
-                          }}
-                          onMouseEnter={() => {
-                            setHoveredGitHubOverviewPointIndex(index);
-                          }}
-                          r={6}
-                          tabIndex={0}
-                        >
-                          <title>{formatGitHubCommitHoverLabel(point)}</title>
-                        </circle>
-                      ))}
-                    </svg>
-                  </div>
-                </section>
-              </section>
-            )}
-            </section>
+            <GitHubPrimaryView
+              activeGitHubSubtab={activeGitHubSubtab}
+              githubCommitCount30d={githubCommitCount30d}
+              githubOpenIssuesLabel={githubOpenIssuesLabel}
+              githubOpenPrsLabel={githubOpenPrsLabel}
+              githubOverviewGraphPolylinePoints={githubOverviewGraphPolylinePoints}
+              githubOverviewGraphSeries={githubOverviewGraphSeries}
+              githubOverviewHoverLabel={githubOverviewHoverLabel}
+              githubRepoLabel={githubRepoLabel}
+              githubStarCountLabel={githubStarCountLabel}
+              githubStatusPill={githubStatusPill}
+              hoveredGitHubOverviewPointIndex={hoveredGitHubOverviewPointIndex}
+              isRefreshingGitHubSummary={isRefreshingGitHubSummary}
+              onGitHubSubtabChange={setActiveGitHubSubtab}
+              onHoveredGitHubOverviewPointIndexChange={setHoveredGitHubOverviewPointIndex}
+              onRefresh={() => {
+                void refreshGitHubRepoSummary();
+              }}
+            />
           ) : (
-
-          <main
-            ref={tentaclesRef}
-            className="tentacles"
-            aria-label="Tentacle board"
-            onWheel={handleTentacleHeaderWheel}
-          >
-            {isLoading && (
-              <section className="empty-state" aria-label="Loading">
-                <h2>Loading tentacles...</h2>
-              </section>
-            )}
-
-            {!isLoading && columns.length === 0 && (
-              <section className="empty-state" aria-label="Empty state">
-                <EmptyOctopus />
-                <h2>No active tentacles</h2>
-                <p>When agents start, tentacles will appear here.</p>
-                {loadError && <p className="empty-state-subtle">{loadError}</p>}
-              </section>
-            )}
-
-            {!isLoading && columns.length > 0 && visibleColumns.length === 0 && (
-              <section className="empty-state" aria-label="All minimized">
-                <h2>All tentacles minimized</h2>
-                <p>Use the Active Agents sidebar to maximize a tentacle.</p>
-                {loadError && <p className="empty-state-subtle">{loadError}</p>}
-              </section>
-            )}
-
-            {visibleColumns.map((column, index) => {
-              const rightNeighbor = visibleColumns[index + 1];
-              return (
-                <Fragment key={column.tentacleId}>
-                  <section
-                    className="tentacle-column"
-                    aria-label={column.tentacleId}
-                    style={{
-                      width: `${tentacleWidths[column.tentacleId] ?? TENTACLE_MIN_WIDTH}px`,
-                    }}
-                  >
-                    <div className="tentacle-column-header">
-                      <div className="tentacle-column-heading">
-                        {editingTentacleId === column.tentacleId ? (
-                          <>
-                            <input
-                              ref={tentacleNameInputRef}
-                              aria-label={`Tentacle name for ${column.tentacleId}`}
-                              className="tentacle-name-editor"
-                              onBlur={() => {
-                                void submitTentacleRename(column.tentacleId, column.tentacleName);
-                              }}
-                              onChange={(event) => {
-                                setTentacleNameDraft(event.target.value);
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                  event.preventDefault();
-                                  void submitTentacleRename(column.tentacleId, column.tentacleName);
-                                }
-                                if (event.key === "Escape") {
-                                  event.preventDefault();
-                                  cancelTentacleNameSubmitRef.current = true;
-                                  setEditingTentacleId(null);
-                                  setTentacleNameDraft("");
-                                }
-                              }}
-                              type="text"
-                              value={tentacleNameDraft}
-                            />
-                            <span
-                              className={`tentacle-workspace-badge tentacle-workspace-badge--${column.tentacleWorkspaceMode}`}
-                            >
-                              {renderTentacleWorkspaceLabel(column.tentacleWorkspaceMode)}
-                            </span>
-                          </>
-                        ) : (
-                          <h2>
-                            <button
-                              className="tentacle-name-display"
-                              onClick={() => {
-                                beginTentacleNameEdit(column.tentacleId, column.tentacleName);
-                              }}
-                              type="button"
-                            >
-                              {column.tentacleName}
-                            </button>
-                            <span
-                              className={`tentacle-workspace-badge tentacle-workspace-badge--${column.tentacleWorkspaceMode}`}
-                            >
-                              {renderTentacleWorkspaceLabel(column.tentacleWorkspaceMode)}
-                            </span>
-                          </h2>
-                        )}
-                      </div>
-                      {editingTentacleId !== column.tentacleId && (
-                        <div className="tentacle-header-actions">
-                          <ActionButton
-                            aria-label={`Minimize tentacle ${column.tentacleId}`}
-                            className="tentacle-minimize"
-                            onClick={() => {
-                              handleMinimizeTentacle(column.tentacleId);
-                            }}
-                            size="dense"
-                            variant="info"
-                          >
-                            Minimize
-                          </ActionButton>
-                          <ActionButton
-                            aria-label={`Rename tentacle ${column.tentacleId}`}
-                            className="tentacle-rename"
-                            onClick={() => {
-                              beginTentacleNameEdit(column.tentacleId, column.tentacleName);
-                            }}
-                            size="dense"
-                            variant="accent"
-                          >
-                            Rename
-                          </ActionButton>
-                          <ActionButton
-                            aria-label={`Delete tentacle ${column.tentacleId}`}
-                            className="tentacle-delete"
-                            disabled={isDeletingTentacleId === column.tentacleId}
-                            onClick={() => {
-                              requestDeleteTentacle(column.tentacleId, column.tentacleName);
-                            }}
-                            size="dense"
-                            variant="danger"
-                          >
-                            {isDeletingTentacleId === column.tentacleId ? "Deleting..." : "Delete"}
-                          </ActionButton>
-                        </div>
-                      )}
-                    </div>
-                    <TentacleTerminal
-                      tentacleId={column.tentacleId}
-                      onCodexStateChange={(state) => {
-                        handleTentacleStateChange(column.tentacleId, state);
-                      }}
-                    />
-                  </section>
-
-                  {rightNeighbor && (
-                    <div
-                      aria-label={`Resize between ${column.tentacleId} and ${rightNeighbor.tentacleId}`}
-                      aria-orientation="vertical"
-                      className="tentacle-divider"
-                      onKeyDown={handleTentacleDividerKeyDown(
-                        column.tentacleId,
-                        rightNeighbor.tentacleId,
-                      )}
-                      onPointerDown={handleTentacleDividerPointerDown(
-                        column.tentacleId,
-                        rightNeighbor.tentacleId,
-                      )}
-                      role="separator"
-                      tabIndex={0}
-                    />
-                  )}
-                </Fragment>
-              );
-            })}
-          </main>
+            <TentacleBoard
+              columns={columns}
+              editingTentacleId={editingTentacleId}
+              isDeletingTentacleId={isDeletingTentacleId}
+              isLoading={isLoading}
+              loadError={loadError}
+              onBeginTentacleNameEdit={beginTentacleNameEdit}
+              onCancelTentacleRename={() => {
+                cancelTentacleNameSubmitRef.current = true;
+                setEditingTentacleId(null);
+                setTentacleNameDraft("");
+              }}
+              onMinimizeTentacle={handleMinimizeTentacle}
+              onRequestDeleteTentacle={requestDeleteTentacle}
+              onSubmitTentacleRename={(tentacleId, currentTentacleName) => {
+                void submitTentacleRename(tentacleId, currentTentacleName);
+              }}
+              onTentacleDividerKeyDown={handleTentacleDividerKeyDown}
+              onTentacleDividerPointerDown={handleTentacleDividerPointerDown}
+              onTentacleHeaderWheel={handleTentacleHeaderWheel}
+              onTentacleNameDraftChange={setTentacleNameDraft}
+              onTentacleStateChange={handleTentacleStateChange}
+              tentacleNameDraft={tentacleNameDraft}
+              tentacleNameInputRef={tentacleNameInputRef}
+              tentacleWidths={tentacleWidths}
+              tentaclesRef={tentaclesRef}
+              visibleColumns={visibleColumns}
+            />
           )}
         </div>
       </section>
 
-      <section className="console-telemetry-tape" aria-label="Telemetry ticker tape">
-        <div className="console-telemetry-track">
-          {[...TELEMETRY_TAPE_ITEMS, ...TELEMETRY_TAPE_ITEMS].map((item, index) => (
-            <span
-              className={`console-telemetry-item ${item.change >= 0 ? "is-up" : "is-down"}`}
-              key={`${item.symbol}-${index}`}
-            >
-              <strong>{item.symbol}</strong>
-              <span>{item.change >= 0 ? `+${item.change.toFixed(2)}%` : `${item.change.toFixed(2)}%`}</span>
-            </span>
-          ))}
-        </div>
-      </section>
+      <TelemetryTape />
 
       {pendingDeleteTentacle && (
-        <div className="delete-confirm-backdrop" role="presentation">
-          <dialog
-            aria-label={`Delete confirmation for ${pendingDeleteTentacle.tentacleName}`}
-            className="delete-confirm-dialog"
-            onKeyDown={(event) => {
-              if (event.key !== "Escape" || isDeletingTentacleId !== null) {
-                return;
-              }
-              event.preventDefault();
-              setPendingDeleteTentacle(null);
-            }}
-            open
-          >
-            <header className="delete-confirm-header">
-              <h2>Delete Tentacle</h2>
-              <span className="pill blocked">DESTRUCTIVE</span>
-            </header>
-            <div className="delete-confirm-body">
-              <p className="delete-confirm-message">
-                Delete <strong>{pendingDeleteTentacle.tentacleName}</strong> and terminate all of
-                its active sessions.
-              </p>
-              <p className="delete-confirm-warning">This action cannot be undone.</p>
-              <dl className="delete-confirm-details">
-                <div>
-                  <dt>Name</dt>
-                  <dd>{pendingDeleteTentacle.tentacleName}</dd>
-                </div>
-                <div>
-                  <dt>ID</dt>
-                  <dd>{pendingDeleteTentacle.tentacleId}</dd>
-                </div>
-              </dl>
-            </div>
-            <div className="delete-confirm-actions">
-              <ActionButton
-                aria-label="Cancel delete"
-                className="delete-confirm-cancel"
-                onClick={() => {
-                  setPendingDeleteTentacle(null);
-                }}
-                size="dense"
-                variant="accent"
-              >
-                Cancel
-              </ActionButton>
-              <ActionButton
-                aria-label={`Confirm delete ${pendingDeleteTentacle.tentacleId}`}
-                className="delete-confirm-submit"
-                disabled={isDeletingTentacleId === pendingDeleteTentacle.tentacleId}
-                onClick={() => {
-                  void handleDeleteTentacle();
-                }}
-                size="dense"
-                variant="danger"
-              >
-                {isDeletingTentacleId === pendingDeleteTentacle.tentacleId
-                  ? "Deleting..."
-                  : "Delete"}
-              </ActionButton>
-            </div>
-          </dialog>
-        </div>
+        <DeleteTentacleDialog
+          isDeletingTentacleId={isDeletingTentacleId}
+          onCancel={() => {
+            setPendingDeleteTentacle(null);
+          }}
+          onConfirmDelete={() => {
+            void handleDeleteTentacle();
+          }}
+          pendingDeleteTentacle={pendingDeleteTentacle}
+        />
       )}
     </div>
   );
