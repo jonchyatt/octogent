@@ -66,8 +66,12 @@ Terminal persistence requires `tmux` on `PATH`.
 ## X monitor
 
 - Open `[4] Monitor` to configure and view social monitoring.
-- Save X developer credentials and target terms from the `X Connection` panel.
-- Default terms are `AI Engineering`, `Agent Engineering`, `Codex`, `Quad Code`, `Skills at Indy`.
+- Monitor has two subtabs:
+  - `Resources` for status, usage budget, and ranked posts.
+  - `Configure` for X credentials and query-term management.
+- Query terms are edited as add/remove chips in memory and persisted with `Save Terms`.
+- Save your X bearer token from the `X Connection` panel.
+- Default terms are `AI Engineering`, `Agent Engineering`, `Codex`, `Quad Code`, `skill.md`.
 - Backend queries X recent search for the last 7 days, filters retweets, then ranks posts locally by `likeCount`.
 - Feed is trimmed to top 30 posts and cached.
 - `GET /api/monitor/feed` auto-refreshes when cache age exceeds 24 hours.

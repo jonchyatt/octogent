@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { DEFAULT_MONITOR_MAX_CACHE_AGE_MS, DEFAULT_MONITOR_QUERY_TERMS } from "./defaults";
 import type { MonitorRepository, PersistedMonitorCache, PersistedMonitorConfig } from "./types";
 
 const MONITOR_CONFIG_VERSION = 1 as const;
@@ -145,15 +146,9 @@ const normalizeCredentials = (
 const defaultConfig = (): PersistedMonitorConfig => ({
   version: MONITOR_CONFIG_VERSION,
   providerId: "x",
-  queryTerms: [
-    "AI Engineering",
-    "Agent Engineering",
-    "Codex",
-    "Quad Code",
-    "Skills at Indy",
-  ],
+  queryTerms: [...DEFAULT_MONITOR_QUERY_TERMS],
   refreshPolicy: {
-    maxCacheAgeMs: 24 * 60 * 60 * 1000,
+    maxCacheAgeMs: DEFAULT_MONITOR_MAX_CACHE_AGE_MS,
   },
   providers: {
     x: {

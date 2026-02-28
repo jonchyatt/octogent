@@ -15,18 +15,27 @@ type MonitorPrimaryViewProps = {
     queryTerms: string[];
     credentials?: {
       bearerToken?: string;
-      apiKey?: string;
-      apiSecret?: string;
-      accessToken?: string;
-      accessTokenSecret?: string;
     };
     validateCredentials: boolean;
   }) => Promise<boolean>;
 };
 
-const normalizeTermDraft = (draft: string): string[] => {
-  const split = draft
-    .split(/[\n,]/)
+type MonitorSubtabId = "resources" | "configure";
+type MonitorProviderId = "x";
+
+const MONITOR_PROVIDER_TABS: Array<{
+  id: MonitorProviderId;
+  label: string;
+  icon: string;
+}> = [{ id: "x", label: "X Monitor", icon: "𝕏" }];
+
+const MONITOR_SUBTABS: Array<{ id: MonitorSubtabId; label: string }> = [
+  { id: "resources", label: "Resources" },
+  { id: "configure", label: "Configure" },
+];
+
+const normalizeTerms = (terms: string[]): string[] => {
+  const split = terms
     .map((term) => term.trim())
     .filter((term) => term.length > 0);
   return [...new Set(split)];
@@ -60,19 +69,18 @@ export const MonitorPrimaryView = ({
   onRefresh,
   onPatchConfig,
 }: MonitorPrimaryViewProps) => {
-  const [queryTermsDraft, setQueryTermsDraft] = useState("");
+  const activeProviderId: MonitorProviderId = "x";
+  const [activeSubtab, setActiveSubtab] = useState<MonitorSubtabId>("resources");
+  const [queryTermsDraft, setQueryTermsDraft] = useState<string[]>([]);
+  const [queryTermInput, setQueryTermInput] = useState("");
   const [bearerToken, setBearerToken] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [apiSecret, setApiSecret] = useState("");
-  const [accessToken, setAccessToken] = useState("");
-  const [accessTokenSecret, setAccessTokenSecret] = useState("");
 
   useEffect(() => {
     if (!monitorConfig) {
       return;
     }
 
-    setQueryTermsDraft(monitorConfig.queryTerms.join("\n"));
+    setQueryTermsDraft(normalizeTerms(monitorConfig.queryTerms));
   }, [monitorConfig]);
 
   const usageCapLabel = useMemo(() => {
@@ -100,11 +108,61 @@ export const MonitorPrimaryView = ({
   }, [monitorFeed]);
 
   const credentialsSummary = monitorConfig?.providers.x.credentials;
+  const canSaveQueryTerms = queryTermsDraft.length > 0;
+
+  const appendQueryTerm = (raw: string) => {
+    const nextTerms = normalizeTerms(raw.split(/[\n,]/));
+    if (nextTerms.length === 0) {
+      return;
+    }
+
+    setQueryTermsDraft((current) => normalizeTerms([...current, ...nextTerms]));
+    setQueryTermInput("");
+  };
+
+  const removeQueryTerm = (termToRemove: string) => {
+    setQueryTermsDraft((current) => current.filter((term) => term !== termToRemove));
+  };
 
   return (
     <section className="monitor-view" aria-label="Monitor primary view">
       <header className="monitor-header">
-        <h2>X Monitor</h2>
+        <div className="monitor-header-main">
+          <nav className="monitor-provider-tabs" aria-label="Monitor providers">
+            {MONITOR_PROVIDER_TABS.map((provider) => (
+              <button
+                aria-current={activeProviderId === provider.id ? "page" : undefined}
+                className="monitor-provider-tab"
+                data-active={activeProviderId === provider.id ? "true" : "false"}
+                key={provider.id}
+                type="button"
+              >
+                <span aria-hidden="true" className="monitor-provider-tab-icon">
+                  {provider.icon}
+                </span>
+                <span>{provider.label}</span>
+              </button>
+            ))}
+          </nav>
+
+          <nav className="monitor-subtabs" aria-label="Monitor subtabs">
+            {MONITOR_SUBTABS.map((subtab) => (
+              <button
+                aria-current={activeSubtab === subtab.id ? "page" : undefined}
+                className="monitor-subtab"
+                data-active={activeSubtab === subtab.id ? "true" : "false"}
+                key={subtab.id}
+                onClick={() => {
+                  setActiveSubtab(subtab.id);
+                }}
+                type="button"
+              >
+                {subtab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
         <div className="monitor-header-actions">
           <span className="console-status-pill" data-state={monitorFeed?.isStale ? "stale" : "fresh"}>
             {monitorFeed?.isStale ? "STALE" : "FRESH"}
@@ -122,225 +180,205 @@ export const MonitorPrimaryView = ({
         </div>
       </header>
 
-      <section className="monitor-panel-grid" aria-label="Monitor controls and status">
-        <section className="monitor-panel monitor-panel--connection" aria-label="X connection settings">
-          <h3>X Connection</h3>
-          <label htmlFor="monitor-x-bearer-token">X bearer token</label>
-          <input
-            id="monitor-x-bearer-token"
-            autoComplete="off"
-            className="monitor-input"
-            onChange={(event) => {
-              setBearerToken(event.target.value);
-            }}
-            placeholder={credentialsSummary?.isConfigured ? "Saved token is redacted" : "Paste X bearer token"}
-            type="password"
-            value={bearerToken}
-          />
+      {activeSubtab === "configure" ? (
+        <section className="monitor-panel-grid monitor-panel-grid--configure" aria-label="Monitor configuration">
+          <section className="monitor-panel monitor-panel--connection" aria-label="X connection settings">
+            <h3>X Connection</h3>
+            <label htmlFor="monitor-x-bearer-token">X bearer token</label>
+            <input
+              id="monitor-x-bearer-token"
+              autoComplete="off"
+              className="monitor-input"
+              onChange={(event) => {
+                setBearerToken(event.target.value);
+              }}
+              placeholder={credentialsSummary?.isConfigured ? "Saved token is redacted" : "Paste X bearer token"}
+              type="password"
+              value={bearerToken}
+            />
 
-          <div className="monitor-optional-grid">
-            <div>
-              <label htmlFor="monitor-x-api-key">X API key</label>
-              <input
-                id="monitor-x-api-key"
-                autoComplete="off"
-                className="monitor-input"
-                onChange={(event) => {
-                  setApiKey(event.target.value);
-                }}
-                placeholder="Optional"
-                type="text"
-                value={apiKey}
-              />
-            </div>
-            <div>
-              <label htmlFor="monitor-x-api-secret">X API secret</label>
-              <input
-                id="monitor-x-api-secret"
-                autoComplete="off"
-                className="monitor-input"
-                onChange={(event) => {
-                  setApiSecret(event.target.value);
-                }}
-                placeholder="Optional"
-                type="password"
-                value={apiSecret}
-              />
-            </div>
-            <div>
-              <label htmlFor="monitor-x-access-token">X access token</label>
-              <input
-                id="monitor-x-access-token"
-                autoComplete="off"
-                className="monitor-input"
-                onChange={(event) => {
-                  setAccessToken(event.target.value);
-                }}
-                placeholder="Optional"
-                type="text"
-                value={accessToken}
-              />
-            </div>
-            <div>
-              <label htmlFor="monitor-x-access-token-secret">X access token secret</label>
-              <input
-                id="monitor-x-access-token-secret"
-                autoComplete="off"
-                className="monitor-input"
-                onChange={(event) => {
-                  setAccessTokenSecret(event.target.value);
-                }}
-                placeholder="Optional"
-                type="password"
-                value={accessTokenSecret}
-              />
-            </div>
-          </div>
-
-          <ActionButton
-            aria-label="Save X credentials"
-            className="monitor-save"
-            disabled={isSavingMonitorConfig}
-            onClick={() => {
-              const nextTerms = normalizeTermDraft(queryTermsDraft);
-              const patchCredentials: {
-                bearerToken?: string;
-                apiKey?: string;
-                apiSecret?: string;
-                accessToken?: string;
-                accessTokenSecret?: string;
-              } = {};
-              if (bearerToken.trim().length > 0) {
-                patchCredentials.bearerToken = bearerToken.trim();
-              }
-              if (apiKey.trim().length > 0) {
-                patchCredentials.apiKey = apiKey.trim();
-              }
-              if (apiSecret.trim().length > 0) {
-                patchCredentials.apiSecret = apiSecret.trim();
-              }
-              if (accessToken.trim().length > 0) {
-                patchCredentials.accessToken = accessToken.trim();
-              }
-              if (accessTokenSecret.trim().length > 0) {
-                patchCredentials.accessTokenSecret = accessTokenSecret.trim();
-              }
-              const hasCredentialPatch = Object.keys(patchCredentials).length > 0;
-              const patchPayload = {
-                providerId: "x" as const,
-                queryTerms: nextTerms,
-                validateCredentials: true,
-                ...(hasCredentialPatch ? { credentials: patchCredentials } : {}),
-              };
-
-              void onPatchConfig(patchPayload).then((saved) => {
-                if (!saved) {
-                  return;
+            <ActionButton
+              aria-label="Save X credentials"
+              className="monitor-save"
+              disabled={isSavingMonitorConfig}
+              onClick={() => {
+                const nextTerms = normalizeTerms(queryTermsDraft);
+                const patchCredentials: {
+                  bearerToken?: string;
+                } = {};
+                if (bearerToken.trim().length > 0) {
+                  patchCredentials.bearerToken = bearerToken.trim();
                 }
+                const hasCredentialPatch = Object.keys(patchCredentials).length > 0;
+                const patchPayload = {
+                  providerId: "x" as const,
+                  queryTerms: nextTerms,
+                  validateCredentials: true,
+                  ...(hasCredentialPatch ? { credentials: patchCredentials } : {}),
+                };
 
-                setBearerToken("");
-                setApiKey("");
-                setApiSecret("");
-                setAccessToken("");
-                setAccessTokenSecret("");
-              });
-            }}
-            size="dense"
-            variant="primary"
-          >
-            {isSavingMonitorConfig ? "Saving..." : "Save X credentials"}
-          </ActionButton>
+                void onPatchConfig(patchPayload).then((saved) => {
+                  if (!saved) {
+                    return;
+                  }
 
-          {credentialsSummary && (
-            <p className="monitor-credentials-meta">
-              {credentialsSummary.isConfigured
-                ? `Saved · token ${credentialsSummary.bearerTokenHint ?? "(redacted)"}`
-                : "Not configured"}
-            </p>
-          )}
-        </section>
+                  setBearerToken("");
+                });
+              }}
+              size="dense"
+              variant="primary"
+            >
+              {isSavingMonitorConfig ? "Saving..." : "Save X credentials"}
+            </ActionButton>
 
-        <section className="monitor-panel monitor-panel--query" aria-label="Monitor query settings">
-          <h3>Target terms</h3>
-          <textarea
-            aria-label="Monitor query terms"
-            className="monitor-textarea"
-            onChange={(event) => {
-              setQueryTermsDraft(event.target.value);
-            }}
-            rows={6}
-            value={queryTermsDraft}
-          />
-          <p>One per line or comma-separated. Recent search window is limited to the last 7 days.</p>
-        </section>
+            {credentialsSummary && (
+              <p className="monitor-credentials-meta">
+                {credentialsSummary.isConfigured
+                  ? `Saved · token ${credentialsSummary.bearerTokenHint ?? "(redacted)"}`
+                  : "Not configured"}
+              </p>
+            )}
+          </section>
 
-        <section className="monitor-panel monitor-panel--status" aria-label="Monitor status metrics">
-          <h3>Status</h3>
-          <dl>
-            <div>
-              <dt>Last sync</dt>
-              <dd>{formatTimestamp(monitorFeed?.lastFetchedAt ?? null)}</dd>
-            </div>
-            <div>
-              <dt>Stale after</dt>
-              <dd>{formatTimestamp(monitorFeed?.staleAfter ?? null)}</dd>
-            </div>
-            <div>
-              <dt>Usage cap</dt>
-              <dd>{usageCapLabel}</dd>
-            </div>
-            <div>
-              <dt>Used</dt>
-              <dd>{usageUsedLabel}</dd>
-            </div>
-            <div>
-              <dt>Remaining</dt>
-              <dd>{usageRemainingLabel}</dd>
-            </div>
-            <div>
-              <dt>Resets</dt>
-              <dd>{formatTimestamp(monitorFeed?.usage?.resetAt ?? null)}</dd>
-            </div>
-          </dl>
-        </section>
-      </section>
-
-      <section className="monitor-feed" aria-label="Monitor feed results">
-        <header>
-          <h3>Top posts by likes</h3>
-          <span>{`${monitorFeed?.posts.length ?? 0} / 30`}</span>
-        </header>
-        {monitorError ? <p className="monitor-error">{monitorError}</p> : null}
-        {monitorFeed?.lastError ? <p className="monitor-error">{monitorFeed.lastError}</p> : null}
-        {monitorFeed && monitorFeed.posts.length === 0 ? (
-          <p className="monitor-empty">No posts available yet.</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Likes</th>
-                <th scope="col">Author</th>
-                <th scope="col">Post</th>
-                <th scope="col">Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(monitorFeed?.posts ?? []).map((post) => (
-                <tr key={`${post.source}:${post.id}`}>
-                  <td>{Math.round(post.likeCount).toLocaleString("en-US")}</td>
-                  <td>@{post.author}</td>
-                  <td>
-                    <a href={post.permalink} rel="noreferrer" target="_blank">
-                      {post.text}
-                    </a>
-                  </td>
-                  <td>{formatTimestamp(post.createdAt)}</td>
-                </tr>
+          <section className="monitor-panel monitor-panel--query" aria-label="Monitor query settings">
+            <h3>Target terms</h3>
+            <div className="monitor-query-terms-list" role="list" aria-label="Monitor query terms">
+              {queryTermsDraft.map((term) => (
+                <div className="monitor-query-term" key={term} role="listitem">
+                  <span>{term}</span>
+                  <button
+                    aria-label={`Remove query term ${term}`}
+                    onClick={() => {
+                      removeQueryTerm(term);
+                    }}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                </div>
               ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+              {queryTermsDraft.length === 0 ? (
+                <p className="monitor-query-empty">Add at least one query term to save.</p>
+              ) : null}
+            </div>
+            <div className="monitor-query-term-form">
+              <input
+                aria-label="Add monitor query term"
+                className="monitor-input"
+                onChange={(event) => {
+                  setQueryTermInput(event.target.value);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    appendQueryTerm(queryTermInput);
+                  }
+                }}
+                placeholder="Add term and press Enter"
+                type="text"
+                value={queryTermInput}
+              />
+              <ActionButton
+                aria-label="Add query term"
+                className="monitor-query-add"
+                onClick={() => {
+                  appendQueryTerm(queryTermInput);
+                }}
+                size="dense"
+                variant="info"
+              >
+                Add
+              </ActionButton>
+            </div>
+            <ActionButton
+              aria-label="Save monitor query terms"
+              className="monitor-query-save"
+              disabled={isSavingMonitorConfig || !canSaveQueryTerms}
+              onClick={() => {
+                void onPatchConfig({
+                  providerId: "x",
+                  queryTerms: normalizeTerms(queryTermsDraft),
+                  validateCredentials: false,
+                });
+              }}
+              size="dense"
+              variant="primary"
+            >
+              {isSavingMonitorConfig ? "Saving..." : "Save Terms"}
+            </ActionButton>
+            <p>Recent search window is limited to the last 7 days.</p>
+          </section>
+        </section>
+      ) : (
+        <section className="monitor-resources" aria-label="Monitor resources">
+          <section className="monitor-panel monitor-panel--status" aria-label="Monitor status metrics">
+            <h3>Status</h3>
+            <dl>
+              <div>
+                <dt>Last sync</dt>
+                <dd>{formatTimestamp(monitorFeed?.lastFetchedAt ?? null)}</dd>
+              </div>
+              <div>
+                <dt>Stale after</dt>
+                <dd>{formatTimestamp(monitorFeed?.staleAfter ?? null)}</dd>
+              </div>
+              <div>
+                <dt>Usage cap</dt>
+                <dd>{usageCapLabel}</dd>
+              </div>
+              <div>
+                <dt>Used</dt>
+                <dd>{usageUsedLabel}</dd>
+              </div>
+              <div>
+                <dt>Remaining</dt>
+                <dd>{usageRemainingLabel}</dd>
+              </div>
+              <div>
+                <dt>Resets</dt>
+                <dd>{formatTimestamp(monitorFeed?.usage?.resetAt ?? null)}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="monitor-feed" aria-label="Monitor feed results">
+            <header>
+              <h3>Top posts by likes</h3>
+              <span>{`${monitorFeed?.posts.length ?? 0} / 30`}</span>
+            </header>
+            {monitorError ? <p className="monitor-error">{monitorError}</p> : null}
+            {monitorFeed?.lastError ? <p className="monitor-error">{monitorFeed.lastError}</p> : null}
+            {monitorFeed && monitorFeed.posts.length === 0 ? (
+              <p className="monitor-empty">No posts available yet.</p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Likes</th>
+                    <th scope="col">Author</th>
+                    <th scope="col">Post</th>
+                    <th scope="col">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(monitorFeed?.posts ?? []).map((post) => (
+                    <tr key={`${post.source}:${post.id}`}>
+                      <td>{Math.round(post.likeCount).toLocaleString("en-US")}</td>
+                      <td>@{post.author}</td>
+                      <td>
+                        <a href={post.permalink} rel="noreferrer" target="_blank">
+                          {post.text}
+                        </a>
+                      </td>
+                      <td>{formatTimestamp(post.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+        </section>
+      )}
     </section>
   );
 };

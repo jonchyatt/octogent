@@ -14,15 +14,7 @@ import type {
 } from "./types";
 import { createXMonitorProvider } from "./xProvider";
 
-export const DEFAULT_MONITOR_QUERY_TERMS = [
-  "AI Engineering",
-  "Agent Engineering",
-  "Codex",
-  "Quad Code",
-  "Skills at Indy",
-] as const;
-
-export const DEFAULT_MONITOR_MAX_CACHE_AGE_MS = 24 * 60 * 60 * 1000;
+export { DEFAULT_MONITOR_MAX_CACHE_AGE_MS, DEFAULT_MONITOR_QUERY_TERMS } from "./defaults";
 
 export class MonitorInputError extends Error {}
 

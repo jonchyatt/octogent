@@ -179,7 +179,31 @@ describe("App Monitor runtime", () => {
     );
 
     const monitorView = await screen.findByLabelText("Monitor primary view");
-    expect(within(monitorView).getByText("Codex is shipping faster loops")).toBeInTheDocument();
+    expect(within(monitorView).getByRole("button", { name: "Resources" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    fireEvent.click(within(monitorView).getByRole("button", { name: "Configure" }));
+    expect(within(monitorView).getByRole("button", { name: "Configure" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(within(monitorView).queryByRole("textbox", { name: "Monitor query terms" })).not.toBeInTheDocument();
+    fireEvent.change(within(monitorView).getByLabelText("Add monitor query term"), {
+      target: {
+        value: "Agent Ops",
+      },
+    });
+    fireEvent.click(within(monitorView).getByRole("button", { name: "Add query term" }));
+    fireEvent.click(within(monitorView).getByRole("button", { name: "Save monitor query terms" }));
+
+    await waitFor(() => {
+      expect(
+        monitorConfigPatchBodies.some((body) =>
+          Array.isArray(body.queryTerms) ? body.queryTerms.includes("Agent Ops") : false,
+        ),
+      ).toBe(true);
+    });
 
     fireEvent.change(within(monitorView).getByLabelText("X bearer token"), {
       target: {
@@ -198,6 +222,8 @@ describe("App Monitor runtime", () => {
       },
     });
 
+    fireEvent.click(within(monitorView).getByRole("button", { name: "Resources" }));
+    expect(within(monitorView).getByText("Codex is shipping faster loops")).toBeInTheDocument();
     fireEvent.click(within(monitorView).getByRole("button", { name: "Refresh monitor feed" }));
 
     expect(await within(monitorView).findByText("Manual refresh delivered this post")).toBeInTheDocument();

@@ -2,31 +2,72 @@
   min-height: 0;
   border: 1px solid #2b2f36;
   background: #0b0d10;
-  padding: 0.34rem;
+  padding: 0.56rem;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 0.32rem;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.52rem;
 }
 
 .monitor-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.72rem;
+  flex-wrap: wrap;
 }
 
-.monitor-header h2 {
-  margin: 0;
-  color: #dce6f7;
-  font-size: 0.96rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+.monitor-header-main {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.46rem;
+  flex-wrap: wrap;
 }
 
 .monitor-header-actions {
   display: inline-flex;
   align-items: center;
   gap: 0.26rem;
+  margin-left: auto;
+}
+
+.monitor-provider-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+}
+
+.monitor-provider-tab {
+  border: 1px solid #2b2f36;
+  background: #11161d;
+  color: #a9b0ba;
+  font-family: var(--font-main);
+  font-size: 0.84rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.24rem 0.5rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.monitor-provider-tab[data-active="true"] {
+  border-color: color-mix(in srgb, #5ca7ff 58%, #1f3960 42%);
+  background: color-mix(in srgb, #5ca7ff 30%, #101924 70%);
+  color: #deebff;
+}
+
+.monitor-provider-tab-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 1px solid color-mix(in srgb, #5ca7ff 58%, #324e71 42%);
+  background: #0d1520;
+  color: #b7d6ff;
+  font-size: 0.86rem;
+  line-height: 1;
 }
 
 .console-shell .monitor-header .console-status-pill[data-state="stale"] {
@@ -36,37 +77,72 @@
 
 .monitor-refresh,
 .monitor-save {
-  --action-button-font-size: 0.66rem;
-  --action-button-padding-y: 0.16rem;
-  --action-button-padding-x: 0.34rem;
+  --action-button-font-size: 0.78rem;
+  --action-button-padding-y: 0.24rem;
+  --action-button-padding-x: 0.48rem;
+}
+
+.monitor-subtabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+}
+
+.monitor-subtab {
+  border: 1px solid #2b2f36;
+  background: #11161d;
+  color: #a9b0ba;
+  font-family: var(--font-main);
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.24rem 0.5rem;
+  cursor: pointer;
+}
+
+.monitor-subtab[data-active="true"] {
+  border-color: color-mix(in srgb, var(--accent-primary) 62%, #6b5210);
+  background: var(--accent-primary);
+  color: #111216;
 }
 
 .monitor-panel-grid {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.56rem;
   grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(220px, 1fr);
+}
+
+.monitor-panel-grid--configure {
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+}
+
+.monitor-resources {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.56rem;
 }
 
 .monitor-panel {
   border: 1px solid #2b2f36;
   background: #090d12;
-  padding: 0.4rem;
+  padding: 0.6rem;
   display: grid;
-  gap: 0.3rem;
+  gap: 0.4rem;
   align-content: start;
 }
 
 .monitor-panel h3 {
   margin: 0;
   color: #d7a622;
-  font-size: 0.72rem;
+  font-size: 0.86rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .monitor-panel label {
   color: #9eb0c8;
-  font-size: 0.65rem;
+  font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -77,8 +153,8 @@
   background: #050607;
   color: #e6e8ec;
   font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
-  font-size: 0.78rem;
-  padding: 0.28rem 0.34rem;
+  font-size: 0.94rem;
+  padding: 0.46rem 0.54rem;
   min-width: 0;
 }
 
@@ -93,22 +169,62 @@
   outline-offset: 1px;
 }
 
-.monitor-optional-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.24rem;
+.monitor-query-terms-list {
+  border: 1px solid #2b2f36;
+  background: #050607;
+  padding: 0.36rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+  min-height: 2.2rem;
 }
 
-.monitor-optional-grid > div {
+.monitor-query-term {
+  border: 1px solid #2f3946;
+  background: #111822;
+  color: #d9e4f6;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.3rem;
+  font-size: 0.82rem;
+}
+
+.monitor-query-term button {
+  border: 1px solid #3a414a;
+  background: #12161b;
+  color: #ffafaf;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.12rem 0.2rem;
+  cursor: pointer;
+}
+
+.monitor-query-empty {
+  margin: 0;
+  color: #9cb0cb;
+  font-size: 0.8rem;
+}
+
+.monitor-query-term-form {
   display: grid;
-  gap: 0.18rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.22rem;
+}
+
+.monitor-query-add,
+.monitor-query-save {
+  --action-button-font-size: 0.76rem;
+  --action-button-padding-y: 0.2rem;
+  --action-button-padding-x: 0.42rem;
 }
 
 .monitor-panel p,
 .monitor-credentials-meta {
   margin: 0;
   color: #8d9db4;
-  font-size: 0.65rem;
+  font-size: 0.8rem;
   line-height: 1.35;
 }
 
@@ -127,7 +243,7 @@
 
 .monitor-panel--status dt {
   color: #7f8ea3;
-  font-size: 0.64rem;
+  font-size: 0.76rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -135,7 +251,7 @@
 .monitor-panel--status dd {
   margin: 0;
   color: #e9edf4;
-  font-size: 0.72rem;
+  font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -154,27 +270,27 @@
   justify-content: space-between;
   gap: 0.5rem;
   border-bottom: 1px solid #2b2f36;
-  padding: 0.34rem 0.4rem;
+  padding: 0.5rem 0.56rem;
 }
 
 .monitor-feed > header h3 {
   margin: 0;
   color: #d7a622;
-  font-size: 0.72rem;
+  font-size: 0.86rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .monitor-feed > header span {
   color: #9cb0cb;
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   letter-spacing: 0.06em;
 }
 
 .monitor-feed table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.7rem;
+  font-size: 0.88rem;
 }
 
 .monitor-feed thead {
@@ -185,18 +301,18 @@
 
 .monitor-feed th {
   text-align: left;
-  font-size: 0.62rem;
+  font-size: 0.74rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #91a5c0;
   border-bottom: 1px solid #2b2f36;
   background: #0f141c;
-  padding: 0.24rem 0.3rem;
+  padding: 0.36rem 0.44rem;
 }
 
 .monitor-feed td {
   border-bottom: 1px solid color-mix(in srgb, #2b2f36 85%, transparent);
-  padding: 0.28rem 0.3rem;
+  padding: 0.4rem 0.44rem;
   color: #d8deea;
   vertical-align: top;
 }
@@ -232,8 +348,8 @@
 .monitor-empty,
 .monitor-error {
   margin: 0;
-  padding: 0.4rem;
-  font-size: 0.7rem;
+  padding: 0.54rem;
+  font-size: 0.86rem;
 }
 
 .monitor-empty {
@@ -247,6 +363,14 @@
 @media (max-width: 1200px) {
   .monitor-panel-grid {
     grid-template-columns: 1fr;
+  }
+
+  .monitor-header {
+    align-items: stretch;
+  }
+
+  .monitor-header-actions {
+    margin-left: 0;
   }
 
   .monitor-feed tbody {
