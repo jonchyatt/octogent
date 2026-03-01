@@ -133,6 +133,10 @@ Keep Monitor Configure controls in a single unified view (not split into separat
 Use column-based layout to fill the available panel width while keeping individual controls readable, and show token state as a green `Saved` badge (without displaying token hints/previews).
 For option picking (like timeframe), prefer custom in-app segmented selectors over native browser `<select>` dropdown popups.
 
+### Scrollbar Consistency Preference
+
+Treat scrollbar styling as a universal console concern: apply it through shared shell-level selectors so new scrollable surfaces (including monitor resources) inherit automatically without per-view overrides.
+
 ### Terminal Surface Preference
 
 Keep the terminal surface dark but not pure black; prefer a deep slate background for long-session readability.

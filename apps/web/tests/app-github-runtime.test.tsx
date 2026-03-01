@@ -95,10 +95,35 @@ describe("App GitHub runtime views", () => {
       ".github-overview-graph-point[aria-label='2026-02-27 · 8 commits']",
     );
     expect(graphPoint).not.toBeNull();
+    expect(container.querySelectorAll(".github-overview-graph-point")).toHaveLength(3);
     fireEvent.mouseEnter(graphPoint as Element);
 
     const hoverMeta = container.querySelector(".github-overview-graph-meta span");
     expect(hoverMeta).not.toBeNull();
     expect(hoverMeta).toHaveTextContent("2026-02-27 · 8 commits");
+
+    const graphSvg = container.querySelector(".github-overview-graph-surface svg") as SVGElement | null;
+    expect(graphSvg).not.toBeNull();
+    if (!graphSvg) {
+      return;
+    }
+
+    vi.spyOn(graphSvg, "getBoundingClientRect").mockReturnValue({
+      x: 100,
+      y: 40,
+      top: 40,
+      left: 100,
+      right: 740,
+      bottom: 220,
+      width: 640,
+      height: 180,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.mouseMove(graphSvg, { clientX: 738 });
+    expect(hoverMeta).toHaveTextContent("2026-02-27 · 8 commits");
+    const graphTooltip = container.querySelector(".github-overview-graph-tooltip");
+    expect(graphTooltip).not.toBeNull();
+    expect(graphTooltip).toHaveTextContent("2026-02-27 · 8 commits");
   });
 });

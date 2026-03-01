@@ -270,41 +270,34 @@
   background-blend-mode: normal;
 }
 
-.active-agents-body,
-.tentacles {
+.console-shell * {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
-.active-agents-body::-webkit-scrollbar,
-.tentacles::-webkit-scrollbar {
+.console-shell *::-webkit-scrollbar {
   width: var(--scrollbar-size);
   height: var(--scrollbar-size);
 }
 
-.active-agents-body::-webkit-scrollbar-track,
-.tentacles::-webkit-scrollbar-track {
+.console-shell *::-webkit-scrollbar-track {
   background: var(--scrollbar-track);
 }
 
-.active-agents-body::-webkit-scrollbar-thumb,
-.tentacles::-webkit-scrollbar-thumb {
+.console-shell *::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
   border: 1px solid color-mix(in srgb, var(--bg-surface-1) 78%, #000000);
 }
 
-.active-agents-body::-webkit-scrollbar-thumb:hover,
-.tentacles::-webkit-scrollbar-thumb:hover {
+.console-shell *::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
 }
 
-.active-agents-body::-webkit-scrollbar-thumb:active,
-.tentacles::-webkit-scrollbar-thumb:active {
+.console-shell *::-webkit-scrollbar-thumb:active {
   background: var(--scrollbar-thumb-active);
 }
 
-.active-agents-body::-webkit-scrollbar-corner,
-.tentacles::-webkit-scrollbar-corner {
+.console-shell *::-webkit-scrollbar-corner {
   background: var(--scrollbar-track);
 }
 

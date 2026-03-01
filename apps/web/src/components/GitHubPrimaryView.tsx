@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import {
   GITHUB_OVERVIEW_GRAPH_HEIGHT,
   GITHUB_OVERVIEW_GRAPH_WIDTH,
@@ -26,6 +28,8 @@ type GitHubPrimaryViewProps = {
   onHoveredGitHubOverviewPointIndexChange: (index: number | null) => void;
 };
 
+const GITHUB_OVERVIEW_GRAPH_VIEWBOX_INSET = 8;
+
 export const GitHubPrimaryView = ({
   activeGitHubSubtab,
   onGitHubSubtabChange,
@@ -43,6 +47,17 @@ export const GitHubPrimaryView = ({
   hoveredGitHubOverviewPointIndex,
   onHoveredGitHubOverviewPointIndexChange,
 }: GitHubPrimaryViewProps) => {
+  const [hoverCursorPosition, setHoverCursorPosition] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const hoveredGitHubOverviewPoint =
+    hoveredGitHubOverviewPointIndex !== null
+      ? githubOverviewGraphSeries[hoveredGitHubOverviewPointIndex] ?? null
+      : null;
+  const tooltipLabel = hoveredGitHubOverviewPoint
+    ? formatGitHubCommitHoverLabel(hoveredGitHubOverviewPoint)
+    : null;
+
   return (
     <section className="github-view" aria-label="GitHub primary view">
       <nav className="github-subtabs" aria-label="GitHub subtabs">
@@ -107,8 +122,48 @@ export const GitHubPrimaryView = ({
               <svg
                 onMouseLeave={() => {
                   onHoveredGitHubOverviewPointIndexChange(null);
+                  setHoverCursorPosition(null);
                 }}
-                viewBox={`0 0 ${GITHUB_OVERVIEW_GRAPH_WIDTH} ${GITHUB_OVERVIEW_GRAPH_HEIGHT}`}
+                onMouseMove={(event) => {
+                  if (githubOverviewGraphSeries.length === 0) {
+                    return;
+                  }
+
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  if (rect.width <= 0) {
+                    return;
+                  }
+
+                  const clampedRatio = Math.min(
+                    1,
+                    Math.max(0, (event.clientX - rect.left) / rect.width),
+                  );
+                  const viewBox = event.currentTarget.viewBox.baseVal;
+                  const pointerX = viewBox.x + viewBox.width * clampedRatio;
+                  const pointerY = Math.max(0, event.clientY - rect.top);
+
+                  let nearestPointIndex = 0;
+                  let nearestDistance = Number.POSITIVE_INFINITY;
+                  githubOverviewGraphSeries.forEach((point, index) => {
+                    const distance = Math.abs(point.x - pointerX);
+                    if (distance < nearestDistance) {
+                      nearestDistance = distance;
+                      nearestPointIndex = index;
+                    }
+                  });
+
+                  if (nearestPointIndex !== hoveredGitHubOverviewPointIndex) {
+                    onHoveredGitHubOverviewPointIndexChange(nearestPointIndex);
+                  }
+
+                  setHoverCursorPosition({
+                    x: Math.max(0, Math.min(rect.width, event.clientX - rect.left)),
+                    y: Math.max(0, Math.min(rect.height, pointerY)),
+                  });
+                }}
+                viewBox={`${-GITHUB_OVERVIEW_GRAPH_VIEWBOX_INSET} ${-GITHUB_OVERVIEW_GRAPH_VIEWBOX_INSET} ${
+                  GITHUB_OVERVIEW_GRAPH_WIDTH + GITHUB_OVERVIEW_GRAPH_VIEWBOX_INSET * 2
+                } ${GITHUB_OVERVIEW_GRAPH_HEIGHT + GITHUB_OVERVIEW_GRAPH_VIEWBOX_INSET * 2}`}
                 role="presentation"
               >
                 <polyline points={githubOverviewGraphPolylinePoints} />
@@ -134,6 +189,17 @@ export const GitHubPrimaryView = ({
                   </circle>
                 ))}
               </svg>
+              {hoverCursorPosition && tooltipLabel && (
+                <div
+                  className="github-overview-graph-tooltip"
+                  style={{
+                    left: `${hoverCursorPosition.x}px`,
+                    top: `${Math.max(8, hoverCursorPosition.y - 14)}px`,
+                  }}
+                >
+                  {tooltipLabel}
+                </div>
+              )}
             </div>
           </section>
         </section>

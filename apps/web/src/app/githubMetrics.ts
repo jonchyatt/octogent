@@ -39,12 +39,12 @@ export const buildGitHubCommitSeries = (summary: GitHubRepoSummarySnapshot | nul
     .sort((left, right) => left.date.localeCompare(right.date))
     .slice(-GITHUB_COMMIT_SERIES_LENGTH);
 
-  if (sorted.length === GITHUB_COMMIT_SERIES_LENGTH) {
-    return sorted;
+  const firstCommitIndex = sorted.findIndex((point) => point.count > 0);
+  if (firstCommitIndex > 0) {
+    return sorted.slice(firstCommitIndex);
   }
 
-  const missing = GITHUB_COMMIT_SERIES_LENGTH - sorted.length;
-  return [...fallbackSeries.slice(0, missing), ...sorted];
+  return sorted;
 };
 
 export const buildGitHubCommitSparkPoints = (
