@@ -153,11 +153,6 @@ export const App = () => {
 
   useConsoleKeyboardShortcuts({ setActivePrimaryNav });
 
-  const activeNavItem = useMemo(
-    () => PRIMARY_NAV_ITEMS.find((item) => item.index === activePrimaryNav) ?? PRIMARY_NAV_ITEMS[0],
-    [activePrimaryNav],
-  );
-  const normalizedTicker = "MAIN";
   const {
     githubCommitCount30d,
     sparklinePoints,
@@ -193,11 +188,9 @@ export const App = () => {
   return (
     <div className="page console-shell">
       <ConsoleHeader
-        activeNavLabel={activeNavItem.label}
         backendLivenessStatus={backendLivenessStatus}
         isAgentsSidebarVisible={isAgentsSidebarVisible}
         isCreatingTentacle={isCreatingTentacle}
-        normalizedTicker={normalizedTicker}
         onCreateSharedTentacle={() => {
           setLoadError(null);
           void createTentacle("shared");

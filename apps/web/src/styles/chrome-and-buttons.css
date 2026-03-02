@@ -33,12 +33,6 @@
   min-width: 0;
 }
 
-.chrome-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-}
-
 .chrome-octopus {
   width: 1.2rem;
   height: 1.2rem;
@@ -55,6 +49,7 @@
 }
 
 .chrome-right {
+  grid-column: 3;
   display: flex;
   align-items: center;
   justify-self: end;

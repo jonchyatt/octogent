@@ -24,17 +24,6 @@
   font-weight: 700;
 }
 
-.console-shell .chrome-brand {
-  justify-self: center;
-  color: #ffe6b6;
-  font-variant-numeric: tabular-nums;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.76rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
 .console-shell .chrome-right {
   gap: 0.24rem;
 }

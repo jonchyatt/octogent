@@ -263,11 +263,8 @@ a.console-telemetry-item:focus-visible {
     gap: 0.24rem;
   }
 
-  .console-shell .chrome-brand {
-    justify-self: start;
-  }
-
   .console-shell .chrome-right {
+    grid-column: 1;
     justify-self: start;
     flex-wrap: wrap;
   }

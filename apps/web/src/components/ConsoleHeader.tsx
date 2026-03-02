@@ -3,8 +3,6 @@ import { ActionButton } from "./ui/ActionButton";
 type ConsoleHeaderProps = {
   isAgentsSidebarVisible: boolean;
   onToggleAgentsSidebar: () => void;
-  normalizedTicker: string;
-  activeNavLabel: string;
   backendLivenessStatus: "live" | "offline";
   isCreatingTentacle: boolean;
   onCreateSharedTentacle: () => void;
@@ -14,8 +12,6 @@ type ConsoleHeaderProps = {
 export const ConsoleHeader = ({
   isAgentsSidebarVisible,
   onToggleAgentsSidebar,
-  normalizedTicker,
-  activeNavLabel,
   backendLivenessStatus,
   isCreatingTentacle,
   onCreateSharedTentacle,
@@ -52,8 +48,6 @@ export const ConsoleHeader = ({
       </button>
       <h1>Octogent Terminal</h1>
     </div>
-
-    <div className="chrome-brand">{`${normalizedTicker} | ${activeNavLabel.toUpperCase()}`}</div>
 
     <div className="chrome-right">
       <span className="console-live-indicator" data-live-state={backendLivenessStatus}>
