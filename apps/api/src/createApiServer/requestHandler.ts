@@ -340,14 +340,22 @@ const handleTentacleItemRoute: ApiRouteHandler = async (
 
   const tentacleId = decodeURIComponent(renameMatch[1] ?? "");
   if (request.method === "DELETE") {
-    const deleted = runtime.deleteTentacle(tentacleId);
-    if (!deleted) {
-      writeJson(response, 404, { error: "Tentacle not found." }, corsOrigin);
-      return true;
-    }
+    try {
+      const deleted = runtime.deleteTentacle(tentacleId);
+      if (!deleted) {
+        writeJson(response, 404, { error: "Tentacle not found." }, corsOrigin);
+        return true;
+      }
 
-    writeNoContent(response, 204, corsOrigin);
-    return true;
+      writeNoContent(response, 204, corsOrigin);
+      return true;
+    } catch (error) {
+      if (error instanceof RuntimeInputError) {
+        writeJson(response, 409, { error: error.message }, corsOrigin);
+        return true;
+      }
+      throw error;
+    }
   }
 
   const bodyReadResult = await readJsonBodyOrWriteError(request, response, corsOrigin);

@@ -136,7 +136,7 @@ export const createTerminalRuntime = ({
       tentacles.delete(tentacleId);
       persistRegistry();
       if (shouldCreateWorktree) {
-        worktreeManager.removeTentacleWorktree(tentacleId);
+        worktreeManager.removeTentacleWorktree(tentacleId, { bestEffort: true });
       }
       throw error;
     }

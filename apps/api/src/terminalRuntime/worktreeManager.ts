@@ -12,6 +12,10 @@ type CreateWorktreeManagerOptions = {
   tentacles: Map<string, PersistedTentacle>;
 };
 
+type RemoveTentacleWorktreeOptions = {
+  bestEffort?: boolean;
+};
+
 export const createWorktreeManager = ({
   workspaceCwd,
   gitClient,
@@ -61,7 +65,11 @@ export const createWorktreeManager = ({
     }
   };
 
-  const removeTentacleWorktree = (tentacleId: string) => {
+  const removeTentacleWorktree = (
+    tentacleId: string,
+    options: RemoveTentacleWorktreeOptions = {},
+  ) => {
+    const { bestEffort = false } = options;
     const worktreePath = getTentacleWorktreePath(tentacleId);
     if (!existsSync(worktreePath)) {
       return;
@@ -72,8 +80,13 @@ export const createWorktreeManager = ({
         cwd: workspaceCwd,
         path: worktreePath,
       });
-    } catch {
-      // Best effort rollback cleanup.
+    } catch (error) {
+      if (bestEffort) {
+        return;
+      }
+      throw new RuntimeInputError(
+        `Unable to remove worktree for ${tentacleId}: ${toErrorMessage(error)}`,
+      );
     }
   };
 

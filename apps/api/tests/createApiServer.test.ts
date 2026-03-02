@@ -57,6 +57,7 @@ class FakeGitClient implements GitClient {
     { branchName: string; baseRef: string; cwd: string }
   >();
   private repositoryAvailable = true;
+  private failRemoveWorktree = false;
 
   assertAvailable(): void {}
 
@@ -83,11 +84,18 @@ class FakeGitClient implements GitClient {
   }
 
   removeWorktree({ path }: { cwd: string; path: string }): void {
+    if (this.failRemoveWorktree) {
+      throw new Error(`Unable to remove worktree: ${path}`);
+    }
     this.worktrees.delete(path);
   }
 
   setRepositoryAvailable(available: boolean): void {
     this.repositoryAvailable = available;
+  }
+
+  setFailRemoveWorktree(shouldFail: boolean): void {
+    this.failRemoveWorktree = shouldFail;
   }
 
   getWorktree(path: string): { branchName: string; baseRef: string; cwd: string } | null {
@@ -710,6 +718,63 @@ describe("createApiServer", () => {
     });
     expect(deleteResponse.status).toBe(204);
     expect(gitClient.getWorktree(expectedWorktreePath)).toBeNull();
+  });
+
+  it("returns 409 and keeps tentacle state when worktree deletion fails", async () => {
+    const workspaceCwd = mkdtempSync(join(tmpdir(), "octogent-api-test-"));
+    temporaryDirectories.push(workspaceCwd);
+    const tmuxClient = new FakeTmuxClient();
+    const gitClient = new FakeGitClient();
+    const baseUrl = await startServer({
+      workspaceCwd,
+      tmuxClient,
+      gitClient,
+    });
+
+    const createResponse = await fetch(`${baseUrl}/api/tentacles`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        workspaceMode: "worktree",
+      }),
+    });
+    expect(createResponse.status).toBe(201);
+
+    const expectedWorktreePath = join(workspaceCwd, ".octogent", "worktrees", "tentacle-1");
+    gitClient.setFailRemoveWorktree(true);
+
+    const deleteResponse = await fetch(`${baseUrl}/api/tentacles/tentacle-1`, {
+      method: "DELETE",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+    expect(deleteResponse.status).toBe(409);
+    await expect(deleteResponse.json()).resolves.toEqual({
+      error: expect.stringContaining("Unable to remove worktree for tentacle-1"),
+    });
+    expect(gitClient.getWorktree(expectedWorktreePath)).toEqual(
+      expect.objectContaining({
+        cwd: workspaceCwd,
+        branchName: "octogent/tentacle-1",
+      }),
+    );
+
+    const listResponse = await fetch(`${baseUrl}/api/agent-snapshots`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+    expect(listResponse.status).toBe(200);
+    await expect(listResponse.json()).resolves.toEqual([
+      expect.objectContaining({
+        tentacleId: "tentacle-1",
+      }),
+    ]);
   });
 
   it("returns 400 when workspace mode is invalid", async () => {
