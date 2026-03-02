@@ -33,7 +33,7 @@
 - `workspaceMode: "worktree"` tentacles run in `.octogent/worktrees/<tentacleId>`.
 - Orphan tmux sessions without a registry entry are ignored.
 - `DELETE /api/tentacles/:tentacleId` removes both registry state and the associated tmux session.
-- Deleting a worktree tentacle attempts to remove its worktree directory (`git worktree remove --force`).
+- Deleting a worktree tentacle removes both its worktree directory (`git worktree remove --force`) and its tentacle branch (`git branch -D octogent/<tentacleId>`).
 - Worktree branch cleanup is still manual (runtime does not delete branches automatically).
 - `PATCH /api/ui-state` updates and persists frontend UI preferences.
 

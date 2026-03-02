@@ -139,4 +139,28 @@ export const createDefaultGitClient = (): GitClient => ({
       stdio: "pipe",
     });
   },
+
+  removeBranch({ cwd, branchName }) {
+    const output = execFileSync(
+      "git",
+      ["branch", "--list", "--format=%(refname:short)", branchName],
+      {
+        cwd,
+        encoding: "utf8",
+        stdio: "pipe",
+      },
+    );
+    const existingBranches = output
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    if (!existingBranches.includes(branchName)) {
+      return;
+    }
+
+    execFileSync("git", ["branch", "-D", branchName], {
+      cwd,
+      stdio: "pipe",
+    });
+  },
 });

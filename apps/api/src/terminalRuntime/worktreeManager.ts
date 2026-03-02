@@ -23,6 +23,8 @@ export const createWorktreeManager = ({
 }: CreateWorktreeManagerOptions) => {
   const getTentacleWorktreePath = (tentacleId: string) =>
     join(workspaceCwd, TENTACLE_WORKTREE_RELATIVE_PATH, tentacleId);
+  const getTentacleBranchName = (tentacleId: string) =>
+    `${TENTACLE_WORKTREE_BRANCH_PREFIX}${tentacleId}`;
 
   const getTentacleWorkspaceCwd = (tentacleId: string) => {
     const tentacle = tentacles.get(tentacleId);
@@ -71,21 +73,35 @@ export const createWorktreeManager = ({
   ) => {
     const { bestEffort = false } = options;
     const worktreePath = getTentacleWorktreePath(tentacleId);
-    if (!existsSync(worktreePath)) {
-      return;
+    const branchName = getTentacleBranchName(tentacleId);
+
+    if (existsSync(worktreePath)) {
+      try {
+        gitClient.removeWorktree({
+          cwd: workspaceCwd,
+          path: worktreePath,
+        });
+      } catch (error) {
+        if (bestEffort) {
+          return;
+        }
+        throw new RuntimeInputError(
+          `Unable to remove worktree for ${tentacleId}: ${toErrorMessage(error)}`,
+        );
+      }
     }
 
     try {
-      gitClient.removeWorktree({
+      gitClient.removeBranch({
         cwd: workspaceCwd,
-        path: worktreePath,
+        branchName,
       });
     } catch (error) {
       if (bestEffort) {
         return;
       }
       throw new RuntimeInputError(
-        `Unable to remove worktree for ${tentacleId}: ${toErrorMessage(error)}`,
+        `Unable to remove branch for ${tentacleId}: ${toErrorMessage(error)}`,
       );
     }
   };

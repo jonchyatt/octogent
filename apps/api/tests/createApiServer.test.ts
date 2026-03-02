@@ -56,6 +56,7 @@ class FakeGitClient implements GitClient {
     string,
     { branchName: string; baseRef: string; cwd: string }
   >();
+  private readonly branches = new Set<string>();
   private repositoryAvailable = true;
   private failRemoveWorktree = false;
 
@@ -80,6 +81,7 @@ class FakeGitClient implements GitClient {
       throw new Error(`Worktree already exists: ${path}`);
     }
     mkdirSync(path, { recursive: true });
+    this.branches.add(branchName);
     this.worktrees.set(path, { cwd, branchName, baseRef });
   }
 
@@ -88,6 +90,10 @@ class FakeGitClient implements GitClient {
       throw new Error(`Unable to remove worktree: ${path}`);
     }
     this.worktrees.delete(path);
+  }
+
+  removeBranch({ branchName }: { cwd: string; branchName: string }): void {
+    this.branches.delete(branchName);
   }
 
   setRepositoryAvailable(available: boolean): void {
@@ -100,6 +106,10 @@ class FakeGitClient implements GitClient {
 
   getWorktree(path: string): { branchName: string; baseRef: string; cwd: string } | null {
     return this.worktrees.get(path) ?? null;
+  }
+
+  hasBranch(branchName: string): boolean {
+    return this.branches.has(branchName);
   }
 }
 
@@ -718,6 +728,7 @@ describe("createApiServer", () => {
     });
     expect(deleteResponse.status).toBe(204);
     expect(gitClient.getWorktree(expectedWorktreePath)).toBeNull();
+    expect(gitClient.hasBranch("octogent/tentacle-1")).toBe(false);
   });
 
   it("returns 409 and keeps tentacle state when worktree deletion fails", async () => {

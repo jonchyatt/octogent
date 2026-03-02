@@ -67,6 +67,7 @@ export type GitClient = {
   isRepository(cwd: string): boolean;
   addWorktree(options: { cwd: string; path: string; branchName: string; baseRef: string }): void;
   removeWorktree(options: { cwd: string; path: string }): void;
+  removeBranch(options: { cwd: string; branchName: string }): void;
 };
 
 export class RuntimeInputError extends Error {}

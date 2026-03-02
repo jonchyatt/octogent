@@ -50,6 +50,7 @@ class FakeGitClient implements GitClient {
     string,
     { branchName: string; baseRef: string; cwd: string }
   >();
+  private readonly branches = new Set<string>();
 
   assertAvailable(): void {}
 
@@ -72,11 +73,16 @@ class FakeGitClient implements GitClient {
       throw new Error(`Worktree already exists: ${path}`);
     }
     mkdirSync(path, { recursive: true });
+    this.branches.add(branchName);
     this.worktrees.set(path, { cwd, branchName, baseRef });
   }
 
   removeWorktree({ path }: { cwd: string; path: string }): void {
     this.worktrees.delete(path);
+  }
+
+  removeBranch({ branchName }: { cwd: string; branchName: string }): void {
+    this.branches.delete(branchName);
   }
 }
 
