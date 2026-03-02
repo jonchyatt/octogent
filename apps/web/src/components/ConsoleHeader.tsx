@@ -5,6 +5,7 @@ type ConsoleHeaderProps = {
   onToggleAgentsSidebar: () => void;
   normalizedTicker: string;
   activeNavLabel: string;
+  backendLivenessStatus: "live" | "offline";
   isCreatingTentacle: boolean;
   onCreateSharedTentacle: () => void;
   onCreateWorktreeTentacle: () => void;
@@ -15,6 +16,7 @@ export const ConsoleHeader = ({
   onToggleAgentsSidebar,
   normalizedTicker,
   activeNavLabel,
+  backendLivenessStatus,
   isCreatingTentacle,
   onCreateSharedTentacle,
   onCreateWorktreeTentacle,
@@ -48,16 +50,19 @@ export const ConsoleHeader = ({
           <rect height="12" width="6" x="2" y="2" />
         </svg>
       </button>
-      <h1>Octogent Engineering Console</h1>
+      <h1>Octogent Terminal</h1>
     </div>
 
     <div className="chrome-brand">{`${normalizedTicker} | ${activeNavLabel.toUpperCase()}`}</div>
 
     <div className="chrome-right">
-      <span className="console-platform-label">Agent Runtime</span>
-      <span className="console-live-indicator">
-        <span className="console-live-dot" aria-hidden="true" />
-        LIVE
+      <span className="console-live-indicator" data-live-state={backendLivenessStatus}>
+        <span
+          className="console-live-dot"
+          data-live-state={backendLivenessStatus}
+          aria-hidden="true"
+        />
+        {backendLivenessStatus === "live" ? "LIVE" : "OFFLINE"}
       </span>
       <ActionButton
         aria-label="Create tentacle in main codebase"

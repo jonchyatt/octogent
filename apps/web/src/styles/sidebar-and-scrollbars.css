@@ -32,16 +32,16 @@
 .active-agents-body {
   min-height: 0;
   overflow: auto;
-  padding: 0.42rem;
+  padding: 0.56rem;
   display: grid;
   align-content: start;
-  gap: 0.4rem;
+  gap: 0.52rem;
 }
 
 .active-agents-footer {
   border-top: 1px solid var(--sidebar-border);
   background: var(--sidebar-panel);
-  padding: 0.36rem 0.42rem 0.4rem;
+  padding: 0.5rem 0.56rem 0.56rem;
 }
 
 .active-agents-section {
@@ -61,11 +61,11 @@
   );
   color: var(--text-primary);
   cursor: pointer;
-  padding: 0.34rem 0.42rem;
+  padding: 0.46rem 0.56rem;
   display: grid;
   grid-template-columns: 1fr auto auto;
   align-items: center;
-  gap: 0.38rem;
+  gap: 0.52rem;
   text-align: left;
 }
 
@@ -91,7 +91,7 @@
 }
 
 .active-agents-section-title {
-  font-size: 0.66rem;
+  font-size: 0.78rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 700;
@@ -100,28 +100,28 @@
 
 .active-agents-section-meta {
   color: var(--sidebar-text-muted);
-  font-size: 0.56rem;
+  font-size: 0.66rem;
   letter-spacing: 0.04em;
 }
 
 .active-agents-section-chevron {
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   line-height: 1;
   color: var(--sidebar-text-muted);
 }
 
 .active-agents-section-panel {
   display: grid;
-  gap: 0.34rem;
-  padding: 0.38rem;
+  gap: 0.48rem;
+  padding: 0.5rem;
 }
 
 .active-agents-codex-usage {
   border: 1px solid var(--sidebar-border);
   background: color-mix(in srgb, var(--sidebar-row) 90%, #131922 10%);
-  padding: 0.24rem 0.28rem;
+  padding: 0.36rem 0.4rem;
   display: grid;
-  gap: 0.24rem;
+  gap: 0.34rem;
   box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 5%, transparent);
 }
 
@@ -140,18 +140,18 @@
 
 .active-agents-codex-usage-bars {
   display: grid;
-  gap: 0.24rem;
+  gap: 0.34rem;
 }
 
 .active-agents-codex-usage-row {
   display: grid;
-  gap: 0.1rem;
+  gap: 0.18rem;
 }
 
 .active-agents-codex-usage-label {
   color: var(--sidebar-text-muted);
   letter-spacing: 0.06em;
-  font-size: 0.58rem;
+  font-size: 0.68rem;
   text-transform: lowercase;
 }
 
@@ -166,7 +166,7 @@
 .active-agents-codex-usage-rail {
   position: relative;
   display: block;
-  height: 0.68rem;
+  height: 0.8rem;
   border: 1px solid var(--sidebar-border-strong);
   background: repeating-linear-gradient(
     90deg,
@@ -196,7 +196,7 @@
 .active-agents-codex-usage-percent {
   color: color-mix(in srgb, var(--accent-primary) 62%, #f0dcb2 38%);
   letter-spacing: 0.05em;
-  font-size: 0.58rem;
+  font-size: 0.68rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -205,7 +205,7 @@
   margin: 0;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  font-size: 0.61rem;
+  font-size: 0.7rem;
   color: var(--sidebar-text-muted);
 }
 
@@ -310,8 +310,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.36rem;
-  padding: 0.28rem 0.36rem;
+  gap: 0.5rem;
+  padding: 0.42rem 0.52rem;
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--sidebar-header) 92%, #2a3647 8%) 0%,
@@ -331,12 +331,12 @@
   color: var(--text-primary);
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  font-size: 0.66rem;
+  font-size: 0.78rem;
 }
 
 .active-agents-group-count {
   color: var(--sidebar-text-muted);
-  font-size: 0.56rem;
+  font-size: 0.66rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -358,11 +358,11 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.42rem;
   min-width: 0;
-  padding: 0.26rem 0.36rem;
+  padding: 0.4rem 0.52rem;
   border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 86%, transparent);
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   background: var(--sidebar-row);
   transition: background 120ms ease, border-color 120ms ease;
 }
@@ -385,14 +385,14 @@
 
 .active-agents-agent-row--root {
   background: color-mix(in srgb, var(--sidebar-row) 78%, #243446 22%);
-  border-left: 2px solid color-mix(in srgb, var(--accent-primary) 48%, #90b6e4 52%);
+  border-left: 3px solid color-mix(in srgb, var(--accent-primary) 44%, #90b6e4 56%);
   font-weight: 600;
-  padding-left: 0.28rem;
+  padding-left: 0.42rem;
 }
 
 .active-agents-agent-row--child {
   color: var(--sidebar-text-muted);
-  padding-left: 0.92rem;
+  padding-left: 1.18rem;
 }
 
 .active-agents-agent-label {
@@ -407,8 +407,8 @@
   border: 1px solid var(--sidebar-border);
   background: var(--sidebar-row);
   color: var(--sidebar-text-muted);
-  font-size: 0.72rem;
-  padding: 0.48rem;
+  font-size: 0.8rem;
+  padding: 0.62rem;
 }
 
 .active-agents-error {

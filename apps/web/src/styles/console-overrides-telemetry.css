@@ -20,11 +20,11 @@
 
 .console-shell .active-agents-section-toggle,
 .console-shell .active-agents-group-header {
-  background: #171e27;
+  background: #181f28;
 }
 
 .console-shell .active-agents-section-toggle:hover {
-  background: color-mix(in srgb, #171e27 75%, #27415e 25%);
+  background: #1d2631;
 }
 
 .console-shell .active-agents-section-title,
@@ -38,17 +38,17 @@
 .console-shell .active-agents-agent-row--child,
 .console-shell .active-agents-codex-usage-label {
   color: #a9b0ba;
-  font-size: 0.68rem;
+  font-size: 0.72rem;
 }
 
 .console-shell .active-agents-agent-row {
-  background: #10151c;
+  background: #10161e;
   border-bottom-color: #252b33;
-  font-size: 0.8rem;
+  font-size: 0.84rem;
 }
 
 .console-shell .active-agents-agent-row:hover {
-  background: #16202a;
+  background: #16202b;
 }
 
 .console-shell .active-agents-agent-row--root {
@@ -58,7 +58,7 @@
 
 .console-shell .active-agents-codex-usage {
   border-color: #2b2f36;
-  background: #0c1219;
+  background: #0c131b;
 }
 
 .console-shell .active-agents-codex-usage-meta {
@@ -69,7 +69,7 @@
 .console-shell .active-agents-codex-usage-percent,
 .console-shell .active-agents-codex-usage-credits,
 .console-shell .active-agents-codex-usage-status {
-  font-size: 0.7rem;
+  font-size: 0.74rem;
 }
 
 .console-shell .tentacles {

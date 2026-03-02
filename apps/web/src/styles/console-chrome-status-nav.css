@@ -39,14 +39,6 @@
   gap: 0.24rem;
 }
 
-.console-platform-label {
-  color: #ffe2e2;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  font-size: 0.68rem;
-  white-space: nowrap;
-}
-
 .console-live-indicator {
   display: inline-flex;
   align-items: center;
@@ -60,12 +52,21 @@
   color: #ffebeb;
 }
 
+.console-live-indicator[data-live-state="offline"] {
+  border-color: color-mix(in srgb, #8f1c25 70%, #ffffff 30%);
+  color: #ffd8d8;
+}
+
 .console-live-dot {
   width: 0.38rem;
   height: 0.38rem;
   border-radius: 999px;
   background: var(--term-green);
   box-shadow: 0 0 0 1px #0b0d10;
+}
+
+.console-live-dot[data-live-state="offline"] {
+  background: #d14857;
 }
 
 .console-shell .chrome-sidebar-toggle {

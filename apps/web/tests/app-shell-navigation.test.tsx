@@ -11,7 +11,7 @@ describe("App shell and navigation", () => {
   });
 
   it("renders empty view when API returns no active agents", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse([]));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse([]));
 
     render(<App />);
 
@@ -21,7 +21,7 @@ describe("App shell and navigation", () => {
   });
 
   it("renders the persistent 5-zone shell with navigation hints", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse([]));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse([]));
 
     render(<App />);
 
@@ -31,21 +31,33 @@ describe("App shell and navigation", () => {
     expect(screen.getByLabelText("Main content canvas")).toBeInTheDocument();
     expect(screen.getByLabelText("Telemetry ticker tape")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Context search input" })).not.toBeInTheDocument();
-    expect(screen.getByText("Press 0-6 to navigate")).toBeInTheDocument();
+    expect(screen.queryByText("Agent Runtime")).not.toBeInTheDocument();
+    expect(await screen.findByText("LIVE")).toBeInTheDocument();
+    expect(screen.getByText("Press 0-4 to navigate")).toBeInTheDocument();
   });
 
-  it("supports keyboard-first primary navigation with number keys 0-6", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse([]));
+  it("supports keyboard-first primary navigation with number keys 0-4", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse([]));
 
     render(<App />);
     await screen.findByText("No active tentacles");
 
-    fireEvent.keyDown(window, { key: "4" });
+    fireEvent.keyDown(window, { key: "2" });
 
     expect(
       screen.getByRole("button", {
-        name: "[4] Monitor",
+        name: "[2] Monitor",
       }),
     ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("shows OFFLINE when backend requests fail", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+
+    render(<App />);
+
+    const loadErrors = await screen.findAllByText("Agent data is currently unavailable.");
+    expect(loadErrors.length).toBeGreaterThan(0);
+    expect(await screen.findByText("OFFLINE")).toBeInTheDocument();
   });
 });

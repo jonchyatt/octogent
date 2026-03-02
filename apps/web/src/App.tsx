@@ -2,6 +2,7 @@ import { buildTentacleColumns } from "@octogent/core";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { type GitHubSubtabId, PRIMARY_NAV_ITEMS, type PrimaryNavIndex } from "./app/constants";
+import { useBackendLivenessPolling } from "./app/hooks/useBackendLivenessPolling";
 import { useCodexUsagePolling } from "./app/hooks/useCodexUsagePolling";
 import { useConsoleKeyboardShortcuts } from "./app/hooks/useConsoleKeyboardShortcuts";
 import { useGitHubPrimaryViewModel } from "./app/hooks/useGitHubPrimaryViewModel";
@@ -33,7 +34,7 @@ export const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tentacleStates, setTentacleStates] = useState<Record<string, CodexState>>({});
-  const [activePrimaryNav, setActivePrimaryNav] = useState<PrimaryNavIndex>(1);
+  const [activePrimaryNav, setActivePrimaryNav] = useState<PrimaryNavIndex>(0);
   const [activeGitHubSubtab, setActiveGitHubSubtab] = useState<GitHubSubtabId>("overview");
   const [hoveredGitHubOverviewPointIndex, setHoveredGitHubOverviewPointIndex] = useState<
     number | null
@@ -109,6 +110,7 @@ export const App = () => {
   });
 
   const codexUsageSnapshot = useCodexUsagePolling();
+  const backendLivenessStatus = useBackendLivenessPolling();
   const { githubRepoSummary, isRefreshingGitHubSummary, refreshGitHubRepoSummary } =
     useGithubSummaryPolling();
   const {
@@ -152,7 +154,7 @@ export const App = () => {
   useConsoleKeyboardShortcuts({ setActivePrimaryNav });
 
   const activeNavItem = useMemo(
-    () => PRIMARY_NAV_ITEMS.find((item) => item.index === activePrimaryNav) ?? PRIMARY_NAV_ITEMS[1],
+    () => PRIMARY_NAV_ITEMS.find((item) => item.index === activePrimaryNav) ?? PRIMARY_NAV_ITEMS[0],
     [activePrimaryNav],
   );
   const normalizedTicker = "MAIN";
@@ -172,8 +174,8 @@ export const App = () => {
     hoveredGitHubOverviewPointIndex,
     setHoveredGitHubOverviewPointIndex,
   });
-  const isGitHubPrimaryView = activePrimaryNav === 3;
-  const isMonitorPrimaryView = activePrimaryNav === 4;
+  const isGitHubPrimaryView = activePrimaryNav === 1;
+  const isMonitorPrimaryView = activePrimaryNav === 2;
 
   const handleTentacleStateChange = useCallback((tentacleId: string, state: CodexState) => {
     setTentacleStates((current) => {
@@ -192,6 +194,7 @@ export const App = () => {
     <div className="page console-shell">
       <ConsoleHeader
         activeNavLabel={activeNavItem.label}
+        backendLivenessStatus={backendLivenessStatus}
         isAgentsSidebarVisible={isAgentsSidebarVisible}
         isCreatingTentacle={isCreatingTentacle}
         normalizedTicker={normalizedTicker}

@@ -12,7 +12,7 @@ describe("App active agents sidebar", () => {
 
   it("renders active agents grouped by tentacle in the sidebar", async () => {
     const longWorkerLabel = "worker-1-with-a-very-long-label-that-should-truncate-in-the-sidebar";
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
       jsonResponse([
         {
           agentId: "agent-1",
@@ -61,7 +61,7 @@ describe("App active agents sidebar", () => {
   });
 
   it("collapses and expands the active agents sidebar section", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
       jsonResponse([
         {
           agentId: "agent-1",
@@ -101,7 +101,7 @@ describe("App active agents sidebar", () => {
   });
 
   it("toggles the active agents sidebar", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse([]));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse([]));
 
     render(<App />);
 
@@ -121,7 +121,7 @@ describe("App active agents sidebar", () => {
   });
 
   it("resizes the active agents sidebar from its border without a separate separator strip", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse([]));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse([]));
 
     render(<App />);
 

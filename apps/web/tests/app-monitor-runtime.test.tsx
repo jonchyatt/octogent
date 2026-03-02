@@ -184,7 +184,7 @@ describe("App Monitor runtime", () => {
 
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "[4] Monitor",
+        name: "[2] Monitor",
       }),
     );
 
@@ -398,7 +398,7 @@ describe("App Monitor runtime", () => {
 
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "[4] Monitor",
+        name: "[2] Monitor",
       }),
     );
 
