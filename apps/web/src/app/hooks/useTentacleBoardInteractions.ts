@@ -70,18 +70,20 @@ export const useTentacleBoardInteractions = ({
   const [tentacleViewportWidth, setTentacleViewportWidth] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!tentaclesRef.current) {
+    const board = tentaclesRef.current;
+    if (!board) {
+      setTentacleViewportWidth(null);
       return;
     }
 
     const measure = () => {
-      const board = tentaclesRef.current;
-      if (!board) {
+      const currentBoard = tentaclesRef.current;
+      if (!currentBoard) {
         setTentacleViewportWidth(null);
         return;
       }
 
-      setTentacleViewportWidth(measureTentacleBoardViewportWidth(board));
+      setTentacleViewportWidth(measureTentacleBoardViewportWidth(currentBoard));
     };
 
     measure();
@@ -90,7 +92,7 @@ export const useTentacleBoardInteractions = ({
       const observer = new ResizeObserver(() => {
         measure();
       });
-      observer.observe(tentaclesRef.current);
+      observer.observe(board);
       return () => {
         observer.disconnect();
       };
@@ -100,19 +102,29 @@ export const useTentacleBoardInteractions = ({
     return () => {
       window.removeEventListener("resize", measure);
     };
-  }, [tentaclesRef]);
+    // Re-run when visibleColumns changes to re-attach observer if the DOM element changed
+    // (e.g. after navigating away from tentacles view and back)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tentaclesRef, visibleColumns]);
 
   useEffect(() => {
     const tentacleIds = visibleColumns.map((column) => column.tentacleId);
+
+    // Always try a fresh DOM measurement to guard against stale tentacleViewportWidth
+    const board = tentaclesRef.current;
+    const freshViewportWidth = board
+      ? (measureTentacleBoardViewportWidth(board) ?? tentacleViewportWidth)
+      : tentacleViewportWidth;
+
     const dividerTotalWidth = Math.max(0, tentacleIds.length - 1) * TENTACLE_DIVIDER_WIDTH;
     const paneViewportWidth =
-      tentacleViewportWidth === null
+      freshViewportWidth === null
         ? null
-        : Math.max(0, tentacleViewportWidth - dividerTotalWidth);
+        : Math.max(0, freshViewportWidth - dividerTotalWidth);
     setTentacleWidths((currentWidths) =>
       reconcileTentacleWidths(currentWidths, tentacleIds, paneViewportWidth),
     );
-  }, [setTentacleWidths, tentacleViewportWidth, visibleColumns]);
+  }, [setTentacleWidths, tentaclesRef, tentacleViewportWidth, visibleColumns]);
 
   const handleMinimizeTentacle = useCallback(
     (tentacleId: string) => {
