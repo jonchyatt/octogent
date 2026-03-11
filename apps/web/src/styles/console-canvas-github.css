@@ -298,6 +298,16 @@
   gap: 0.44rem;
   padding: 0.26rem 0;
   border-bottom: 1px dashed #243041;
+  cursor: pointer;
+}
+
+.github-overview-recent-item.is-selected {
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+}
+
+.github-overview-recent-item.is-selected .github-overview-recent-node {
+  background: color-mix(in srgb, var(--accent-primary) 72%, #1b2636);
+  border-color: var(--accent-primary);
 }
 
 .github-overview-recent-item::before {
@@ -402,13 +412,48 @@
   opacity: 1;
 }
 
+.github-overview-recent-tooltip.is-visible .github-overview-recent-tooltip-copy {
+  pointer-events: auto;
+}
+
 .github-overview-recent-tooltip-hash {
   margin: 0;
   color: #ccd9eb;
   font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
   font-size: 0.76rem;
   letter-spacing: 0.02em;
-  word-break: break-all;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+}
+
+.github-overview-recent-tooltip-copy {
+  all: unset;
+  display: inline-grid;
+  place-items: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: pointer;
+  color: #6b7a90;
+  transition: color 120ms linear;
+}
+
+.github-overview-recent-tooltip-copy:hover {
+  color: var(--accent-primary);
+}
+
+.github-overview-recent-tooltip-copy svg {
+  width: 0.92rem;
+  height: 0.92rem;
+}
+
+.github-overview-recent-tooltip-copy svg rect,
+.github-overview-recent-tooltip-copy svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .github-overview-recent-tooltip-author {

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { GITHUB_OVERVIEW_GRAPH_HEIGHT, GITHUB_OVERVIEW_GRAPH_WIDTH } from "../app/constants";
 import { formatGitHubCommitHoverLabel } from "../app/githubMetrics";
@@ -58,12 +58,42 @@ export const GitHubPrimaryView = ({
   const [hoverCursorPosition, setHoverCursorPosition] = useState<{ x: number; y: number } | null>(
     null,
   );
+  const [pinnedCommitHash, setPinnedCommitHash] = useState<string | null>(null);
   const [hoveredCommitHash, setHoveredCommitHash] = useState<string | null>(null);
-  const [commitHoverY, setCommitHoverY] = useState<number | null>(null);
+  const [commitTooltipY, setCommitTooltipY] = useState<number | null>(null);
   const recentSectionRef = useRef<HTMLElement>(null);
-  const hoveredCommit = hoveredCommitHash
-    ? githubRecentCommits.find((c) => c.hash === hoveredCommitHash) ?? null
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const activeCommitHash = pinnedCommitHash ?? hoveredCommitHash;
+  const activeCommit = activeCommitHash
+    ? githubRecentCommits.find((c) => c.hash === activeCommitHash) ?? null
     : null;
+
+  const dismissCommitTooltip = useCallback(() => {
+    setPinnedCommitHash(null);
+    setCommitTooltipY(null);
+  }, []);
+
+  useEffect(() => {
+    if (!pinnedCommitHash) {
+      return;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        recentSectionRef.current?.contains(target) ||
+        tooltipRef.current?.contains(target)
+      ) {
+        return;
+      }
+      dismissCommitTooltip();
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [pinnedCommitHash, dismissCommitTooltip]);
   const hoveredGitHubOverviewPoint =
     hoveredGitHubOverviewPointIndex !== null
       ? githubOverviewGraphSeries[hoveredGitHubOverviewPointIndex] ?? null
@@ -256,10 +286,6 @@ export const GitHubPrimaryView = ({
               className="github-overview-recent"
               aria-label="Recent commits"
               ref={recentSectionRef}
-              onMouseLeave={() => {
-                setHoveredCommitHash(null);
-                setCommitHoverY(null);
-              }}
             >
               <header className="github-overview-recent-header">
                 <h3>Recent commits</h3>
@@ -269,24 +295,41 @@ export const GitHubPrimaryView = ({
               <ol className="github-overview-recent-list">
                 {githubRecentCommits.map((commit) => (
                   <li
-                    className="github-overview-recent-item"
+                    className={`github-overview-recent-item${pinnedCommitHash === commit.hash ? " is-selected" : ""}`}
                     key={commit.hash}
                     onMouseEnter={(event) => {
+                      if (pinnedCommitHash) {
+                        return;
+                      }
                       setHoveredCommitHash(commit.hash);
                       const sectionRect = recentSectionRef.current?.getBoundingClientRect();
                       if (sectionRect) {
-                        setCommitHoverY(event.clientY - sectionRect.top);
-                      }
-                    }}
-                    onMouseMove={(event) => {
-                      const sectionRect = recentSectionRef.current?.getBoundingClientRect();
-                      if (sectionRect) {
-                        setCommitHoverY(event.clientY - sectionRect.top);
+                        const itemRect = event.currentTarget.getBoundingClientRect();
+                        setCommitTooltipY(
+                          itemRect.top - sectionRect.top + itemRect.height / 2,
+                        );
                       }
                     }}
                     onMouseLeave={() => {
+                      if (pinnedCommitHash) {
+                        return;
+                      }
                       setHoveredCommitHash(null);
-                      setCommitHoverY(null);
+                      setCommitTooltipY(null);
+                    }}
+                    onClick={(event) => {
+                      if (pinnedCommitHash === commit.hash) {
+                        dismissCommitTooltip();
+                        return;
+                      }
+                      setPinnedCommitHash(commit.hash);
+                      const sectionRect = recentSectionRef.current?.getBoundingClientRect();
+                      if (sectionRect) {
+                        const itemRect = event.currentTarget.getBoundingClientRect();
+                        setCommitTooltipY(
+                          itemRect.top - sectionRect.top + itemRect.height / 2,
+                        );
+                      }
                     }}
                   >
                     <span aria-hidden="true" className="github-overview-recent-node" />
@@ -305,22 +348,38 @@ export const GitHubPrimaryView = ({
               <p className="github-overview-recent-empty">Recent commit data is unavailable.</p>
             )}
               <div
-                className={`github-overview-recent-tooltip${hoveredCommit ? " is-visible" : ""}`}
+                ref={tooltipRef}
+                className={`github-overview-recent-tooltip${activeCommit ? " is-visible" : ""}`}
                 style={{
-                  top: commitHoverY !== null ? `${commitHoverY}px` : undefined,
+                  top: commitTooltipY !== null ? `${commitTooltipY}px` : undefined,
                 }}
               >
-                {hoveredCommit && (
+                {activeCommit && (
                   <>
-                    <p className="github-overview-recent-tooltip-hash">{hoveredCommit.hash}</p>
+                    <p className="github-overview-recent-tooltip-hash">
+                      <span>{activeCommit.shortHash}</span>
+                      <button
+                        className="github-overview-recent-tooltip-copy"
+                        type="button"
+                        title="Copy full hash"
+                        onClick={() => {
+                          navigator.clipboard.writeText(activeCommit.hash);
+                        }}
+                      >
+                        <svg viewBox="0 0 16 16" aria-hidden="true">
+                          <rect x="5.5" y="5.5" width="8" height="8" rx="1.2" />
+                          <path d="M10.5 5.5V3.7a1.2 1.2 0 0 0-1.2-1.2H3.7a1.2 1.2 0 0 0-1.2 1.2v5.6a1.2 1.2 0 0 0 1.2 1.2H5.5" />
+                        </svg>
+                      </button>
+                    </p>
                     <p className="github-overview-recent-tooltip-author">
-                      {hoveredCommit.authorName}
-                      {hoveredCommit.authorEmail ? ` <${hoveredCommit.authorEmail}>` : ""}
+                      {activeCommit.authorName}
+                      {activeCommit.authorEmail ? ` <${activeCommit.authorEmail}>` : ""}
                     </p>
                     <p className="github-overview-recent-tooltip-message">
-                      {hoveredCommit.body
-                        ? `${hoveredCommit.subject}\n\n${hoveredCommit.body}`
-                        : hoveredCommit.subject}
+                      {activeCommit.body
+                        ? `${activeCommit.subject}\n\n${activeCommit.body}`
+                        : activeCommit.subject}
                     </p>
                   </>
                 )}
