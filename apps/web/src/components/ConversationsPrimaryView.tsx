@@ -1,5 +1,6 @@
 import type { ConversationSessionDetail, ConversationSessionSummary } from "../app/types";
 import { ActionButton } from "./ui/ActionButton";
+import { MarkdownContent } from "./ui/MarkdownContent";
 
 type ConversationsPrimaryViewProps = {
   sessions: ConversationSessionSummary[];
@@ -113,7 +114,7 @@ export const ConversationsPrimaryView = ({
             {selectedSession.turns.map((turn) => (
               <li className="conversations-turn" data-role={turn.role} key={turn.turnId}>
                 <time className="conversations-turn-time" dateTime={turn.startedAt}>{formatTimestamp(turn.startedAt)}</time>
-                <pre>{turn.content}</pre>
+                <MarkdownContent content={turn.content} className="conversations-turn-content" />
               </li>
             ))}
           </ol>
