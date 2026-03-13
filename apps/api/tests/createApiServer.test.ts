@@ -523,6 +523,7 @@ describe("createApiServer", () => {
         turnCount: 2,
         userTurnCount: 1,
         assistantTurnCount: 1,
+        firstUserTurnPreview: "build export",
         lastUserTurnPreview: "build export",
         lastAssistantTurnPreview: "implemented",
       },
@@ -607,9 +608,11 @@ describe("createApiServer", () => {
     );
     expect(markdownExportResponse.status).toBe(200);
     expect(markdownExportResponse.headers.get("content-type")).toContain("text/markdown");
-    await expect(markdownExportResponse.text()).resolves.toContain(
-      "# Conversation tentacle-2-agent-1",
-    );
+    const markdownBody = await markdownExportResponse.text();
+    expect(markdownBody).toContain("## User");
+    expect(markdownBody).toContain("summarize");
+    expect(markdownBody).toContain("## Assistant");
+    expect(markdownBody).toContain("summary ready");
   });
 
   it("returns 400 for unsupported conversation export format", async () => {
