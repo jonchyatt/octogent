@@ -118,8 +118,8 @@
   padding: 0.2rem 0.6rem;
   border: none;
   border-radius: 5px 0 0 5px;
-  background: #b5711a;
-  color: #fff;
+  background: color-mix(in srgb, var(--accent-primary) 88%, #ffd7a0 12%);
+  color: #121212;
   font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
   font-size: 0.78rem;
   font-weight: 500;
@@ -131,7 +131,7 @@
 }
 
 .terminal-prompt-banner-inject:hover {
-  background: #d4881f;
+  background: color-mix(in srgb, var(--accent-primary) 100%, #ffd7a0 0%);
 }
 
 .terminal-prompt-banner-text {
@@ -154,8 +154,8 @@
   padding: 0;
   border: none;
   border-radius: 0 5px 5px 0;
-  background: #9a6016;
-  color: rgba(255, 255, 255, 0.7);
+  background: color-mix(in srgb, var(--accent-primary) 72%, #000 28%);
+  color: rgba(18, 18, 18, 0.6);
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
@@ -164,8 +164,8 @@
 }
 
 .terminal-prompt-banner-close:hover {
-  background: #7a4c12;
-  color: #fff;
+  background: color-mix(in srgb, var(--accent-primary) 56%, #000 44%);
+  color: #121212;
 }
 
 .terminal-header-actions {
