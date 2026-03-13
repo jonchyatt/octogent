@@ -119,6 +119,19 @@
   gap: 0.24rem;
 }
 
+.conversations-transcript-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.conversations-transcript-header-actions {
+  display: flex;
+  gap: 0.32rem;
+  flex-shrink: 0;
+}
+
 .conversations-transcript-header h3 {
   margin: 0;
   color: #dce6f7;
@@ -221,4 +234,48 @@
     grid-template-columns: 1fr;
     grid-template-rows: minmax(200px, auto) minmax(0, 1fr);
   }
+}
+
+/* Sidebar conversations list */
+.sidebar-conversations-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  align-content: start;
+  gap: 0.22rem;
+}
+
+.sidebar-conversation-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid #2b2f36;
+  background: #11161d;
+  color: #b8c2d1;
+  font-family: var(--font-main);
+  padding: 0.34rem 0.4rem;
+  display: grid;
+  gap: 0.1rem;
+  cursor: pointer;
+}
+
+.sidebar-conversation-item strong {
+  color: #e6ebf3;
+  font-size: 0.78rem;
+}
+
+.sidebar-conversation-item span {
+  color: #98a9c0;
+  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+}
+
+.sidebar-conversation-item[data-active="true"] {
+  border-color: color-mix(in srgb, var(--accent-primary) 62%, #6b5210);
+  background: color-mix(in srgb, #19140b 38%, #11161d 62%);
+}
+
+.sidebar-conversation-item:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--accent-primary) 70%, #e9c56c);
+  outline-offset: 1px;
 }

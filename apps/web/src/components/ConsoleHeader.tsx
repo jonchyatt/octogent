@@ -19,7 +19,7 @@ const readStoredProvider = (): TentacleAgentProvider => {
   } catch {
     // ignore
   }
-  return "codex";
+  return "claude-code";
 };
 
 const storeProvider = (provider: TentacleAgentProvider) => {

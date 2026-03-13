@@ -30,9 +30,11 @@ type UseConversationsRuntimeResult = {
   isLoadingSessions: boolean;
   isLoadingSelectedSession: boolean;
   isExporting: boolean;
+  isClearing: boolean;
   errorMessage: string | null;
   selectSession: (sessionId: string) => void;
   refreshSessions: () => Promise<void>;
+  clearAllSessions: () => Promise<void>;
   exportSession: (
     sessionId: string,
     format: ConversationExportFormat,
@@ -54,6 +56,7 @@ export const useConversationsRuntime = ({
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [isLoadingSelectedSession, setIsLoadingSelectedSession] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const selectedSessionRequestRef = useRef(0);
 
@@ -94,6 +97,32 @@ export const useConversationsRuntime = ({
       setErrorMessage(buildErrorMessage("Unable to load conversations.", error));
     } finally {
       setIsLoadingSessions(false);
+    }
+  }, [enabled]);
+
+  const clearAllSessions = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
+
+    setIsClearing(true);
+    try {
+      const response = await fetch(buildConversationsUrl(), {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Unable to clear conversations (${response.status})`);
+      }
+
+      setSessions([]);
+      setSelectedSessionId(null);
+      setSelectedSession(null);
+      setErrorMessage(null);
+    } catch (error) {
+      setErrorMessage(buildErrorMessage("Unable to clear conversations.", error));
+    } finally {
+      setIsClearing(false);
     }
   }, [enabled]);
 
@@ -158,6 +187,7 @@ export const useConversationsRuntime = ({
       setIsLoadingSessions(false);
       setIsLoadingSelectedSession(false);
       setIsExporting(false);
+      setIsClearing(false);
       setErrorMessage(null);
       return;
     }
@@ -219,9 +249,11 @@ export const useConversationsRuntime = ({
     isLoadingSessions,
     isLoadingSelectedSession,
     isExporting,
+    isClearing,
     errorMessage,
     selectSession,
     refreshSessions,
+    clearAllSessions,
     exportSession,
   };
 };

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { CodexRuntimeState } from "../codexStateDetection";
@@ -360,6 +360,23 @@ export const listConversationSessions = (
 
 export const ensureTranscriptDirectory = (transcriptDirectoryPath: string) => {
   mkdirSync(transcriptDirectoryPath, { recursive: true });
+};
+
+export const deleteAllConversations = (transcriptDirectoryPath: string) => {
+  if (!existsSync(transcriptDirectoryPath)) {
+    return;
+  }
+
+  const files = readdirSync(transcriptDirectoryPath);
+  for (const file of files) {
+    if (file.endsWith(".jsonl") || file.endsWith(".claude-turns.json")) {
+      try {
+        rmSync(join(transcriptDirectoryPath, file));
+      } catch {
+        // Best-effort removal
+      }
+    }
+  }
 };
 
 const claudeTurnsFilename = (sessionId: string) =>

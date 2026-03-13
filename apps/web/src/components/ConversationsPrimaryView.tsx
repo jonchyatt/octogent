@@ -3,14 +3,14 @@ import { ActionButton } from "./ui/ActionButton";
 
 type ConversationsPrimaryViewProps = {
   sessions: ConversationSessionSummary[];
-  selectedSessionId: string | null;
   selectedSession: ConversationSessionDetail | null;
   isLoadingSessions: boolean;
   isLoadingSelectedSession: boolean;
   isExporting: boolean;
+  isClearing: boolean;
   errorMessage: string | null;
-  onSelectSession: (sessionId: string) => void;
   onRefresh: () => void;
+  onClearAll: () => void;
   onExport: (format: "json" | "md") => void;
 };
 
@@ -35,14 +35,14 @@ const formatTimestamp = (value: string | null) => {
 
 export const ConversationsPrimaryView = ({
   sessions,
-  selectedSessionId,
   selectedSession,
   isLoadingSessions,
   isLoadingSelectedSession,
   isExporting,
+  isClearing,
   errorMessage,
-  onSelectSession,
   onRefresh,
+  onClearAll,
   onExport,
 }: ConversationsPrimaryViewProps) => (
   <section className="conversations-view" aria-label="Conversations primary view">
@@ -63,100 +63,85 @@ export const ConversationsPrimaryView = ({
           {isLoadingSessions ? "Refreshing..." : "Refresh"}
         </ActionButton>
         <ActionButton
-          aria-label="Export conversation as JSON"
-          className="conversations-export"
-          disabled={!selectedSession || isExporting}
-          onClick={() => {
-            onExport("json");
-          }}
+          aria-label="Clear all conversations"
+          className="conversations-clear-all"
+          disabled={sessions.length === 0 || isClearing}
+          onClick={onClearAll}
           size="dense"
-          variant="info"
+          variant="danger"
         >
-          {isExporting ? "Exporting..." : "Export JSON"}
-        </ActionButton>
-        <ActionButton
-          aria-label="Export conversation as Markdown"
-          className="conversations-export"
-          disabled={!selectedSession || isExporting}
-          onClick={() => {
-            onExport("md");
-          }}
-          size="dense"
-          variant="info"
-        >
-          {isExporting ? "Exporting..." : "Export Markdown"}
+          {isClearing ? "Clearing..." : "Clear All"}
         </ActionButton>
       </div>
     </header>
 
     {errorMessage ? <p className="conversations-error">{errorMessage}</p> : null}
 
-    <div className="conversations-layout">
-      <aside className="conversations-sessions" aria-label="Conversation sessions">
-        {sessions.length === 0 ? (
-          <p className="conversations-empty">No conversation transcripts yet.</p>
-        ) : (
-          <ol className="conversations-session-list">
-            {sessions.map((session) => (
-              <li key={session.sessionId}>
-                <button
-                  aria-current={session.sessionId === selectedSessionId ? "page" : undefined}
-                  className="conversations-session-item"
-                  data-active={session.sessionId === selectedSessionId ? "true" : "false"}
+    <section className="conversations-transcript" aria-label="Conversation transcript pane">
+      {isLoadingSelectedSession ? (
+        <p className="conversations-empty">Loading conversation...</p>
+      ) : selectedSession ? (
+        <>
+          <header className="conversations-transcript-header">
+            <div className="conversations-transcript-header-top">
+              <h3>{selectedSession.sessionId}</h3>
+              <div className="conversations-transcript-header-actions">
+                <ActionButton
+                  aria-label="Export conversation as JSON"
+                  className="conversations-export"
+                  disabled={isExporting}
                   onClick={() => {
-                    onSelectSession(session.sessionId);
+                    onExport("json");
                   }}
-                  type="button"
+                  size="dense"
+                  variant="info"
                 >
-                  <strong>{session.sessionId}</strong>
-                  <span>{`Tentacle ${session.tentacleId ?? "--"}`}</span>
-                  <span>{`${session.turnCount} turns`}</span>
-                  <span>{`Updated ${formatTimestamp(session.lastEventAt)}`}</span>
-                </button>
+                  {isExporting ? "Exporting..." : "Export JSON"}
+                </ActionButton>
+                <ActionButton
+                  aria-label="Export conversation as Markdown"
+                  className="conversations-export"
+                  disabled={isExporting}
+                  onClick={() => {
+                    onExport("md");
+                  }}
+                  size="dense"
+                  variant="info"
+                >
+                  {isExporting ? "Exporting..." : "Export Markdown"}
+                </ActionButton>
+              </div>
+            </div>
+            <dl>
+              <div>
+                <dt>Started</dt>
+                <dd>{formatTimestamp(selectedSession.startedAt)}</dd>
+              </div>
+              <div>
+                <dt>Ended</dt>
+                <dd>{formatTimestamp(selectedSession.endedAt)}</dd>
+              </div>
+              <div>
+                <dt>Events</dt>
+                <dd>{selectedSession.eventCount}</dd>
+              </div>
+            </dl>
+          </header>
+          <ol className="conversations-turn-list">
+            {selectedSession.turns.map((turn) => (
+              <li className="conversations-turn" data-role={turn.role} key={turn.turnId}>
+                <header>
+                  <span>{turn.role === "user" ? "User" : "Assistant"}</span>
+                  <time dateTime={turn.startedAt}>{formatTimestamp(turn.startedAt)}</time>
+                </header>
+                <pre>{turn.content}</pre>
               </li>
             ))}
           </ol>
-        )}
-      </aside>
-
-      <section className="conversations-transcript" aria-label="Conversation transcript pane">
-        {isLoadingSelectedSession ? (
-          <p className="conversations-empty">Loading conversation...</p>
-        ) : selectedSession ? (
-          <>
-            <header className="conversations-transcript-header">
-              <h3>{selectedSession.sessionId}</h3>
-              <dl>
-                <div>
-                  <dt>Started</dt>
-                  <dd>{formatTimestamp(selectedSession.startedAt)}</dd>
-                </div>
-                <div>
-                  <dt>Ended</dt>
-                  <dd>{formatTimestamp(selectedSession.endedAt)}</dd>
-                </div>
-                <div>
-                  <dt>Events</dt>
-                  <dd>{selectedSession.eventCount}</dd>
-                </div>
-              </dl>
-            </header>
-            <ol className="conversations-turn-list">
-              {selectedSession.turns.map((turn) => (
-                <li className="conversations-turn" data-role={turn.role} key={turn.turnId}>
-                  <header>
-                    <span>{turn.role === "user" ? "User" : "Assistant"}</span>
-                    <time dateTime={turn.startedAt}>{formatTimestamp(turn.startedAt)}</time>
-                  </header>
-                  <pre>{turn.content}</pre>
-                </li>
-              ))}
-            </ol>
-          </>
-        ) : (
-          <p className="conversations-empty">Select a session to view conversation history.</p>
-        )}
-      </section>
-    </div>
+        </>
+      ) : (
+        <p className="conversations-empty">Select a conversation from the sidebar.</p>
+      )}
+    </section>
   </section>
 );

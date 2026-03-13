@@ -325,6 +325,12 @@ const handleConversationsCollectionRoute: ApiRouteHandler = async (
     return false;
   }
 
+  if (request.method === "DELETE") {
+    runtime.deleteAllConversationSessions();
+    writeNoContent(response, 204, corsOrigin);
+    return true;
+  }
+
   if (request.method !== "GET") {
     writeMethodNotAllowed(response, corsOrigin);
     return true;

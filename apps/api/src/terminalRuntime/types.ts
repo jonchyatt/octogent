@@ -189,6 +189,7 @@ export type TerminalRuntime = {
   listConversationSessions(): ConversationSessionSummary[];
   readConversationSession(sessionId: string): ConversationSessionDetail | null;
   exportConversationSession(sessionId: string, format: "json" | "md"): string | null;
+  deleteAllConversationSessions(): void;
   readUiState(): PersistedUiState;
   patchUiState(patch: PersistedUiState): PersistedUiState;
   readTentacleGitStatus(tentacleId: string): TentacleGitStatusSnapshot | null;

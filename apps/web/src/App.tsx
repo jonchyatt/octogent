@@ -21,6 +21,7 @@ import { useTentacleStateReconciliation } from "./app/hooks/useTentacleStateReco
 import { clampSidebarWidth } from "./app/normalizers";
 import type { TentacleView } from "./app/types";
 import { ActiveAgentsSidebar } from "./components/ActiveAgentsSidebar";
+import { SidebarConversationsList } from "./components/SidebarConversationsList";
 import type { CodexState } from "./components/CodexStateBadge";
 import { ConsoleHeader } from "./components/ConsoleHeader";
 import { ConsolePrimaryNav } from "./components/ConsolePrimaryNav";
@@ -268,9 +269,11 @@ export const App = () => {
     isLoadingSessions: isLoadingConversationSessions,
     isLoadingSelectedSession,
     isExporting: isExportingConversation,
+    isClearing: isClearingConversations,
     errorMessage: conversationsErrorMessage,
     selectSession,
     refreshSessions,
+    clearAllSessions,
     exportSession,
   } = useConversationsRuntime({
     enabled: isUiStateHydrated && activePrimaryNav === 4,
@@ -409,6 +412,15 @@ export const App = () => {
               minimizedTentacleIds={minimizedTentacleIds}
               onMaximizeTentacle={handleMaximizeTentacle}
               actionPanel={sidebarActionPanel}
+              bodyContent={
+                activePrimaryNav === 4 ? (
+                  <SidebarConversationsList
+                    sessions={conversationSessions}
+                    selectedSessionId={selectedSessionId}
+                    onSelectSession={selectSession}
+                  />
+                ) : undefined
+              }
             />
           )}
 
@@ -465,8 +477,12 @@ export const App = () => {
             conversationsPrimaryViewProps={{
               errorMessage: conversationsErrorMessage,
               isExporting: isExportingConversation,
+              isClearing: isClearingConversations,
               isLoadingSelectedSession,
               isLoadingSessions: isLoadingConversationSessions,
+              onClearAll: () => {
+                void clearAllSessions();
+              },
               onExport: (format) => {
                 if (!selectedSessionId) {
                   return;
@@ -491,9 +507,7 @@ export const App = () => {
               onRefresh: () => {
                 void refreshSessions();
               },
-              onSelectSession: selectSession,
               selectedSession,
-              selectedSessionId,
               sessions: conversationSessions,
             }}
             tentacleBoardProps={{

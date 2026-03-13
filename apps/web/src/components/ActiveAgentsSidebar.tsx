@@ -52,6 +52,7 @@ type ActiveAgentsSidebarProps = {
   } | null;
   claudeUsageStatus?: "ok" | "unavailable" | "error" | "loading";
   actionPanel?: ReactNode;
+  bodyContent?: ReactNode;
 };
 
 const clampSidebarWidth = (width: number): number =>
@@ -106,6 +107,7 @@ export const ActiveAgentsSidebar = ({
   claudeUsageSnapshot = null,
   claudeUsageStatus = "loading",
   actionPanel = null,
+  bodyContent,
 }: ActiveAgentsSidebarProps) => {
   const sidebarRef = useRef<HTMLElement | null>(null);
   const resolveAgentCodexState = (
@@ -201,6 +203,7 @@ export const ActiveAgentsSidebar = ({
         ) : (
           <>
             <div className="active-agents-body">
+              {bodyContent ?? (
               <section className="active-agents-section" aria-label="Sidebar section Active Agents">
                 <button
                   aria-controls="active-agents-section-panel"
@@ -294,7 +297,7 @@ export const ActiveAgentsSidebar = ({
                   </div>
                 )}
               </section>
-            </div>
+              )}</div>
             {showUsageFooter && (
               <footer className="active-agents-footer">
                 {isCodexUsageVisible && (

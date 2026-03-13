@@ -14,6 +14,7 @@ import {
 import { parseClaudeTranscript } from "./terminalRuntime/claudeTranscript";
 import {
   conversationExportMarkdown,
+  deleteAllConversations,
   listConversationSessions,
   readConversationSession,
   storeClaudeTranscriptTurns,
@@ -67,16 +68,16 @@ export const createTerminalRuntime = ({
   const apiPort = process.env.OCTOGENT_API_PORT ?? process.env.PORT ?? "8787";
 
   const installHooksInDirectory = (targetCwd: string) => {
-    const projectHooksPath = join(workspaceCwd, ".claude", "hooks.json");
+    const projectSettingsPath = join(workspaceCwd, ".claude", "settings.json");
     const targetClaudeDir = join(targetCwd, ".claude");
-    const targetHooksPath = join(targetClaudeDir, "hooks.json");
+    const targetSettingsPath = join(targetClaudeDir, "settings.json");
 
-    // If the project root has a hooks.json, copy it into the target directory.
-    if (existsSync(projectHooksPath)) {
+    // If the project root has a settings.json with hooks, copy it into the target directory.
+    if (existsSync(projectSettingsPath)) {
       try {
-        const content = readFileSync(projectHooksPath, "utf8");
+        const content = readFileSync(projectSettingsPath, "utf8");
         mkdirSync(targetClaudeDir, { recursive: true });
-        writeFileSync(targetHooksPath, content, "utf8");
+        writeFileSync(targetSettingsPath, content, "utf8");
       } catch {
         // Best-effort: hooks are not critical for tentacle operation.
       }
@@ -139,7 +140,7 @@ export const createTerminalRuntime = ({
 
     try {
       mkdirSync(targetClaudeDir, { recursive: true });
-      writeFileSync(targetHooksPath, `${JSON.stringify(hooksConfig, null, 2)}\n`, "utf8");
+      writeFileSync(targetSettingsPath, `${JSON.stringify(hooksConfig, null, 2)}\n`, "utf8");
     } catch {
       // Best-effort
     }
@@ -489,6 +490,10 @@ export const createTerminalRuntime = ({
       }
 
       return conversationExportMarkdown(conversation);
+    },
+
+    deleteAllConversationSessions() {
+      deleteAllConversations(transcriptDirectoryPath);
     },
 
     readUiState,
@@ -875,6 +880,8 @@ export const createTerminalRuntime = ({
     },
 
     handleHook(hookName: string, payload: unknown): { ok: boolean } {
+      console.log(`[Hook] Received hook: ${hookName}`, JSON.stringify(payload));
+
       if (hookName !== "stop" || !payload || typeof payload !== "object") {
         return { ok: true };
       }
@@ -884,15 +891,20 @@ export const createTerminalRuntime = ({
         typeof hookPayload.transcript_path === "string" ? hookPayload.transcript_path : null;
       const hookCwd = typeof hookPayload.cwd === "string" ? hookPayload.cwd : null;
 
+      console.log(`[Hook] Stop hook: transcriptPath=${transcriptPath}, hookCwd=${hookCwd}`);
+
       if (!transcriptPath || !hookCwd) {
+        console.log("[Hook] Missing transcriptPath or hookCwd, skipping.");
         return { ok: true };
       }
 
       // Find the octogent session whose tentacle CWD matches the hook's cwd.
       let matchedSessionId: string | null = null;
+      console.log(`[Hook] Active sessions: ${sessions.size}`);
       for (const [sessionId, session] of sessions.entries()) {
         try {
           const tentacleCwd = worktreeManager.getTentacleWorkspaceCwd(session.tentacleId);
+          console.log(`[Hook] Session ${sessionId}: tentacleCwd=${tentacleCwd}`);
           if (tentacleCwd === hookCwd || hookCwd.startsWith(`${tentacleCwd}/`)) {
             matchedSessionId = sessionId;
             break;
@@ -903,12 +915,44 @@ export const createTerminalRuntime = ({
       }
 
       if (!matchedSessionId) {
+        console.log("[Hook] No matching session found for cwd, skipping.");
         return { ok: true };
       }
 
+      console.log(`[Hook] Matched session: ${matchedSessionId}, parsing transcript...`);
       const turns = parseClaudeTranscript(transcriptPath);
-      if (turns && turns.length > 0) {
+      console.log(`[Hook] Parsed ${turns?.length ?? 0} turns from transcript.`);
+
+      // The Stop hook payload includes the last assistant message which may not
+      // yet be written to the transcript file. Append it if it's missing.
+      const lastAssistantMessage =
+        typeof hookPayload.last_assistant_message === "string"
+          ? hookPayload.last_assistant_message.trim()
+          : null;
+
+      if (lastAssistantMessage && lastAssistantMessage.length > 0) {
+        const effectiveTurns = turns ?? [];
+        const lastTurn = effectiveTurns.length > 0 ? effectiveTurns[effectiveTurns.length - 1] : null;
+
+        if (!lastTurn || lastTurn.role !== "assistant" || lastTurn.content !== lastAssistantMessage) {
+          const now = new Date().toISOString();
+          effectiveTurns.push({
+            turnId: `turn-${effectiveTurns.length + 1}`,
+            role: "assistant",
+            content: lastAssistantMessage,
+            startedAt: now,
+            endedAt: now,
+          });
+          console.log(`[Hook] Appended last_assistant_message as final turn.`);
+        }
+
+        if (effectiveTurns.length > 0) {
+          storeClaudeTranscriptTurns(transcriptDirectoryPath, matchedSessionId, effectiveTurns);
+          console.log(`[Hook] Stored ${effectiveTurns.length} turns for session ${matchedSessionId}.`);
+        }
+      } else if (turns && turns.length > 0) {
         storeClaudeTranscriptTurns(transcriptDirectoryPath, matchedSessionId, turns);
+        console.log(`[Hook] Stored ${turns.length} turns for session ${matchedSessionId}.`);
       }
 
       return { ok: true };
