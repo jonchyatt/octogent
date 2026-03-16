@@ -11,9 +11,11 @@ import { useEffect, useRef } from "react";
 
 const DEFAULT_SCALE = 14; // CSS pixels per sprite pixel
 const BOUNCE_PAD = 2; // extra canvas rows reserved for vertical animations
-// Extra rows above the sprite for sleepy ZZZ overlay (transparent for all other expressions).
-const TOP_PAD = 4;
+// Extra rows above the sprite for overlays (ZZZ, accessories).
+const ZZZ_PAD = 7; // sleepy ZZZ needs 7 rows
+const ACCESSORY_PAD = 3; // hair etc. needs 3 rows above the dome
 const ZZZ_COLOR = "#7ec8e3"; // soft sky-blue for the floating z glyphs
+const HAIR_COLOR = "#4a2c0a"; // dark brown
 
 const B = "B"; // body (accent fill)
 const O = "O"; // outline (dark)
@@ -49,6 +51,24 @@ const HEAD_BODY: string[][] = [
   [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_], // 9
 ];
 
+// Happy — open mouth: solid black rectangle in rows 7-8, cols 5-10.
+// prettier-ignore
+const HEAD_BODY_HAPPY: string[][] = [
+  [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_], // 6
+  [_,O,B,B,B,O,O,O,O,O,O,O,B,B,O,_], // 7  top of open mouth (cols 5-10)
+  [_,O,B,B,B,O,O,O,O,O,O,O,B,B,O,_], // 8  bottom of open mouth (cols 5-10)
+  [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_], // 9
+];
+
+// Angry — open mouth, narrower than happy to read as a shout/snarl.
+// prettier-ignore
+const HEAD_BODY_ANGRY: string[][] = [
+  [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_], // 6
+  [_,O,B,B,B,B,O,O,O,O,O,B,B,B,O,_], // 7  top of open mouth (cols 6-10)
+  [_,O,B,B,B,B,O,O,O,O,O,B,B,B,O,_], // 8  bottom of open mouth (cols 6-10)
+  [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_], // 9
+];
+
 // Normal — 2×2 square eyes (rows 4-5).
 // prettier-ignore
 const FACE_NORMAL: string[][] = [
@@ -57,12 +77,13 @@ const FACE_NORMAL: string[][] = [
   [_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_], // 5  eyes
 ];
 
-// Happy — squinted eyes (crescent: only top eye row visible, bottom cleared).
+// Happy — upward-curved eyes (^_^ style): bottom row lit, top row clear.
+// The open space above the pupil makes the eye read as curving upward = smile.
 // prettier-ignore
 const FACE_HAPPY: string[][] = [
   [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_], // 3
-  [_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_], // 4  top half of eye
-  [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_], // 5  clear = squinted
+  [_,O,B,B,B,B,B,B,B,B,B,B,B,B,O,_], // 4  clear = top of eye open
+  [_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_], // 5  bottom row lit = eyes curve up
 ];
 
 // Sleepy — heavy eyelid (solid outline stripe) with tiny pupils peeking below.
@@ -90,8 +111,12 @@ const FACE_SURPRISED: string[][] = [
   [_,O,B,B,E,E,B,B,B,B,E,E,B,B,O,_], // 5  eyes
 ];
 
-function buildHead(face: string[][], topRows: string[][] = HEAD_TOP): string[][] {
-  return [...topRows, ...face, ...HEAD_BODY];
+function buildHead(
+  face: string[][],
+  topRows: string[][] = HEAD_TOP,
+  bodyRows: string[][] = HEAD_BODY,
+): string[][] {
+  return [...topRows, ...face, ...bodyRows];
 }
 
 // ─── Tentacle / tail variants ────────────────────────────────────────────────
@@ -199,11 +224,49 @@ const WALK_S3: string[][] = [
   [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_], // 13  empty
 ];
 
-const WALK_FRAMES: SpriteFrame[] = [
+const JOG_FRAMES: SpriteFrame[] = [
   { bottom: WALK_S0, yOffset: 1 }, // neutral (dip)
   { bottom: WALK_S1, yOffset: 0 }, // step right
   { bottom: WALK_S0, yOffset: 1 }, // neutral (dip)
   { bottom: WALK_S3, yOffset: 0 }, // step left
+];
+
+// Walk: wave stride — motion ripples across tentacles left → right.
+// Three leg states: neutral (straight), mid (knee bends, foot stays), bent (full step).
+// The stepping leg cycles L → M → R. The leg before the stepper shows the mid state,
+// creating a smooth wave: neutral → mid → bent → neutral.
+
+// Frame 0: L=bent, M=neutral, R=mid (trailing from previous cycle)
+// prettier-ignore
+const WALK_WAVE_0: string[][] = [
+  [_,O,B,B,O,_,O,B,B,O,_,O,B,B,O,_], // 10  upper legs
+  [_,_,_,B,B,_,_,B,B,_,_,_,_,B,B,_], // 11  L bent knee, M center, R mid knee
+  [_,_,_,O,B,O,O,B,B,O,_,O,B,B,O,_], // 12  L bent(narrow), M neutral, R mid(full)
+  [_,_,_,_,O,O,_,O,O,_,_,_,O,O,_,_], // 13  caps follow
+];
+
+// Frame 1: M=bent, L=mid (trailing), R=neutral
+// prettier-ignore
+const WALK_WAVE_1: string[][] = [
+  [_,O,B,B,O,_,O,B,B,O,_,O,B,B,O,_], // 10  upper legs
+  [_,_,_,B,B,_,_,_,B,B,_,_,B,B,_,_], // 11  L mid knee, M bent knee, R center
+  [_,O,B,B,O,_,_,_,O,B,O,O,B,B,O,_], // 12  L mid(full), M bent(narrow), R neutral
+  [_,_,O,O,_,_,_,_,_,O,O,_,O,O,_,_], // 13  caps follow
+];
+
+// Frame 2: R=bent, M=mid (trailing), L=neutral
+// prettier-ignore
+const WALK_WAVE_2: string[][] = [
+  [_,O,B,B,O,_,O,B,B,O,_,O,B,B,O,_], // 10  upper legs
+  [_,_,B,B,_,_,_,_,B,B,_,_,_,B,B,_], // 11  L center, M mid knee, R bent knee
+  [_,O,B,B,O,_,O,B,B,O,_,_,_,O,B,O], // 12  L neutral, M mid(full), R bent(narrow)
+  [_,_,O,O,_,_,_,O,O,_,_,_,_,_,O,O], // 13  caps follow
+];
+
+const WALK_FRAMES: SpriteFrame[] = [
+  { bottom: WALK_WAVE_0 },
+  { bottom: WALK_WAVE_1 },
+  { bottom: WALK_WAVE_2 },
 ];
 
 // ─── Bounce / float animations ───────────────────────────────────────────────
@@ -249,7 +312,8 @@ const FLOAT_FRAMES: SpriteFrame[] = [
 
 // ─── Frame timing ────────────────────────────────────────────────────────────
 
-const WALK_FRAME_MS = 220;
+const JOG_FRAME_MS = 220;
+const WALK_FRAME_MS = 320;
 const SWAY_FRAME_MS = 350;
 const FLOAT_FRAME_MS = 420;
 
@@ -259,14 +323,27 @@ const SPRITE_W = 16;
 // HEAD_TOP(3) + face(3) + HEAD_BODY(4) + TENTACLE_TOP(1) + TAIL_NEUTRAL(3) = 14
 const SPRITE_H = HEAD_TOP.length + FACE_NORMAL.length + HEAD_BODY.length + TENTACLE_TOP.length + TAIL_NEUTRAL.length;
 
-export type OctopusAnimation = "idle" | "sway" | "jog" | "walk-up" | "bounce" | "float";
+export type OctopusAnimation = "idle" | "sway" | "walk" | "jog" | "swim-up" | "bounce" | "float";
 export type OctopusExpression = "normal" | "happy" | "sleepy" | "angry" | "surprised";
+export type OctopusAccessory = "none" | "hair";
+
+// ─── Accessories ──────────────────────────────────────────────────────────────
+// Pixel overlays drawn on top of the sprite. Coordinates are relative to
+// sprite row 0 (negative y = above the dome). Works with any animation/expression.
+
+// Hair — small quiff sitting on top of the dome.
+// prettier-ignore
+const HAIR_PIXELS: Array<[number, number]> = [
+                [7,-3],[8,-3],                   // tip
+         [6,-2],[7,-2],[8,-2],[9,-2],            // mid
+  [5,-1],[6,-1],[7,-1],[8,-1],[9,-1],[10,-1],    // base (covers dome top)
+];
 
 const HEADS: Record<OctopusExpression, string[][]> = {
   normal:    buildHead(FACE_NORMAL),
-  happy:     buildHead(FACE_HAPPY),
+  happy:     buildHead(FACE_HAPPY,    HEAD_TOP,       HEAD_BODY_HAPPY),
   sleepy:    buildHead(FACE_SLEEPY),
-  angry:     buildHead(FACE_ANGRY, HEAD_TOP_ANGRY),
+  angry:     buildHead(FACE_ANGRY,    HEAD_TOP_ANGRY, HEAD_BODY_ANGRY),
   surprised: buildHead(FACE_SURPRISED),
 };
 
@@ -295,33 +372,66 @@ function drawSprite(
   }
 }
 
-// Draw floating Z glyphs in the top-pad rows (canvas rows 0..TOP_PAD-1 = rows 0..3).
-// zzzPhase 0 → small Z only; zzzPhase 1 → small + medium Z; 2-3 → hidden (blink off).
-// Each Z is a proper 3×3 pixel shape: top-bar / center-diagonal / bottom-bar.
+// Three 3×5 Z glyphs staggered rising right→left above the sprite.
+// Each Z: top-bar / 3-step diagonal (top-right→bottom-left) / bottom-bar.
+// Phase 0: Z1 only · Phase 1: all three · Phase 2-3: hidden.
 function drawZZZ(ctx: CanvasRenderingContext2D, scale: number, zzzPhase: number) {
-  if (zzzPhase >= 2) return;
+  if (zzzPhase >= 3) return; // phases 3-4 are the blank pause
 
   ctx.fillStyle = ZZZ_COLOR;
 
-  // Small Z — 3×3 at rows 1-3, cols 13-15 (right side, just above the dome).
+  // Z1 — lowest, right side. Rows 2-6, cols 13-15.
   // prettier-ignore
-  const SMALL_Z: Array<[number, number]> = [
-    [13,1],[14,1],[15,1],  // top bar
-           [14,2],         // center diagonal pixel
-    [13,3],[14,3],[15,3],  // bottom bar
+  const Z1: Array<[number, number]> = [
+    [13,2],[14,2],[15,2],
+                  [15,3],
+           [14,4],
+    [13,5],
+    [13,6],[14,6],[15,6],
   ];
 
-  // Medium Z — 3×3 at rows 0-2, cols 10-12 (higher and left, trailing-z effect).
+  // Z2 — middle height. Rows 1-5, cols 9-11.
   // prettier-ignore
-  const MED_Z: Array<[number, number]> = [
-    [10,0],[11,0],[12,0],  // top bar
-           [11,1],         // center diagonal pixel
-    [10,2],[11,2],[12,2],  // bottom bar
+  const Z2: Array<[number, number]> = [
+    [9,1],[10,1],[11,1],
+                 [11,2],
+          [10,3],
+    [9,4],
+    [9,5],[10,5],[11,5],
   ];
 
-  const pixels = zzzPhase === 0 ? SMALL_Z : [...SMALL_Z, ...MED_Z];
+  // Z3 — highest, left side. Rows 0-4, cols 5-7.
+  // prettier-ignore
+  const Z3: Array<[number, number]> = [
+    [5,0],[6,0],[7,0],
+                [7,1],
+          [6,2],
+    [5,3],
+    [5,4],[6,4],[7,4],
+  ];
+
+  const pixels =
+    zzzPhase === 0 ? Z1 :
+    zzzPhase === 1 ? [...Z1, ...Z2] :
+    [...Z1, ...Z2, ...Z3];
   for (const [x, y] of pixels) {
     ctx.fillRect(x * scale, y * scale, scale, scale);
+  }
+}
+
+// Draw accessory overlay. Coordinates are relative to sprite row 0,
+// so they move with the sprite (respecting yOffset and topPad).
+function drawAccessory(
+  ctx: CanvasRenderingContext2D,
+  accessory: OctopusAccessory,
+  scale: number,
+  yOff: number,
+) {
+  if (accessory === "none") return;
+  const pixels = accessory === "hair" ? HAIR_PIXELS : [];
+  ctx.fillStyle = HAIR_COLOR;
+  for (const [x, y] of pixels) {
+    ctx.fillRect(x * scale, (y + yOff) * scale, scale, scale);
   }
 }
 
@@ -329,10 +439,12 @@ function drawZZZ(ctx: CanvasRenderingContext2D, scale: number, zzzPhase: number)
 
 function buildFrameSequence(animation: OctopusAnimation): SpriteFrame[] {
   switch (animation) {
-    case "walk-up":
+    case "swim-up":
       return WALKUP_FRAMES.map((bottom) => ({ bottom }));
-    case "jog":
+    case "walk":
       return WALK_FRAMES;
+    case "jog":
+      return JOG_FRAMES;
     case "bounce":
       return BOUNCE_FRAMES;
     case "float":
@@ -343,7 +455,8 @@ function buildFrameSequence(animation: OctopusAnimation): SpriteFrame[] {
 }
 
 function animationFrameMs(animation: OctopusAnimation): number {
-  if (animation === "jog" || animation === "walk-up") return WALK_FRAME_MS;
+  if (animation === "jog" || animation === "swim-up") return JOG_FRAME_MS;
+  if (animation === "walk") return WALK_FRAME_MS;
   if (animation === "float") return FLOAT_FRAME_MS;
   return SWAY_FRAME_MS;
 }
@@ -355,6 +468,7 @@ const IDLE_FRAME: SpriteFrame = { bottom: [...TENTACLE_TOP, ...TAIL_NEUTRAL] };
 type OctopusGlyphProps = {
   animation?: OctopusAnimation;
   expression?: OctopusExpression;
+  accessory?: OctopusAccessory;
   /** Override the pixel scale (CSS px per sprite pixel). Default: 14. */
   scale?: number;
   className?: string;
@@ -365,6 +479,7 @@ type OctopusGlyphProps = {
 export const OctopusGlyph = ({
   animation = "sway",
   expression = "normal",
+  accessory = "none",
   scale = DEFAULT_SCALE,
   className,
   color,
@@ -374,8 +489,11 @@ export const OctopusGlyph = ({
   const frameRef = useRef(0);
   const zzzPhaseRef = useRef(0);
 
-  // Sleepy expression gets extra canvas rows above the sprite for the ZZZ overlay.
-  const topPad = expression === "sleepy" ? TOP_PAD : 0;
+  // Extra canvas rows above the sprite for overlays (ZZZ, accessories).
+  const topPad = Math.max(
+    expression === "sleepy" ? ZZZ_PAD : 0,
+    accessory !== "none" ? ACCESSORY_PAD : 0,
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -396,6 +514,8 @@ export const OctopusGlyph = ({
     const drawFrame = (frame: SpriteFrame, zzzPhase: number) => {
       drawSprite(ctx, accentColor, frame, head, scale, topPad);
       if (expression === "sleepy") drawZZZ(ctx, scale, zzzPhase);
+      const yOff = (frame.yOffset ?? 0) + topPad;
+      drawAccessory(ctx, accessory, scale, yOff);
     };
 
     // Idle with no ZZZ: static, no interval.
@@ -417,12 +537,12 @@ export const OctopusGlyph = ({
       if (frames) {
         frameRef.current = (frameRef.current + 1) % frames.length;
       }
-      zzzPhaseRef.current = (zzzPhaseRef.current + 1) % 4;
+      zzzPhaseRef.current = (zzzPhaseRef.current + 1) % 5;
       drawFrame(frames?.[frameRef.current] ?? IDLE_FRAME, zzzPhaseRef.current);
     }, ms);
 
     return () => clearInterval(id);
-  }, [animation, expression, color, scale, topPad]);
+  }, [animation, expression, accessory, color, scale, topPad]);
 
   return (
     <canvas
