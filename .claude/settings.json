@@ -29,8 +29,14 @@
         "matcher": "*",
         "hooks": [
           {
-            "type": "command",
-            "command": "curl -s -X POST \"http://localhost:8787/api/hooks/pre-tool-use?octogent_session=$OCTOGENT_SESSION_ID\" -H 'Content-Type: application/json' -d @- || true",
+            "type": "http",
+            "url": "http://localhost:8787/api/hooks/pre-tool-use",
+            "headers": {
+              "X-Octogent-Session": "$OCTOGENT_SESSION_ID"
+            },
+            "allowedEnvVars": [
+              "OCTOGENT_SESSION_ID"
+            ],
             "timeout": 5
           }
         ]
@@ -41,8 +47,14 @@
         "matcher": "*",
         "hooks": [
           {
-            "type": "command",
-            "command": "curl -s -X POST \"http://localhost:8787/api/hooks/notification?octogent_session=$OCTOGENT_SESSION_ID\" -H 'Content-Type: application/json' -d @- || true",
+            "type": "http",
+            "url": "http://localhost:8787/api/hooks/notification",
+            "headers": {
+              "X-Octogent-Session": "$OCTOGENT_SESSION_ID"
+            },
+            "allowedEnvVars": [
+              "OCTOGENT_SESSION_ID"
+            ],
             "timeout": 5
           }
         ]

@@ -110,8 +110,10 @@ export const createTerminalRuntime = ({
             matcher: "*",
             hooks: [
               {
-                type: "command",
-                command: `curl -s -X POST "http://localhost:${apiPort}/api/hooks/pre-tool-use?octogent_session=$OCTOGENT_SESSION_ID" -H 'Content-Type: application/json' -d @- || true`,
+                type: "http",
+                url: `http://localhost:${apiPort}/api/hooks/pre-tool-use`,
+                headers: { "X-Octogent-Session": "$OCTOGENT_SESSION_ID" },
+                allowedEnvVars: ["OCTOGENT_SESSION_ID"],
                 timeout: 5,
               },
             ],
@@ -122,8 +124,10 @@ export const createTerminalRuntime = ({
             matcher: "*",
             hooks: [
               {
-                type: "command",
-                command: `curl -s -X POST "http://localhost:${apiPort}/api/hooks/notification?octogent_session=$OCTOGENT_SESSION_ID" -H 'Content-Type: application/json' -d @- || true`,
+                type: "http",
+                url: `http://localhost:${apiPort}/api/hooks/notification`,
+                headers: { "X-Octogent-Session": "$OCTOGENT_SESSION_ID" },
+                allowedEnvVars: ["OCTOGENT_SESSION_ID"],
                 timeout: 5,
               },
             ],

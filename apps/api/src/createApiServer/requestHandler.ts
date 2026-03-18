@@ -938,7 +938,13 @@ const handleHookRoute: ApiRouteHandler = async (
   }
 
   const hookName = match[1] ?? "";
-  const octogentSessionId = requestUrl.searchParams.get("octogent_session") ?? undefined;
+  // HTTP hooks pass the session ID via header; command hooks via query param.
+  const octogentSessionId =
+    (typeof request.headers["x-octogent-session"] === "string"
+      ? request.headers["x-octogent-session"]
+      : undefined) ??
+    requestUrl.searchParams.get("octogent_session") ??
+    undefined;
   const result = runtime.handleHook(hookName, body.payload, octogentSessionId);
 
   if (hookName === "session-start" || hookName === "stop") {
