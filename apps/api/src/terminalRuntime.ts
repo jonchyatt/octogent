@@ -22,6 +22,7 @@ import {
   searchConversations,
   storeClaudeTranscriptTurns,
 } from "./terminalRuntime/conversations";
+import { broadcastMessage } from "./terminalRuntime/protocol";
 import {
   loadTentacleRegistry,
   persistTentacleRegistry,
@@ -111,6 +112,18 @@ export const createTerminalRuntime = ({
               {
                 type: "command",
                 command: `curl -s -X POST "http://localhost:${apiPort}/api/hooks/pre-tool-use?octogent_session=$OCTOGENT_SESSION_ID" -H 'Content-Type: application/json' -d @- || true`,
+                timeout: 5,
+              },
+            ],
+          },
+        ],
+        Notification: [
+          {
+            matcher: "*",
+            hooks: [
+              {
+                type: "command",
+                command: `curl -s -X POST "http://localhost:${apiPort}/api/hooks/notification?octogent_session=$OCTOGENT_SESSION_ID" -H 'Content-Type: application/json' -d @- || true`,
                 timeout: 5,
               },
             ],
@@ -311,11 +324,19 @@ export const createTerminalRuntime = ({
     const shouldCreateWorktree = workspaceMode === "worktree";
     if (shouldCreateWorktree) {
       worktreeManager.createTentacleWorktree(tentacleId);
-      try {
-        installHooksInDirectory(worktreeManager.getTentacleWorkspaceCwd(tentacleId));
-      } catch {
-        // Best-effort: hooks installation should not block tentacle creation.
-      }
+    }
+
+    // Install hooks in the tentacle's working directory. For worktree tentacles
+    // this writes to the worktree's own .claude/settings.json; for shared
+    // tentacles it updates the main workspace's .claude/settings.json so that
+    // newly added hook types (e.g. Notification) are always present.
+    try {
+      const hookTargetCwd = shouldCreateWorktree
+        ? worktreeManager.getTentacleWorkspaceCwd(tentacleId)
+        : workspaceCwd;
+      installHooksInDirectory(hookTargetCwd);
+    } catch {
+      // Best-effort: hooks installation should not block tentacle creation.
     }
 
     tentacles.set(tentacleId, tentacle);
@@ -892,7 +913,68 @@ export const createTerminalRuntime = ({
     handleHook(hookName: string, payload: unknown, octogentSessionId?: string): { ok: boolean } {
       console.log(`[Hook] Received hook: ${hookName} octogentSession=${octogentSessionId ?? "(none)"}`, JSON.stringify(payload));
 
-      if (hookName !== "stop" || !payload || typeof payload !== "object") {
+      if (!payload || typeof payload !== "object") {
+        return { ok: true };
+      }
+
+      const hookPayloadRecord = payload as Record<string, unknown>;
+
+      // ── Notification hook: detect permission_prompt and idle_prompt ──
+      if (hookName === "notification") {
+        if (!octogentSessionId) {
+          return { ok: true };
+        }
+        const session = sessions.get(octogentSessionId);
+        if (!session) {
+          console.log(`[Hook] notification: no session for ${octogentSessionId}, skipping.`);
+          return { ok: true };
+        }
+
+        const notificationType =
+          typeof hookPayloadRecord.notification_type === "string"
+            ? hookPayloadRecord.notification_type
+            : null;
+
+        console.log(`[Hook] notification: type=${notificationType} session=${octogentSessionId}`);
+
+        if (notificationType === "permission_prompt") {
+          session.agentState = "waiting_for_permission";
+          session.stateTracker.forceState("waiting_for_permission");
+          broadcastMessage(session, { type: "state", state: "waiting_for_permission" });
+        } else if (notificationType === "idle_prompt") {
+          session.agentState = "waiting_for_user";
+          session.stateTracker.forceState("waiting_for_user");
+          broadcastMessage(session, { type: "state", state: "waiting_for_user" });
+        }
+
+        return { ok: true };
+      }
+
+      // ── PreToolUse hook: detect AskUserQuestion tool ──
+      if (hookName === "pre-tool-use") {
+        if (!octogentSessionId) {
+          return { ok: true };
+        }
+        const session = sessions.get(octogentSessionId);
+        if (!session) {
+          return { ok: true };
+        }
+
+        const toolName =
+          typeof hookPayloadRecord.tool_name === "string" ? hookPayloadRecord.tool_name : null;
+
+        console.log(`[Hook] pre-tool-use: tool=${toolName} session=${octogentSessionId}`);
+
+        if (toolName === "AskUserQuestion") {
+          session.agentState = "waiting_for_user";
+          session.stateTracker.forceState("waiting_for_user");
+          broadcastMessage(session, { type: "state", state: "waiting_for_user" });
+        }
+
+        return { ok: true };
+      }
+
+      if (hookName !== "stop") {
         return { ok: true };
       }
 

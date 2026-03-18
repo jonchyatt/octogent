@@ -1,0 +1,198 @@
+.console-shell .state-sandbox-view {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.state-sandbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.56rem;
+  padding: 0.36rem 0.56rem;
+  border-bottom: 1px solid #2b2f36;
+  background: #0d1017;
+}
+
+.state-sandbox-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #c8cdd4;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.state-sandbox-state-display {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.state-sandbox-state-label {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.state-sandbox-state-value {
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  padding: 0.12rem 0.4rem;
+  border-radius: 3px;
+  background: #1a1f2a;
+  border: 1px solid #2b2f36;
+  color: #8b9099;
+}
+
+.state-sandbox-state-value[data-state="processing"] {
+  color: #4ade80;
+  border-color: #4ade8044;
+  background: #4ade8011;
+}
+
+.state-sandbox-state-value[data-state="idle"] {
+  color: #60a5fa;
+  border-color: #60a5fa44;
+  background: #60a5fa11;
+}
+
+.state-sandbox-state-value[data-state="waiting_for_permission"] {
+  color: #faa32c;
+  border-color: #faa32c66;
+  background: #faa32c18;
+}
+
+.state-sandbox-state-value[data-state="waiting_for_user"] {
+  color: #f472b6;
+  border-color: #f472b666;
+  background: #f472b618;
+}
+
+.state-sandbox-state-value--large {
+  font-size: 1rem;
+  padding: 0.24rem 0.64rem;
+}
+
+.state-sandbox-state-value--compact {
+  font-size: 0.68rem;
+  padding: 0.08rem 0.28rem;
+}
+
+/* Body: terminal + side panel */
+.state-sandbox-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.state-sandbox-terminal {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.state-sandbox-terminal .tentacle-terminal {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Side panel */
+.state-sandbox-panel {
+  width: 280px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #2b2f36;
+  background: #0d1017;
+  overflow-y: auto;
+}
+
+.state-sandbox-panel-section {
+  padding: 0.56rem;
+  border-bottom: 1px solid #2b2f36;
+}
+
+.state-sandbox-panel-heading {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 0.4rem;
+}
+
+.state-sandbox-log-count {
+  font-weight: 400;
+  color: #555a63;
+}
+
+.state-sandbox-current {
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+}
+
+.state-sandbox-state-desc {
+  font-size: 0.74rem;
+  color: #8b9099;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* State log */
+.state-sandbox-log {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.state-sandbox-log-empty {
+  font-size: 0.74rem;
+  color: #555a63;
+  margin: 0;
+}
+
+.state-sandbox-log-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+}
+
+.state-sandbox-log-time {
+  color: #555a63;
+  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+  min-width: 6em;
+}
+
+/* Loading / error states */
+.state-sandbox-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.72rem;
+  flex: 1;
+  color: #8b9099;
+  font-size: 0.88rem;
+}
+
+.state-sandbox-status button {
+  padding: 0.32rem 0.72rem;
+  border: 1px solid #2b2f36;
+  border-radius: 4px;
+  background: #181c24;
+  color: #c8cdd4;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.state-sandbox-status button:hover {
+  background: #22262f;
+}

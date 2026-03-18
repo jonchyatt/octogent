@@ -1,4 +1,14 @@
-export type AgentRuntimeState = "idle" | "processing";
+export type AgentRuntimeState =
+  | "idle"
+  | "processing"
+  | "waiting_for_permission"
+  | "waiting_for_user";
+
+export const isAgentRuntimeState = (value: unknown): value is AgentRuntimeState =>
+  value === "idle" ||
+  value === "processing" ||
+  value === "waiting_for_permission" ||
+  value === "waiting_for_user";
 
 const PROCESSING_PATTERN = /esc to interrupt/i;
 

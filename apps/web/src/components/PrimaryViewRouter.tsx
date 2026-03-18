@@ -9,6 +9,7 @@ import { GitHubPrimaryView } from "./GitHubPrimaryView";
 import { MonitorPrimaryView } from "./MonitorPrimaryView";
 import { SandboxPrimaryView } from "./SandboxPrimaryView";
 import { SettingsPrimaryView } from "./SettingsPrimaryView";
+import { StateSandboxPrimaryView } from "./StateSandboxPrimaryView";
 import { TentacleBoard } from "./TentacleBoard";
 
 type PrimaryViewRouterProps = {
@@ -106,6 +107,10 @@ export const PrimaryViewRouter = ({
 
   if (activePrimaryNav === 7) {
     return <SandboxPrimaryView />;
+  }
+
+  if (activePrimaryNav === 8) {
+    return <StateSandboxPrimaryView />;
   }
 
   return <TentacleBoard {...tentacleBoardProps} />;

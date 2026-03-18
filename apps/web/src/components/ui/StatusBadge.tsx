@@ -1,4 +1,4 @@
-type StatusBadgeTone = "live" | "idle" | "processing" | "queued" | "blocked";
+export type StatusBadgeTone = "live" | "idle" | "processing" | "queued" | "blocked" | "warning";
 
 type StatusBadgeProps = {
   tone: StatusBadgeTone;

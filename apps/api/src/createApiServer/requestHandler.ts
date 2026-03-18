@@ -916,7 +916,7 @@ const handleTentacleItemRoute: ApiRouteHandler = async (
   return true;
 };
 
-const HOOK_PATH_PATTERN = /^\/api\/hooks\/(session-start|user-prompt-submit|pre-tool-use|stop)$/;
+const HOOK_PATH_PATTERN = /^\/api\/hooks\/(session-start|user-prompt-submit|pre-tool-use|notification|stop)$/;
 
 const handleHookRoute: ApiRouteHandler = async (
   { request, response, requestUrl, corsOrigin },
