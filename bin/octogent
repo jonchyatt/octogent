@@ -1,0 +1,106 @@
+#!/usr/bin/env node
+
+// Octogent CLI — thin wrapper over the local API server.
+// Usage:
+//   octogent tentacle create <name> [--description "..."]
+//   octogent tentacle list
+
+const API_PORT = process.env.OCTOGENT_API_PORT ?? process.env.PORT ?? "8787";
+const API_BASE = `http://localhost:${API_PORT}`;
+
+const args = process.argv.slice(2);
+
+async function main() {
+  const resource = args[0];
+  const command = args[1];
+
+  if (resource === "tentacle" || resource === "tentacles") {
+    if (command === "create") {
+      return tentacleCreate();
+    }
+    if (command === "list" || command === "ls") {
+      return tentacleList();
+    }
+  }
+
+  printUsage();
+  process.exit(1);
+}
+
+function printUsage() {
+  console.log(`Usage:
+  octogent tentacle create <name> [--description "..."]
+  octogent tentacle list`);
+}
+
+function parseFlag(flag) {
+  const idx = args.indexOf(flag);
+  if (idx === -1 || idx + 1 >= args.length) return undefined;
+  return args[idx + 1];
+}
+
+async function tentacleCreate() {
+  const name = args[2];
+  if (!name || name.startsWith("-")) {
+    console.error("Error: tentacle name is required.");
+    console.error("  octogent tentacle create <name> [--description \"...\"]");
+    process.exit(1);
+  }
+
+  const description = parseFlag("--description") ?? parseFlag("-d") ?? "";
+
+  const body = { name, description };
+
+  try {
+    const res = await fetch(`${API_BASE}/api/deck/tentacles`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.error(`Error: ${data.error ?? "Failed to create tentacle"}`);
+      process.exit(1);
+    }
+
+    console.log(`Created tentacle "${data.tentacleId}"`);
+    if (data.description) {
+      console.log(`  ${data.description}`);
+    }
+  } catch (err) {
+    console.error(`Error: Could not reach API at ${API_BASE}. Is the server running?`);
+    process.exit(1);
+  }
+}
+
+async function tentacleList() {
+  try {
+    const res = await fetch(`${API_BASE}/api/deck/tentacles`, {
+      headers: { Accept: "application/json" },
+    });
+
+    if (!res.ok) {
+      console.error("Error: failed to fetch tentacles.");
+      process.exit(1);
+    }
+
+    const tentacles = await res.json();
+
+    if (tentacles.length === 0) {
+      console.log("No tentacles found.");
+      return;
+    }
+
+    for (const t of tentacles) {
+      const desc = t.description ? ` — ${t.description}` : "";
+      console.log(`  ${t.tentacleId}${desc}`);
+    }
+  } catch (err) {
+    console.error(`Error: Could not reach API at ${API_BASE}. Is the server running?`);
+    process.exit(1);
+  }
+}
+
+main();

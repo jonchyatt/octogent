@@ -1039,6 +1039,26 @@
   100% { opacity: 1; }
 }
 
+/* ─── Terminal inside detail panel ────────────────────────────────────────── */
+
+.deck-detail-terminal {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: deck-content-fade 200ms ease-out;
+}
+
+.deck-detail-terminal .tentacle-terminal {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.deck-detail-terminal .terminal-mount {
+  flex: 1;
+}
+
 /* ─── Markdown rendering inside detail panel ─────────────────────────────── */
 
 .deck-detail-markdown {

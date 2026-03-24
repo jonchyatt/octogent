@@ -2,7 +2,12 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { ClaudeUsageSnapshot } from "../claudeUsage";
 import type { CodexUsageSnapshot } from "../codexUsage";
-import { createDeckTentacle, deleteDeckTentacle, readDeckTentacles, readDeckVaultFile } from "../deck/readDeckTentacles";
+import {
+  createDeckTentacle,
+  deleteDeckTentacle,
+  readDeckTentacles,
+  readDeckVaultFile,
+} from "../deck/readDeckTentacles";
 import type { GitHubRepoSummarySnapshot } from "../githubRepoSummary";
 import { MonitorInputError, type MonitorService } from "../monitor";
 import { listPromptTemplates, readPromptTemplate, resolvePrompt } from "../prompts";
@@ -524,6 +529,28 @@ const handleTentaclesCollectionRoute: ApiRouteHandler = async (
         templateVars.tentacleId = createTentacleInput.tentacleName;
       }
 
+      // Auto-inject apiPort so prompt templates can reference the local API.
+      if (!templateVars.apiPort) {
+        templateVars.apiPort = process.env.OCTOGENT_API_PORT ?? process.env.PORT ?? "8787";
+      }
+
+      // Auto-inject existingTentacles summary so planner-style prompts have context.
+      if (!templateVars.existingTentacles) {
+        const deckTentacles = readDeckTentacles(workspaceCwd);
+        if (deckTentacles.length > 0) {
+          const listing = deckTentacles
+            .map(
+              (t) =>
+                `- **${t.displayName}** (\`${t.tentacleId}\`): ${t.description || "(no description)"}`,
+            )
+            .join("\n");
+          templateVars.existingTentacles = `## Existing Tentacles\n\nThe following departments already exist:\n\n${listing}\n\nConsider these when proposing new departments — avoid duplicates and note any gaps.`;
+        } else {
+          templateVars.existingTentacles =
+            "## Existing Tentacles\n\nNo department tentacles exist yet. You are starting from scratch.";
+        }
+      }
+
       const resolved = await resolvePrompt(workspaceCwd, templateName, templateVars);
       if (resolved !== undefined) {
         createTentacleInput.initialPrompt = resolved;
@@ -916,7 +943,8 @@ const handleTentacleItemRoute: ApiRouteHandler = async (
   return true;
 };
 
-const HOOK_PATH_PATTERN = /^\/api\/hooks\/(session-start|user-prompt-submit|pre-tool-use|notification|stop)$/;
+const HOOK_PATH_PATTERN =
+  /^\/api\/hooks\/(session-start|user-prompt-submit|pre-tool-use|notification|stop)$/;
 
 const handleHookRoute: ApiRouteHandler = async (
   { request, response, requestUrl, corsOrigin },
@@ -979,9 +1007,10 @@ const handleDeckTentaclesRoute: ApiRouteHandler = async (
     const description = body && typeof body.description === "string" ? body.description : "";
     const color = body && typeof body.color === "string" ? body.color : "#d4a017";
 
-    const rawOctopus = body && typeof body.octopus === "object" && body.octopus !== null
-      ? body.octopus as Record<string, unknown>
-      : {};
+    const rawOctopus =
+      body && typeof body.octopus === "object" && body.octopus !== null
+        ? (body.octopus as Record<string, unknown>)
+        : {};
     const octopus = {
       animation: typeof rawOctopus.animation === "string" ? rawOctopus.animation : null,
       expression: typeof rawOctopus.expression === "string" ? rawOctopus.expression : null,

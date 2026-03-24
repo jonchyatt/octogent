@@ -6,6 +6,7 @@ import {
   buildDeckTentacleUrl,
   buildDeckTentaclesUrl,
   buildDeckVaultFileUrl,
+  buildTentaclesUrl,
 } from "../runtime/runtimeEndpoints";
 import {
   type OctopusAccessory,
@@ -13,6 +14,7 @@ import {
   type OctopusExpression,
   OctopusGlyph,
 } from "./EmptyOctopus";
+import { TentacleTerminal } from "./TentacleTerminal";
 import { MarkdownContent } from "./ui/MarkdownContent";
 
 const AGENT_PROVIDER_OPTIONS: { value: TentacleAgentProvider; label: string }[] = [
@@ -68,7 +70,8 @@ function deriveOctopusVisuals(tentacle: DeckTentacleSummary): OctopusVisuals {
   const stored = tentacle.octopus;
   return {
     color:
-      tentacle.color ?? (OCTOPUS_COLORS[hashString(tentacle.tentacleId) % OCTOPUS_COLORS.length] as string),
+      tentacle.color ??
+      (OCTOPUS_COLORS[hashString(tentacle.tentacleId) % OCTOPUS_COLORS.length] as string),
     animation:
       (stored?.animation as OctopusAnimation | null) ??
       (ANIMATIONS[Math.floor(rng() * ANIMATIONS.length)] as OctopusAnimation),
@@ -196,8 +199,14 @@ const TentaclePod = ({
             aria-label="Delete tentacle"
           >
             <svg className="deck-pod-btn-icon" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M5.5 1.5h5M2 4h12M6 7v5M10 7v5M3.5 4l.75 9.5a1 1 0 001 .9h5.5a1 1 0 001-.9L12.5 4"
-                fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d="M5.5 1.5h5M2 4h12M6 7v5M10 7v5M3.5 4l.75 9.5a1 1 0 001 .9h5.5a1 1 0 001-.9L12.5 4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </button>
         )}
@@ -283,6 +292,8 @@ type ActionCardsProps = {
   setAgentMenuOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   agentMenuRef: React.RefObject<HTMLDivElement | null>;
   onAddManually: () => void;
+  onLaunchAgent: () => void;
+  isLaunchingAgent?: boolean;
 };
 
 const ActionCards = ({
@@ -293,6 +304,8 @@ const ActionCards = ({
   setAgentMenuOpen,
   agentMenuRef,
   onAddManually,
+  onLaunchAgent,
+  isLaunchingAgent,
 }: ActionCardsProps) => (
   <div className={`deck-empty-actions${compact ? " deck-empty-actions--compact" : ""}`}>
     <button type="button" className="deck-empty-card" onClick={() => {}}>
@@ -356,8 +369,13 @@ const ActionCards = ({
               </div>
             )}
           </div>
-          <button type="button" className="deck-empty-agent-launch" onClick={() => {}}>
-            Launch
+          <button
+            type="button"
+            className="deck-empty-agent-launch"
+            disabled={isLaunchingAgent}
+            onClick={onLaunchAgent}
+          >
+            {isLaunchingAgent ? "..." : "Launch"}
           </button>
         </div>
       </div>
@@ -384,7 +402,12 @@ type OctopusAppearancePayload = {
 };
 
 type AddTentacleFormProps = {
-  onSubmit: (name: string, description: string, color: string, octopus: OctopusAppearancePayload) => void;
+  onSubmit: (
+    name: string,
+    description: string,
+    color: string,
+    octopus: OctopusAppearancePayload,
+  ) => void;
   onCancel: () => void;
   isSubmitting: boolean;
   error: string | null;
@@ -464,117 +487,117 @@ const AddTentacleForm = ({ onSubmit, onCancel, isSubmitting, error }: AddTentacl
       </div>
 
       <div className="deck-add-form-body">
-      <div className="deck-add-form-preview">
-        <OctopusGlyph
-          color={selectedColor}
-          animation={selectedAnimation}
-          expression={selectedExpression}
-          accessory={selectedAccessory}
-          hairColor={selectedHairColor}
-          scale={8}
-        />
-      </div>
-
-      <label className="deck-add-form-label">
-        Name
-        <input
-          ref={nameRef}
-          type="text"
-          className="deck-add-form-input"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Database Layer"
-        />
-      </label>
-
-      <label className="deck-add-form-label">
-        Description
-        <textarea
-          className="deck-add-form-textarea"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="What this tentacle is responsible for..."
-          rows={3}
-        />
-      </label>
-
-      <div className="deck-add-form-label">
-        Color
-        <div className="deck-add-form-colors">
-          {OCTOPUS_COLORS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              className="deck-add-form-color-swatch"
-              data-selected={c === selectedColor ? "true" : "false"}
-              style={{ backgroundColor: c }}
-              onClick={() => setSelectedColor(c)}
-              aria-label={`Select color ${c}`}
-            />
-          ))}
+        <div className="deck-add-form-preview">
+          <OctopusGlyph
+            color={selectedColor}
+            animation={selectedAnimation}
+            expression={selectedExpression}
+            accessory={selectedAccessory}
+            hairColor={selectedHairColor}
+            scale={8}
+          />
         </div>
-      </div>
 
-      <div className="deck-add-form-row">
+        <label className="deck-add-form-label">
+          Name
+          <input
+            ref={nameRef}
+            type="text"
+            className="deck-add-form-input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Database Layer"
+          />
+        </label>
+
+        <label className="deck-add-form-label">
+          Description
+          <textarea
+            className="deck-add-form-textarea"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="What this tentacle is responsible for..."
+            rows={3}
+          />
+        </label>
+
         <div className="deck-add-form-label">
-          Expression
-          <div className="deck-add-form-chips">
-            {EXPRESSION_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                className="deck-add-form-chip"
-                data-selected={opt.value === selectedExpression ? "true" : "false"}
-                onClick={() => setSelectedExpression(opt.value)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="deck-add-form-label">
-          Hair Style
-          <div className="deck-add-form-chips">
-            {ACCESSORY_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                className="deck-add-form-chip"
-                data-selected={opt.value === selectedAccessory ? "true" : "false"}
-                onClick={() => setSelectedAccessory(opt.value)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="deck-add-form-label">
-          Hair Color
+          Color
           <div className="deck-add-form-colors">
-            {HAIR_COLORS.map((c) => (
+            {OCTOPUS_COLORS.map((c) => (
               <button
                 key={c}
                 type="button"
-                className="deck-add-form-color-swatch deck-add-form-color-swatch--small"
-                data-selected={c === selectedHairColor ? "true" : "false"}
+                className="deck-add-form-color-swatch"
+                data-selected={c === selectedColor ? "true" : "false"}
                 style={{ backgroundColor: c }}
-                onClick={() => setSelectedHairColor(c)}
-                aria-label={`Select hair color ${c}`}
+                onClick={() => setSelectedColor(c)}
+                aria-label={`Select color ${c}`}
               />
             ))}
           </div>
         </div>
-      </div>
 
-      {error && <div className="deck-add-form-error">{error}</div>}
+        <div className="deck-add-form-row">
+          <div className="deck-add-form-label">
+            Expression
+            <div className="deck-add-form-chips">
+              {EXPRESSION_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className="deck-add-form-chip"
+                  data-selected={opt.value === selectedExpression ? "true" : "false"}
+                  onClick={() => setSelectedExpression(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="deck-add-form-label">
+            Hair Style
+            <div className="deck-add-form-chips">
+              {ACCESSORY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className="deck-add-form-chip"
+                  data-selected={opt.value === selectedAccessory ? "true" : "false"}
+                  onClick={() => setSelectedAccessory(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="deck-add-form-label">
+            Hair Color
+            <div className="deck-add-form-colors">
+              {HAIR_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className="deck-add-form-color-swatch deck-add-form-color-swatch--small"
+                  data-selected={c === selectedHairColor ? "true" : "false"}
+                  style={{ backgroundColor: c }}
+                  onClick={() => setSelectedHairColor(c)}
+                  aria-label={`Select hair color ${c}`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
 
-      <button
-        type="submit"
-        className="deck-add-form-submit"
-        disabled={isSubmitting || name.trim().length === 0}
-      >
-        {isSubmitting ? "Creating..." : "Create Tentacle"}
-      </button>
+        {error && <div className="deck-add-form-error">{error}</div>}
+
+        <button
+          type="submit"
+          className="deck-add-form-submit"
+          disabled={isSubmitting || name.trim().length === 0}
+        >
+          {isSubmitting ? "Creating..." : "Create Tentacle"}
+        </button>
       </div>
     </form>
   );
@@ -619,8 +642,14 @@ const DeckBottomActions = ({ onClearAll }: DeckBottomActionsProps) => {
           onClick={() => setConfirmingClear(true)}
         >
           <svg className="deck-bottom-clear-icon" viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M5.5 1.5h5M2 4h12M6 7v5M10 7v5M3.5 4l.75 9.5a1 1 0 001 .9h5.5a1 1 0 001-.9L12.5 4"
-              fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            <path
+              d="M5.5 1.5h5M2 4h12M6 7v5M10 7v5M3.5 4l.75 9.5a1 1 0 001 .9h5.5a1 1 0 001-.9L12.5 4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
           Clear All
         </button>
@@ -631,10 +660,9 @@ const DeckBottomActions = ({ onClearAll }: DeckBottomActionsProps) => {
 
 // ─── Main view ───────────────────────────────────────────────────────────────
 
-type FocusState = {
-  tentacleId: string;
-  fileName: string;
-};
+type FocusState =
+  | { type: "vault"; tentacleId: string; fileName: string }
+  | { type: "terminal"; agentId: string; terminalLabel: string };
 
 type EmptyViewMode = "idle" | "adding";
 
@@ -654,6 +682,7 @@ export const DeckPrimaryView = ({ onSidebarContent }: DeckPrimaryViewProps) => {
   const [selectedAgent, setSelectedAgent] = useState<TentacleAgentProvider>("claude-code");
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const agentMenuRef = useRef<HTMLDivElement>(null);
+  const [isLaunchingAgent, setIsLaunchingAgent] = useState(false);
 
   // Fetch tentacle list
   const fetchTentacles = useCallback(async () => {
@@ -684,7 +713,7 @@ export const DeckPrimaryView = ({ onSidebarContent }: DeckPrimaryViewProps) => {
 
   // Fetch vault file content when focus changes
   useEffect(() => {
-    if (!focus) {
+    if (!focus || focus.type !== "vault") {
       setVaultContent(null);
       return;
     }
@@ -740,12 +769,37 @@ export const DeckPrimaryView = ({ onSidebarContent }: DeckPrimaryViewProps) => {
   }, [agentMenuOpen]);
 
   const handleVaultFileClick = useCallback((tentacleId: string, fileName: string) => {
-    setFocus({ tentacleId, fileName });
+    setFocus({ type: "vault", tentacleId, fileName });
   }, []);
 
   const handleClose = useCallback(() => {
     setFocus(null);
   }, []);
+
+  const handleLaunchAgent = useCallback(async () => {
+    setIsLaunchingAgent(true);
+    try {
+      const response = await fetch(buildTentaclesUrl(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          name: "tentacle-planner",
+          workspaceMode: "shared",
+          agentProvider: selectedAgent,
+          promptTemplate: "tentacle-planner",
+        }),
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      const tentacleId = data.tentacleId as string;
+      const agentId = `${tentacleId}-agent-1`;
+      setFocus({ type: "terminal", agentId, terminalLabel: "Tentacle Planner" });
+    } catch {
+      // silently ignore
+    } finally {
+      setIsLaunchingAgent(false);
+    }
+  }, [selectedAgent]);
 
   const handleCreateTentacle = useCallback(
     async (name: string, description: string, color: string, octopus: OctopusAppearancePayload) => {
@@ -795,38 +849,42 @@ export const DeckPrimaryView = ({ onSidebarContent }: DeckPrimaryViewProps) => {
     [fetchTentacles],
   );
 
-  const focusedTentacle = focus ? tentacles.find((t) => t.tentacleId === focus.tentacleId) : null;
+  const focusedTentacle =
+    focus?.type === "vault" ? tentacles.find((t) => t.tentacleId === focus.tentacleId) : null;
   const mode = focus ? "detail" : "grid";
 
   // Push sidebar content to the shared sidebar
-  const sidebarContent = tentacles.length > 0 ? (
-    <div className="deck-sidebar-content">
-      <div className="deck-sidebar-content-top">
-        <ActionCards
-          compact
-          selectedAgent={selectedAgent}
-          setSelectedAgent={setSelectedAgent}
-          agentMenuOpen={agentMenuOpen}
-          setAgentMenuOpen={setAgentMenuOpen}
-          agentMenuRef={agentMenuRef}
-          onAddManually={() => {
-            setEmptyViewMode("adding");
-            setCreateError(null);
-          }}
-        />
+  const sidebarContent =
+    tentacles.length > 0 ? (
+      <div className="deck-sidebar-content">
+        <div className="deck-sidebar-content-top">
+          <ActionCards
+            compact
+            selectedAgent={selectedAgent}
+            setSelectedAgent={setSelectedAgent}
+            agentMenuOpen={agentMenuOpen}
+            setAgentMenuOpen={setAgentMenuOpen}
+            agentMenuRef={agentMenuRef}
+            onAddManually={() => {
+              setEmptyViewMode("adding");
+              setCreateError(null);
+            }}
+            onLaunchAgent={handleLaunchAgent}
+            isLaunchingAgent={isLaunchingAgent}
+          />
+        </div>
+        <div className="deck-sidebar-content-bottom">
+          <DeckBottomActions
+            onClearAll={async () => {
+              for (const t of tentacles) {
+                await fetch(buildDeckTentacleUrl(t.tentacleId), { method: "DELETE" });
+              }
+              await fetchTentacles();
+            }}
+          />
+        </div>
       </div>
-      <div className="deck-sidebar-content-bottom">
-        <DeckBottomActions
-          onClearAll={async () => {
-            for (const t of tentacles) {
-              await fetch(buildDeckTentacleUrl(t.tentacleId), { method: "DELETE" });
-            }
-            await fetchTentacles();
-          }}
-        />
-      </div>
-    </div>
-  ) : null;
+    ) : null;
 
   useEffect(() => {
     onSidebarContent?.(sidebarContent);
@@ -835,7 +893,7 @@ export const DeckPrimaryView = ({ onSidebarContent }: DeckPrimaryViewProps) => {
 
   // ─── Empty state (no tentacles) ─────────────────────────────────────────────
 
-  if (tentacles.length === 0) {
+  if (tentacles.length === 0 && focus?.type !== "terminal") {
     return (
       <section
         className="deck-view"
@@ -864,6 +922,8 @@ export const DeckPrimaryView = ({ onSidebarContent }: DeckPrimaryViewProps) => {
                 setEmptyViewMode("adding");
                 setCreateError(null);
               }}
+              onLaunchAgent={handleLaunchAgent}
+              isLaunchingAgent={isLaunchingAgent}
             />
           </div>
           {emptyViewMode === "adding" && (
@@ -885,57 +945,67 @@ export const DeckPrimaryView = ({ onSidebarContent }: DeckPrimaryViewProps) => {
 
   return (
     <section className="deck-view" data-mode={mode} aria-label="Deck">
-        <div className="deck-pods-container">
-          {tentacles.map((t) => {
-            const isThis = focus?.tentacleId === t.tentacleId;
-            return (
-              <div
-                key={t.tentacleId}
-                className="deck-pod-slot"
-                data-pod-role={isThis ? "focused" : focus ? "other" : "idle"}
-              >
-                <TentaclePod
-                  tentacle={t}
-                  visuals={visualsMap.get(t.tentacleId) as OctopusVisuals}
-                  isFocused={isThis}
-                  activeFileName={isThis ? focus?.fileName : undefined}
-                  onVaultFileClick={(fileName) =>
-                    isThis
-                      ? setFocus({ tentacleId: t.tentacleId, fileName })
-                      : handleVaultFileClick(t.tentacleId, fileName)
-                  }
-                  onClose={handleClose}
-                  onDelete={() => handleDeleteTentacle(t.tentacleId)}
-                  isDeleting={deletingTentacleId === t.tentacleId}
-                />
-              </div>
-            );
-          })}
-        </div>
+      <div className="deck-pods-container">
+        {tentacles.map((t) => {
+          const isThis = focus?.type === "vault" && focus.tentacleId === t.tentacleId;
+          return (
+            <div
+              key={t.tentacleId}
+              className="deck-pod-slot"
+              data-pod-role={isThis ? "focused" : focus ? "other" : "idle"}
+            >
+              <TentaclePod
+                tentacle={t}
+                visuals={visualsMap.get(t.tentacleId) as OctopusVisuals}
+                isFocused={isThis}
+                activeFileName={isThis ? focus.fileName : undefined}
+                onVaultFileClick={(fileName) =>
+                  isThis
+                    ? setFocus({ type: "vault", tentacleId: t.tentacleId, fileName })
+                    : handleVaultFileClick(t.tentacleId, fileName)
+                }
+                onClose={handleClose}
+                onDelete={() => handleDeleteTentacle(t.tentacleId)}
+                isDeleting={deletingTentacleId === t.tentacleId}
+              />
+            </div>
+          );
+        })}
+      </div>
 
-        <div className="deck-detail-main">
-          {focusedTentacle && focus && (
-            <>
-              <header className="deck-detail-main-header">
-                <span className="deck-detail-main-path">
-                  {focusedTentacle.displayName} / <strong>{focus.fileName}</strong>
-                </span>
-              </header>
-              <div
-                className="deck-detail-main-content"
-                key={`${focus.tentacleId}/${focus.fileName}`}
-              >
-                {loadingVault ? (
-                  <span className="deck-detail-loading">Loading…</span>
-                ) : vaultContent !== null ? (
-                  <MarkdownContent content={vaultContent} className="deck-detail-markdown" />
-                ) : (
-                  <span className="deck-detail-loading">File not found.</span>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+      <div className="deck-detail-main">
+        {focus?.type === "vault" && focusedTentacle && (
+          <>
+            <header className="deck-detail-main-header">
+              <span className="deck-detail-main-path">
+                {focusedTentacle.displayName} / <strong>{focus.fileName}</strong>
+              </span>
+            </header>
+            <div className="deck-detail-main-content" key={`${focus.tentacleId}/${focus.fileName}`}>
+              {loadingVault ? (
+                <span className="deck-detail-loading">Loading…</span>
+              ) : vaultContent !== null ? (
+                <MarkdownContent content={vaultContent} className="deck-detail-markdown" />
+              ) : (
+                <span className="deck-detail-loading">File not found.</span>
+              )}
+            </div>
+          </>
+        )}
+        {focus?.type === "terminal" && (
+          <div className="deck-detail-terminal" key={focus.agentId}>
+            <header className="deck-detail-main-header">
+              <button type="button" className="deck-add-form-back" onClick={handleClose}>
+                ← Back
+              </button>
+              <span className="deck-detail-main-path">
+                <strong>{focus.terminalLabel}</strong>
+              </span>
+            </header>
+            <TentacleTerminal terminalId={focus.agentId} terminalLabel={focus.terminalLabel} />
+          </div>
+        )}
+      </div>
     </section>
   );
 };
