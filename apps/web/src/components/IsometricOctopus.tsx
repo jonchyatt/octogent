@@ -20,8 +20,7 @@ type Vec3 = [number, number, number];
 
 function makeProjection(ox: number, oy: number, s: number) {
   const toSx = (x: number, y: number) => ((x - y) * 2 + ox) * s;
-  const toSy = (x: number, y: number, z: number) =>
-    ((x + y) - z * 2 + oy) * s;
+  const toSy = (x: number, y: number, z: number) => (x + y - z * 2 + oy) * s;
   return { toSx, toSy };
 }
 
@@ -57,7 +56,13 @@ function hexToRgb(hex: string): [number, number, number] {
 }
 
 function rgbToHex(r: number, g: number, b: number): string {
-  return `#${[r, g, b].map((c) => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, "0")).join("")}`;
+  return `#${[r, g, b]
+    .map((c) =>
+      Math.max(0, Math.min(255, Math.round(c)))
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
 }
 
 /** Darken a hex color by a factor (0 = black, 1 = original). */
@@ -69,11 +74,7 @@ function darken(hex: string, factor: number): string {
 /** Lighten a hex color toward white by a factor (0 = original, 1 = white). */
 function lighten(hex: string, factor: number): string {
   const [r, g, b] = hexToRgb(hex);
-  return rgbToHex(
-    r + (255 - r) * factor,
-    g + (255 - g) * factor,
-    b + (255 - b) * factor,
-  );
+  return rgbToHex(r + (255 - r) * factor, g + (255 - g) * factor, b + (255 - b) * factor);
 }
 
 // ─── Isometric octopus model ─────────────────────────────────────────────────
@@ -100,7 +101,7 @@ type DrawOpts = {
   ctx: CanvasRenderingContext2D;
   ox: number; // origin x in sprite-pixel space
   oy: number; // origin y in sprite-pixel space
-  s: number;  // canvas pixels per sprite pixel
+  s: number; // canvas pixels per sprite pixel
   color: string;
   expression: OctopusExpression;
   tentacleOffsets?: number[]; // per-tentacle z offsets for animation
@@ -112,10 +113,10 @@ function drawOctopus(opts: DrawOpts) {
   const face = (pts: Vec3[], col: string) => drawFace(ctx, pts, col, toSx, toSy);
 
   // Derived shading colors
-  const cLeft = color;                   // left face — base color
-  const cFront = darken(color, 0.82);    // front face — slightly darker
-  const cRight = darken(color, 0.65);    // right face — darker
-  const cTop = lighten(color, 0.15);     // top face — lighter
+  const cLeft = color; // left face — base color
+  const cFront = darken(color, 0.82); // front face — slightly darker
+  const cRight = darken(color, 0.65); // right face — darker
+  const cTop = lighten(color, 0.15); // top face — lighter
 
   // ── Tentacles (z = 0 → 3) ──
   for (let i = 0; i < TENT_XS.length; i++) {
@@ -126,43 +127,119 @@ function drawOctopus(opts: DrawOpts) {
     const z1 = TENT_H + zOff;
 
     // Left face
-    face([[tx, ty + TENT_D, z0], [tx, ty, z0], [tx, ty, z1], [tx, ty + TENT_D, z1]], darken(color, 0.75));
+    face(
+      [
+        [tx, ty + TENT_D, z0],
+        [tx, ty, z0],
+        [tx, ty, z1],
+        [tx, ty + TENT_D, z1],
+      ],
+      darken(color, 0.75),
+    );
     // Front face
-    face([[tx, ty, z0], [tx + TENT_W, ty, z0], [tx + TENT_W, ty, z1], [tx, ty, z1]], darken(color, 0.65));
+    face(
+      [
+        [tx, ty, z0],
+        [tx + TENT_W, ty, z0],
+        [tx + TENT_W, ty, z1],
+        [tx, ty, z1],
+      ],
+      darken(color, 0.65),
+    );
     // Right face
-    face([[tx + TENT_W, ty, z0], [tx + TENT_W, ty + TENT_D, z0], [tx + TENT_W, ty + TENT_D, z1], [tx + TENT_W, ty, z1]], darken(color, 0.55));
+    face(
+      [
+        [tx + TENT_W, ty, z0],
+        [tx + TENT_W, ty + TENT_D, z0],
+        [tx + TENT_W, ty + TENT_D, z1],
+        [tx + TENT_W, ty, z1],
+      ],
+      darken(color, 0.55),
+    );
     // Top cap
-    face([[tx, ty, z1], [tx + TENT_W, ty, z1], [tx + TENT_W, ty + TENT_D, z1], [tx, ty + TENT_D, z1]], color);
+    face(
+      [
+        [tx, ty, z1],
+        [tx + TENT_W, ty, z1],
+        [tx + TENT_W, ty + TENT_D, z1],
+        [tx, ty + TENT_D, z1],
+      ],
+      color,
+    );
   }
 
   // ── Lower body (z = 3 → 6) ──
   // Left
-  face([[0, BODY_D, 3], [0, 0, 3], [0, 0, 6], [0, BODY_D, 6]], cLeft);
+  face(
+    [
+      [0, BODY_D, 3],
+      [0, 0, 3],
+      [0, 0, 6],
+      [0, BODY_D, 6],
+    ],
+    cLeft,
+  );
   // Front
-  face([[0, 0, 3], [BODY_W, 0, 3], [BODY_W, 0, 6], [0, 0, 6]], cFront);
+  face(
+    [
+      [0, 0, 3],
+      [BODY_W, 0, 3],
+      [BODY_W, 0, 6],
+      [0, 0, 6],
+    ],
+    cFront,
+  );
   // Right
-  face([[BODY_W, 0, 3], [BODY_W, BODY_D, 3], [BODY_W, BODY_D, 6], [BODY_W, 0, 6]], cRight);
+  face(
+    [
+      [BODY_W, 0, 3],
+      [BODY_W, BODY_D, 3],
+      [BODY_W, BODY_D, 6],
+      [BODY_W, 0, 6],
+    ],
+    cRight,
+  );
 
   // ── Upper dome (z = 6 → 9, tapered inward) ──
   const tp = TAPER;
   // Left
   face(
-    [[0, BODY_D, 6], [0, 0, 6], [tp, tp, 9], [tp, BODY_D - tp, 9]],
+    [
+      [0, BODY_D, 6],
+      [0, 0, 6],
+      [tp, tp, 9],
+      [tp, BODY_D - tp, 9],
+    ],
     cLeft,
   );
   // Front
   face(
-    [[0, 0, 6], [BODY_W, 0, 6], [BODY_W - tp, tp, 9], [tp, tp, 9]],
+    [
+      [0, 0, 6],
+      [BODY_W, 0, 6],
+      [BODY_W - tp, tp, 9],
+      [tp, tp, 9],
+    ],
     cFront,
   );
   // Right
   face(
-    [[BODY_W, 0, 6], [BODY_W, BODY_D, 6], [BODY_W - tp, BODY_D - tp, 9], [BODY_W - tp, tp, 9]],
+    [
+      [BODY_W, 0, 6],
+      [BODY_W, BODY_D, 6],
+      [BODY_W - tp, BODY_D - tp, 9],
+      [BODY_W - tp, tp, 9],
+    ],
     cRight,
   );
   // Top
   face(
-    [[tp, tp, 9], [BODY_W - tp, tp, 9], [BODY_W - tp, BODY_D - tp, 9], [tp, BODY_D - tp, 9]],
+    [
+      [tp, tp, 9],
+      [BODY_W - tp, tp, 9],
+      [BODY_W - tp, BODY_D - tp, 9],
+      [tp, BODY_D - tp, 9],
+    ],
     cTop,
   );
 
@@ -172,10 +249,7 @@ function drawOctopus(opts: DrawOpts) {
 
 // ─── Expressions ─────────────────────────────────────────────────────────────
 
-function drawExpression(
-  face: (pts: Vec3[], col: string) => void,
-  expression: OctopusExpression,
-) {
+function drawExpression(face: (pts: Vec3[], col: string) => void, expression: OctopusExpression) {
   switch (expression) {
     case "normal":
       drawNormalEyes(face);
@@ -201,68 +275,252 @@ function drawExpression(
 
 // Normal — two 1.2×1.5 rectangles on front face
 function drawNormalEyes(face: (pts: Vec3[], col: string) => void) {
-  face([[1, 0, 6], [2.2, 0, 6], [2.2, 0, 7.5], [1, 0, 7.5]], "#000000");
-  face([[BODY_W - 2.2, 0, 6], [BODY_W - 1, 0, 6], [BODY_W - 1, 0, 7.5], [BODY_W - 2.2, 0, 7.5]], "#000000");
+  face(
+    [
+      [1, 0, 6],
+      [2.2, 0, 6],
+      [2.2, 0, 7.5],
+      [1, 0, 7.5],
+    ],
+    "#000000",
+  );
+  face(
+    [
+      [BODY_W - 2.2, 0, 6],
+      [BODY_W - 1, 0, 6],
+      [BODY_W - 1, 0, 7.5],
+      [BODY_W - 2.2, 0, 7.5],
+    ],
+    "#000000",
+  );
 }
 
 // Happy — curved upward eyes (^_^): narrow bottom slit
 function drawHappyEyes(face: (pts: Vec3[], col: string) => void) {
   // Arched eyes — thinner at top, wider at bottom, shifted up
-  face([[1, 0, 7], [2.2, 0, 7], [2.2, 0, 7.5], [1, 0, 7.5]], "#000000");
-  face([[BODY_W - 2.2, 0, 7], [BODY_W - 1, 0, 7], [BODY_W - 1, 0, 7.5], [BODY_W - 2.2, 0, 7.5]], "#000000");
+  face(
+    [
+      [1, 0, 7],
+      [2.2, 0, 7],
+      [2.2, 0, 7.5],
+      [1, 0, 7.5],
+    ],
+    "#000000",
+  );
+  face(
+    [
+      [BODY_W - 2.2, 0, 7],
+      [BODY_W - 1, 0, 7],
+      [BODY_W - 1, 0, 7.5],
+      [BODY_W - 2.2, 0, 7.5],
+    ],
+    "#000000",
+  );
   // Upper lid hints
-  face([[1.2, 0, 7.5], [2, 0, 7.5], [2, 0, 7.8], [1.2, 0, 7.8]], "#000000");
-  face([[BODY_W - 2, 0, 7.5], [BODY_W - 1.2, 0, 7.5], [BODY_W - 1.2, 0, 7.8], [BODY_W - 2, 0, 7.8]], "#000000");
+  face(
+    [
+      [1.2, 0, 7.5],
+      [2, 0, 7.5],
+      [2, 0, 7.8],
+      [1.2, 0, 7.8],
+    ],
+    "#000000",
+  );
+  face(
+    [
+      [BODY_W - 2, 0, 7.5],
+      [BODY_W - 1.2, 0, 7.5],
+      [BODY_W - 1.2, 0, 7.8],
+      [BODY_W - 2, 0, 7.8],
+    ],
+    "#000000",
+  );
 }
 
 function drawHappyMouth(face: (pts: Vec3[], col: string) => void) {
   // Small upward curve (smile)
-  face([[2.2, 0, 5.2], [3.8, 0, 5.2], [3.8, 0, 5.6], [2.2, 0, 5.6]], "#000000");
-  face([[2, 0, 5.6], [2.4, 0, 5.6], [2.4, 0, 5.8], [2, 0, 5.8]], "#000000");
-  face([[3.6, 0, 5.6], [4, 0, 5.6], [4, 0, 5.8], [3.6, 0, 5.8]], "#000000");
+  face(
+    [
+      [2.2, 0, 5.2],
+      [3.8, 0, 5.2],
+      [3.8, 0, 5.6],
+      [2.2, 0, 5.6],
+    ],
+    "#000000",
+  );
+  face(
+    [
+      [2, 0, 5.6],
+      [2.4, 0, 5.6],
+      [2.4, 0, 5.8],
+      [2, 0, 5.8],
+    ],
+    "#000000",
+  );
+  face(
+    [
+      [3.6, 0, 5.6],
+      [4, 0, 5.6],
+      [4, 0, 5.8],
+      [3.6, 0, 5.8],
+    ],
+    "#000000",
+  );
 }
 
 // Sleepy — heavy eyelids (half-closed rectangles)
 function drawSleepyEyes(face: (pts: Vec3[], col: string) => void) {
   // Closed eyelids — wider dark bar
-  face([[1, 0, 6.8], [2.2, 0, 6.8], [2.2, 0, 7.3], [1, 0, 7.3]], "#000000");
-  face([[BODY_W - 2.2, 0, 6.8], [BODY_W - 1, 0, 6.8], [BODY_W - 1, 0, 7.3], [BODY_W - 2.2, 0, 7.3]], "#000000");
+  face(
+    [
+      [1, 0, 6.8],
+      [2.2, 0, 6.8],
+      [2.2, 0, 7.3],
+      [1, 0, 7.3],
+    ],
+    "#000000",
+  );
+  face(
+    [
+      [BODY_W - 2.2, 0, 6.8],
+      [BODY_W - 1, 0, 6.8],
+      [BODY_W - 1, 0, 7.3],
+      [BODY_W - 2.2, 0, 7.3],
+    ],
+    "#000000",
+  );
   // Tiny pupils peeking below
-  face([[1.4, 0, 6.4], [1.8, 0, 6.4], [1.8, 0, 6.8], [1.4, 0, 6.8]], "#000000");
-  face([[BODY_W - 1.8, 0, 6.4], [BODY_W - 1.4, 0, 6.4], [BODY_W - 1.4, 0, 6.8], [BODY_W - 1.8, 0, 6.8]], "#000000");
+  face(
+    [
+      [1.4, 0, 6.4],
+      [1.8, 0, 6.4],
+      [1.8, 0, 6.8],
+      [1.4, 0, 6.8],
+    ],
+    "#000000",
+  );
+  face(
+    [
+      [BODY_W - 1.8, 0, 6.4],
+      [BODY_W - 1.4, 0, 6.4],
+      [BODY_W - 1.4, 0, 6.8],
+      [BODY_W - 1.8, 0, 6.8],
+    ],
+    "#000000",
+  );
 }
 
 // Angry — narrowed eyes with diagonal brow lines
 function drawAngryEyes(face: (pts: Vec3[], col: string) => void) {
-  face([[1, 0, 6.2], [2.2, 0, 6.2], [2.2, 0, 7.2], [1, 0, 7.2]], "#000000");
-  face([[BODY_W - 2.2, 0, 6.2], [BODY_W - 1, 0, 6.2], [BODY_W - 1, 0, 7.2], [BODY_W - 2.2, 0, 7.2]], "#000000");
+  face(
+    [
+      [1, 0, 6.2],
+      [2.2, 0, 6.2],
+      [2.2, 0, 7.2],
+      [1, 0, 7.2],
+    ],
+    "#000000",
+  );
+  face(
+    [
+      [BODY_W - 2.2, 0, 6.2],
+      [BODY_W - 1, 0, 6.2],
+      [BODY_W - 1, 0, 7.2],
+      [BODY_W - 2.2, 0, 7.2],
+    ],
+    "#000000",
+  );
 }
 
 function drawAngryBrows(face: (pts: Vec3[], col: string) => void) {
   // Left brow — angled down toward center
-  face([[0.6, 0, 8], [2.4, 0, 7.4], [2.4, 0, 7.8], [0.6, 0, 8.4]], "#000000");
+  face(
+    [
+      [0.6, 0, 8],
+      [2.4, 0, 7.4],
+      [2.4, 0, 7.8],
+      [0.6, 0, 8.4],
+    ],
+    "#000000",
+  );
   // Right brow — mirrored
-  face([[BODY_W - 2.4, 0, 7.4], [BODY_W - 0.6, 0, 8], [BODY_W - 0.6, 0, 8.4], [BODY_W - 2.4, 0, 7.8]], "#000000");
+  face(
+    [
+      [BODY_W - 2.4, 0, 7.4],
+      [BODY_W - 0.6, 0, 8],
+      [BODY_W - 0.6, 0, 8.4],
+      [BODY_W - 2.4, 0, 7.8],
+    ],
+    "#000000",
+  );
 }
 
 function drawAngryMouth(face: (pts: Vec3[], col: string) => void) {
   // Narrow snarl
-  face([[2.4, 0, 5], [3.6, 0, 5], [3.6, 0, 5.5], [2.4, 0, 5.5]], "#000000");
+  face(
+    [
+      [2.4, 0, 5],
+      [3.6, 0, 5],
+      [3.6, 0, 5.5],
+      [2.4, 0, 5.5],
+    ],
+    "#000000",
+  );
 }
 
 // Surprised — tall round eyes + small O mouth
 function drawSurprisedEyes(face: (pts: Vec3[], col: string) => void) {
   // Taller eyes (3-row equivalent)
-  face([[1, 0, 5.8], [2.2, 0, 5.8], [2.2, 0, 7.8], [1, 0, 7.8]], "#000000");
-  face([[BODY_W - 2.2, 0, 5.8], [BODY_W - 1, 0, 5.8], [BODY_W - 1, 0, 7.8], [BODY_W - 2.2, 0, 7.8]], "#000000");
+  face(
+    [
+      [1, 0, 5.8],
+      [2.2, 0, 5.8],
+      [2.2, 0, 7.8],
+      [1, 0, 7.8],
+    ],
+    "#000000",
+  );
+  face(
+    [
+      [BODY_W - 2.2, 0, 5.8],
+      [BODY_W - 1, 0, 5.8],
+      [BODY_W - 1, 0, 7.8],
+      [BODY_W - 2.2, 0, 7.8],
+    ],
+    "#000000",
+  );
   // Highlight in each eye (white glint)
-  face([[1.2, 0, 7.2], [1.6, 0, 7.2], [1.6, 0, 7.6], [1.2, 0, 7.6]], "#ffffff");
-  face([[BODY_W - 1.6, 0, 7.2], [BODY_W - 1.2, 0, 7.2], [BODY_W - 1.2, 0, 7.6], [BODY_W - 1.6, 0, 7.6]], "#ffffff");
+  face(
+    [
+      [1.2, 0, 7.2],
+      [1.6, 0, 7.2],
+      [1.6, 0, 7.6],
+      [1.2, 0, 7.6],
+    ],
+    "#ffffff",
+  );
+  face(
+    [
+      [BODY_W - 1.6, 0, 7.2],
+      [BODY_W - 1.2, 0, 7.2],
+      [BODY_W - 1.2, 0, 7.6],
+      [BODY_W - 1.6, 0, 7.6],
+    ],
+    "#ffffff",
+  );
 }
 
 function drawSurprisedMouth(face: (pts: Vec3[], col: string) => void) {
   // Small O mouth
-  face([[2.6, 0, 4.8], [3.4, 0, 4.8], [3.4, 0, 5.5], [2.6, 0, 5.5]], "#000000");
+  face(
+    [
+      [2.6, 0, 4.8],
+      [3.4, 0, 4.8],
+      [3.4, 0, 5.5],
+      [2.6, 0, 5.5],
+    ],
+    "#000000",
+  );
 }
 
 // ─── ZZZ overlay for sleepy expression ───────────────────────────────────────
@@ -282,11 +540,44 @@ function drawIsoZZZ(
   // Z glyphs floating above the octopus, rendered as small iso quads
   const drawZ = (bx: number, bz: number, size: number) => {
     // Top bar
-    drawFace(ctx, [[bx, 0, bz + size], [bx + size, 0, bz + size], [bx + size, 0, bz + size - 0.3], [bx, 0, bz + size - 0.3]], "#7ec8e3", toSx, toSy);
+    drawFace(
+      ctx,
+      [
+        [bx, 0, bz + size],
+        [bx + size, 0, bz + size],
+        [bx + size, 0, bz + size - 0.3],
+        [bx, 0, bz + size - 0.3],
+      ],
+      "#7ec8e3",
+      toSx,
+      toSy,
+    );
     // Diagonal
-    drawFace(ctx, [[bx + size - 0.3, 0, bz + size - 0.3], [bx + size, 0, bz + size - 0.3], [bx + 0.3, 0, bz + 0.3], [bx, 0, bz + 0.3]], "#7ec8e3", toSx, toSy);
+    drawFace(
+      ctx,
+      [
+        [bx + size - 0.3, 0, bz + size - 0.3],
+        [bx + size, 0, bz + size - 0.3],
+        [bx + 0.3, 0, bz + 0.3],
+        [bx, 0, bz + 0.3],
+      ],
+      "#7ec8e3",
+      toSx,
+      toSy,
+    );
     // Bottom bar
-    drawFace(ctx, [[bx, 0, bz + 0.3], [bx + size, 0, bz + 0.3], [bx + size, 0, bz], [bx, 0, bz]], "#7ec8e3", toSx, toSy);
+    drawFace(
+      ctx,
+      [
+        [bx, 0, bz + 0.3],
+        [bx + size, 0, bz + 0.3],
+        [bx + size, 0, bz],
+        [bx, 0, bz],
+      ],
+      "#7ec8e3",
+      toSx,
+      toSy,
+    );
   };
 
   // Z1 — lowest, near right
@@ -311,7 +602,7 @@ function buildTentacleOffsets(animation: IsometricOctopusAnimation, frame: numbe
     case "breathe": {
       // Gentle up/down with slight phase offset per tentacle
       const offsets = [0, 0.15, 0.3];
-      return offsets.map((off) => Math.sin((frame * 0.15) + off * Math.PI * 2) * 0.3);
+      return offsets.map((off) => Math.sin(frame * 0.15 + off * Math.PI * 2) * 0.3);
     }
     case "bounce": {
       // All tentacles compress/extend together
@@ -375,9 +666,8 @@ export const IsometricOctopus = ({
 
     const accentColor =
       color ??
-      (getComputedStyle(document.documentElement)
-        .getPropertyValue("--accent-primary")
-        .trim() || "#d4a017");
+      (getComputedStyle(document.documentElement).getPropertyValue("--accent-primary").trim() ||
+        "#d4a017");
 
     // Origin places the octopus centered in the canvas
     const ox = SCENE_W / 2 + 2;
@@ -407,16 +697,19 @@ export const IsometricOctopus = ({
 
     if (animation === "idle" && expression !== "sleepy") return;
 
-    const id = setInterval(() => {
-      frameRef.current += 1;
-      if (expression === "sleepy") {
-        // Cycle ZZZ every 5 frames
-        if (frameRef.current % 5 === 0) {
-          zzzPhaseRef.current = (zzzPhaseRef.current + 1) % 5;
+    const id = setInterval(
+      () => {
+        frameRef.current += 1;
+        if (expression === "sleepy") {
+          // Cycle ZZZ every 5 frames
+          if (frameRef.current % 5 === 0) {
+            zzzPhaseRef.current = (zzzPhaseRef.current + 1) % 5;
+          }
         }
-      }
-      render();
-    }, animation === "idle" ? 350 : 60);
+        render();
+      },
+      animation === "idle" ? 350 : 60,
+    );
 
     return () => clearInterval(id);
   }, [animation, expression, color, scale, canvasW, canvasH]);

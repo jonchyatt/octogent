@@ -172,11 +172,7 @@ const TentaclePod = ({
         <button type="button" className="deck-pod-btn">
           Spawn
         </button>
-        <button
-          type="button"
-          className="deck-pod-btn"
-          onClick={() => onVaultBrowse?.()}
-        >
+        <button type="button" className="deck-pod-btn" onClick={() => onVaultBrowse?.()}>
           Vault
         </button>
         {confirmingDelete ? (
@@ -973,9 +969,7 @@ export const DeckPrimaryView = ({ onSidebarContent }: DeckPrimaryViewProps) => {
                 onVaultFileClick={(fileName) =>
                   setFocus({ type: "vault", tentacleId: t.tentacleId, fileName })
                 }
-                onVaultBrowse={() =>
-                  setFocus({ type: "vault-browser", tentacleId: t.tentacleId })
-                }
+                onVaultBrowse={() => setFocus({ type: "vault-browser", tentacleId: t.tentacleId })}
                 onClose={handleClose}
                 onDelete={() => handleDeleteTentacle(t.tentacleId)}
                 isDeleting={deletingTentacleId === t.tentacleId}
@@ -1013,7 +1007,11 @@ export const DeckPrimaryView = ({ onSidebarContent }: DeckPrimaryViewProps) => {
                           type="button"
                           className="deck-vault-tree-file"
                           onClick={() =>
-                            setFocus({ type: "vault", tentacleId: focus.tentacleId, fileName: file })
+                            setFocus({
+                              type: "vault",
+                              tentacleId: focus.tentacleId,
+                              fileName: file,
+                            })
                           }
                         >
                           {file}

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  isMonitorCacheStale,
-  rankAndLimitPostsByLikes,
-} from "../src/monitor/service";
+import { isMonitorCacheStale, rankAndLimitPostsByLikes } from "../src/monitor/service";
 import { buildXRecentSearchQuery } from "../src/monitor/xProvider";
 import type { MonitorPost } from "../src/monitor/types";
 

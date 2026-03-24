@@ -39,11 +39,7 @@ describe("readGithubRepoSummary", () => {
         };
       }
 
-      if (
-        command === "git" &&
-        args[0] === "log" &&
-        args.includes("--pretty=format:%ad")
-      ) {
+      if (command === "git" && args[0] === "log" && args.includes("--pretty=format:%ad")) {
         return {
           stdout: "2026-02-27\n2026-02-27\n2026-03-01\n",
           stderr: "",
@@ -61,11 +57,7 @@ describe("readGithubRepoSummary", () => {
         };
       }
 
-      if (
-        command === "git" &&
-        args[0] === "log" &&
-        args.includes("--shortstat")
-      ) {
+      if (command === "git" && args[0] === "log" && args.includes("--shortstat")) {
         return {
           stdout: shortstatRecords,
           stderr: "",

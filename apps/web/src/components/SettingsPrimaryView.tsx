@@ -144,7 +144,9 @@ export const SettingsPrimaryView = ({
         >
           <span className="settings-toggle-copy">
             <span className="settings-toggle-label">Bottom telemetry tape</span>
-            <span className="settings-toggle-description">Scrolling tape under the workspace canvas</span>
+            <span className="settings-toggle-description">
+              Scrolling tape under the workspace canvas
+            </span>
           </span>
           <span className="settings-toggle-switch" aria-hidden="true">
             <span className="settings-toggle-thumb" />
@@ -184,7 +186,9 @@ export const SettingsPrimaryView = ({
           <span className="settings-toggle-switch" aria-hidden="true">
             <span className="settings-toggle-thumb" />
           </span>
-          <span className="settings-toggle-state">{isCodexUsageVisible ? "Enabled" : "Disabled"}</span>
+          <span className="settings-toggle-state">
+            {isCodexUsageVisible ? "Enabled" : "Disabled"}
+          </span>
         </button>
         <button
           aria-checked={isClaudeUsageVisible}

@@ -250,10 +250,18 @@ const readCommitSeries = async (
   }));
 };
 
-const parseRecentCommit = (entry: string): Omit<GitHubRecentCommit, "filesChanged" | "insertions" | "deletions"> | null => {
-  const [rawHash, rawShortHash, rawAuthorName, rawAuthorEmail, rawAuthoredAt, rawBody, ...subjectParts] = entry
-    .split("\u001f")
-    .map((part) => part.trim());
+const parseRecentCommit = (
+  entry: string,
+): Omit<GitHubRecentCommit, "filesChanged" | "insertions" | "deletions"> | null => {
+  const [
+    rawHash,
+    rawShortHash,
+    rawAuthorName,
+    rawAuthorEmail,
+    rawAuthoredAt,
+    rawBody,
+    ...subjectParts
+  ] = entry.split("\u001f").map((part) => part.trim());
   const rawSubject = subjectParts.join("\u001f").trim();
 
   if (!rawHash || !rawShortHash || !rawAuthorName || !rawAuthoredAt || !rawSubject) {
@@ -268,7 +276,9 @@ const parseRecentCommit = (entry: string): Omit<GitHubRecentCommit, "filesChange
     subject: rawSubject,
     authorName: rawAuthorName,
     authorEmail: rawAuthorEmail ?? "",
-    authoredAt: Number.isFinite(authoredAtMs) ? new Date(authoredAtMs).toISOString() : rawAuthoredAt,
+    authoredAt: Number.isFinite(authoredAtMs)
+      ? new Date(authoredAtMs).toISOString()
+      : rawAuthoredAt,
     body: rawBody ?? "",
   };
 };
@@ -293,12 +303,7 @@ const readCommitDiffStats = async (
 ): Promise<Map<string, DiffStat>> => {
   const { stdout } = await runCommand(
     "git",
-    [
-      "log",
-      `-${RECENT_COMMIT_LIMIT}`,
-      "--pretty=format:%H",
-      "--shortstat",
-    ],
+    ["log", `-${RECENT_COMMIT_LIMIT}`, "--pretty=format:%H", "--shortstat"],
     { cwd, env },
   );
 

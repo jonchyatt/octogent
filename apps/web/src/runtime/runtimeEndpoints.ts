@@ -266,10 +266,7 @@ export const buildDeckTentaclesUrl = (runtimeBaseUrl = readRuntimeBaseUrl()) => 
   return buildAbsoluteUrl(runtimeBaseUrl, "/api/deck/tentacles");
 };
 
-export const buildDeckTentacleUrl = (
-  tentacleId: string,
-  runtimeBaseUrl = readRuntimeBaseUrl(),
-) => {
+export const buildDeckTentacleUrl = (tentacleId: string, runtimeBaseUrl = readRuntimeBaseUrl()) => {
   const encodedTentacleId = encodeURIComponent(tentacleId);
   const path = `/api/deck/tentacles/${encodedTentacleId}`;
   if (!runtimeBaseUrl) {

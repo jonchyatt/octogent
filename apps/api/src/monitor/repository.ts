@@ -52,9 +52,7 @@ const normalizeMonitorPost = (value: unknown): PersistedMonitorCache["posts"][nu
       : null;
   const permalink = typeof record.permalink === "string" ? record.permalink : null;
   const matchedQueryTerm =
-    typeof record.matchedQueryTerm === "string"
-      ? record.matchedQueryTerm
-      : null;
+    typeof record.matchedQueryTerm === "string" ? record.matchedQueryTerm : null;
 
   if (
     source !== "x" ||
@@ -92,7 +90,8 @@ const normalizeUsage = (value: unknown): PersistedMonitorCache["usage"] => {
   }
 
   const source = record.source === "x-api" ? "x-api" : "none";
-  const fetchedAt = typeof record.fetchedAt === "string" ? record.fetchedAt : new Date().toISOString();
+  const fetchedAt =
+    typeof record.fetchedAt === "string" ? record.fetchedAt : new Date().toISOString();
   const message = typeof record.message === "string" ? record.message : null;
 
   const cap =

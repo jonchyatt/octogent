@@ -94,9 +94,7 @@ const unavailableSnapshot = (
 
 const normalizeScopes = (value: unknown): string[] => {
   if (Array.isArray(value)) {
-    return value
-      .map((item) => asString(item))
-      .filter((item): item is string => item !== null);
+    return value.map((item) => asString(item)).filter((item): item is string => item !== null);
   }
 
   const scopeString = asString(value);
@@ -223,7 +221,8 @@ const mapUsageSnapshot = (
     status: "ok",
     fetchedAt: now.toISOString(),
     source: "oauth-api",
-    planType: asString(usagePayload.plan_type ?? usagePayload.planType) ?? inferPlanType(rateLimitTier),
+    planType:
+      asString(usagePayload.plan_type ?? usagePayload.planType) ?? inferPlanType(rateLimitTier),
     primaryUsedPercent: readWindowPercent(primaryWindow),
     primaryResetAt: readWindowResetAt(primaryWindow),
     secondaryUsedPercent: readWindowPercent(weeklyWindow),
@@ -320,10 +319,7 @@ const percentFromLine = (line: string): number | null => {
   return Math.round(clamped * 10) / 10;
 };
 
-const extractLabeledPercent = (
-  lines: string[],
-  labelSubstrings: string[],
-): number | null => {
+const extractLabeledPercent = (lines: string[], labelSubstrings: string[]): number | null => {
   for (let i = 0; i < lines.length; i++) {
     const normalized = lines[i]!.toLowerCase();
     const collapsed = normalized.replace(/\s+/gu, "");
@@ -343,7 +339,10 @@ const extractLabeledPercent = (
 
 export const parseCliUsageOutput = (rawOutput: string): ParsedCliUsage => {
   const clean = stripAnsiCodes(rawOutput);
-  const lines = clean.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+  const lines = clean
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
 
   const primaryUsedPercent = extractLabeledPercent(lines, ["current session"]);
   const secondaryUsedPercent = extractLabeledPercent(lines, [
@@ -399,86 +398,105 @@ const READY_NEEDLES = [
 
 const spawnCliAndCapture = (binary: string): Promise<string | null> =>
   new Promise<string | null>((resolve) => {
-    import("node-pty").then((pty) => {
-      let buffer = "";
-      let usageBuffer = "";
-      let done = false;
-      let phase: "waiting" | "capturing" = "waiting";
-      let settleTimer: ReturnType<typeof setTimeout> | null = null;
-      let enterTimer: ReturnType<typeof setInterval> | null = null;
+    import("node-pty")
+      .then((pty) => {
+        let buffer = "";
+        let usageBuffer = "";
+        let done = false;
+        let phase: "waiting" | "capturing" = "waiting";
+        let settleTimer: ReturnType<typeof setTimeout> | null = null;
+        let enterTimer: ReturnType<typeof setInterval> | null = null;
 
-      const term = pty.spawn(binary, ["--allowed-tools", ""], {
-        name: "xterm-256color",
-        cols: CLI_PTY_COLS,
-        rows: CLI_PTY_ROWS,
-        env: scrubbedEnv(),
-      });
+        const term = pty.spawn(binary, ["--allowed-tools", ""], {
+          name: "xterm-256color",
+          cols: CLI_PTY_COLS,
+          rows: CLI_PTY_ROWS,
+          env: scrubbedEnv(),
+        });
 
-      const finish = (result: string | null) => {
-        if (done) return;
-        done = true;
-        if (deadlineTimer) clearTimeout(deadlineTimer);
-        if (settleTimer) clearTimeout(settleTimer);
-        if (enterTimer) clearInterval(enterTimer);
-        try { term.kill(); } catch { /* already dead */ }
-        resolve(result);
-      };
-
-      const deadlineTimer = setTimeout(() => {
-        finish(usageBuffer.length > 0 ? usageBuffer : buffer.length > 0 ? buffer : null);
-      }, CLI_PTY_TIMEOUT_MS);
-
-      const sendUsageCommand = () => {
-        if (phase !== "waiting") return;
-        phase = "capturing";
-        // Clear the buffer so we only capture /usage output
-        usageBuffer = "";
-        console.log("[claude-usage] CLI ready, sending /usage");
-        try {
-          term.write("/usage\r");
-        } catch {
-          finish(null);
-          return;
-        }
-        // Periodic Enter presses to refresh TUI render
-        enterTimer = setInterval(() => {
-          try { term.write("\r"); } catch { /* ignore */ }
-        }, CLI_PTY_ENTER_INTERVAL_MS);
-      };
-
-      term.onData((data: string) => {
-        buffer += data;
-        if (phase === "capturing") {
-          usageBuffer += data;
-        }
-
-        const normalized = stripAnsiCodes(buffer).toLowerCase();
-
-        const collapsed = normalized.replace(/\s+/gu, "");
-
-        // Handle trust prompts
-        if (collapsed.includes("doyoutrust")) {
-          try { term.write("y\r"); } catch { /* ignore */ }
-          return;
-        }
-
-        // Phase 1: wait for welcome screen to render, then send /usage
-        if (phase === "waiting") {
-          if (READY_NEEDLES.some((n) => collapsed.includes(n))) {
-            sendUsageCommand();
+        const finish = (result: string | null) => {
+          if (done) return;
+          done = true;
+          if (deadlineTimer) clearTimeout(deadlineTimer);
+          if (settleTimer) clearTimeout(settleTimer);
+          if (enterTimer) clearInterval(enterTimer);
+          try {
+            term.kill();
+          } catch {
+            /* already dead */
           }
-          return;
-        }
+          resolve(result);
+        };
 
-        // Phase 2: capturing /usage output — look for stop needles
-        const usageCollapsed = stripAnsiCodes(usageBuffer).toLowerCase().replace(/\s+/gu, "");
-        if (!settleTimer && STOP_NEEDLES.some((n) => usageCollapsed.includes(n.replace(/\s+/gu, "")))) {
-          settleTimer = setTimeout(() => finish(usageBuffer), CLI_PTY_SETTLE_MS);
-        }
-      });
+        const deadlineTimer = setTimeout(() => {
+          finish(usageBuffer.length > 0 ? usageBuffer : buffer.length > 0 ? buffer : null);
+        }, CLI_PTY_TIMEOUT_MS);
 
-      term.onExit(() => finish(usageBuffer.length > 0 ? usageBuffer : buffer.length > 0 ? buffer : null));
-    }).catch(() => resolve(null));
+        const sendUsageCommand = () => {
+          if (phase !== "waiting") return;
+          phase = "capturing";
+          // Clear the buffer so we only capture /usage output
+          usageBuffer = "";
+          console.log("[claude-usage] CLI ready, sending /usage");
+          try {
+            term.write("/usage\r");
+          } catch {
+            finish(null);
+            return;
+          }
+          // Periodic Enter presses to refresh TUI render
+          enterTimer = setInterval(() => {
+            try {
+              term.write("\r");
+            } catch {
+              /* ignore */
+            }
+          }, CLI_PTY_ENTER_INTERVAL_MS);
+        };
+
+        term.onData((data: string) => {
+          buffer += data;
+          if (phase === "capturing") {
+            usageBuffer += data;
+          }
+
+          const normalized = stripAnsiCodes(buffer).toLowerCase();
+
+          const collapsed = normalized.replace(/\s+/gu, "");
+
+          // Handle trust prompts
+          if (collapsed.includes("doyoutrust")) {
+            try {
+              term.write("y\r");
+            } catch {
+              /* ignore */
+            }
+            return;
+          }
+
+          // Phase 1: wait for welcome screen to render, then send /usage
+          if (phase === "waiting") {
+            if (READY_NEEDLES.some((n) => collapsed.includes(n))) {
+              sendUsageCommand();
+            }
+            return;
+          }
+
+          // Phase 2: capturing /usage output — look for stop needles
+          const usageCollapsed = stripAnsiCodes(usageBuffer).toLowerCase().replace(/\s+/gu, "");
+          if (
+            !settleTimer &&
+            STOP_NEEDLES.some((n) => usageCollapsed.includes(n.replace(/\s+/gu, "")))
+          ) {
+            settleTimer = setTimeout(() => finish(usageBuffer), CLI_PTY_SETTLE_MS);
+          }
+        });
+
+        term.onExit(() =>
+          finish(usageBuffer.length > 0 ? usageBuffer : buffer.length > 0 ? buffer : null),
+        );
+      })
+      .catch(() => resolve(null));
   });
 
 const spawnDefaultCliUsage = async (): Promise<string | null> => {
@@ -509,20 +527,14 @@ const readOauthUsageSnapshot = async (
     const errorCode =
       typeof error === "object" && error && "code" in error ? String(error.code) : "";
     if (errorCode === "ENOENT") {
-      return unavailableSnapshot(
-        now,
-        "Claude credentials not found. Run `claude login`.",
-      );
+      return unavailableSnapshot(now, "Claude credentials not found. Run `claude login`.");
     }
     return unavailableSnapshot(now, "Unable to read Claude credentials.", "error");
   }
 
   const oauthCredentials = readClaudeOauthCredentials(credentialsJson);
   if (!oauthCredentials) {
-    return unavailableSnapshot(
-      now,
-      "Claude OAuth access token is missing. Re-run `claude login`.",
-    );
+    return unavailableSnapshot(now, "Claude OAuth access token is missing. Re-run `claude login`.");
   }
 
   if (!oauthCredentials.scopes.includes("user:profile")) {
@@ -578,10 +590,7 @@ const readOauthUsageSnapshot = async (
   }
 };
 
-const buildCliSnapshot = (
-  parsed: ParsedCliUsage,
-  now: Date,
-): ClaudeUsageSnapshot => ({
+const buildCliSnapshot = (parsed: ParsedCliUsage, now: Date): ClaudeUsageSnapshot => ({
   status: "ok",
   fetchedAt: now.toISOString(),
   source: "cli-pty",
@@ -618,17 +627,23 @@ export const readClaudeUsageSnapshot = async (
       console.log(`[claude-usage] CLI PTY captured ${cleaned.length} chars`);
       const parsed = parseCliUsageOutput(cliOutput);
       if (cliHasRealData(parsed)) {
-        console.log(`[claude-usage] CLI PTY parsed: session=${parsed.primaryUsedPercent}% week=${parsed.secondaryUsedPercent}% sonnet=${parsed.sonnetUsedPercent}%`);
+        console.log(
+          `[claude-usage] CLI PTY parsed: session=${parsed.primaryUsedPercent}% week=${parsed.secondaryUsedPercent}% sonnet=${parsed.sonnetUsedPercent}%`,
+        );
         const snapshot = buildCliSnapshot(parsed, now);
         cachedSnapshot = { snapshot, fetchedAt: Date.now() };
         return snapshot;
       }
-      console.log(`[claude-usage] CLI PTY output had no parseable usage data. First 500 chars:\n${cleaned.slice(0, 500)}`);
+      console.log(
+        `[claude-usage] CLI PTY output had no parseable usage data. First 500 chars:\n${cleaned.slice(0, 500)}`,
+      );
     } else {
       console.log("[claude-usage] CLI PTY returned null (binary missing or node-pty unavailable)");
     }
   } catch (error) {
-    console.log(`[claude-usage] CLI PTY error: ${error instanceof Error ? error.message : String(error)}`);
+    console.log(
+      `[claude-usage] CLI PTY error: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   // Fall back to OAuth API

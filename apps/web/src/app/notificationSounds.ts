@@ -48,9 +48,7 @@ export const TENTACLE_COMPLETION_SOUND_OPTIONS: Array<{
   },
 ];
 
-export const isTentacleCompletionSoundId = (
-  value: unknown,
-): value is TentacleCompletionSoundId =>
+export const isTentacleCompletionSoundId = (value: unknown): value is TentacleCompletionSoundId =>
   typeof value === "string" &&
   TENTACLE_COMPLETION_SOUND_IDS.includes(value as TentacleCompletionSoundId);
 

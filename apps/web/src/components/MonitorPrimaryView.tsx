@@ -45,9 +45,7 @@ const MONITOR_SEARCH_WINDOW_OPTIONS: Array<{ value: 7 | 3 | 1; label: string }> 
 ];
 
 const normalizeTerms = (terms: string[]): string[] => {
-  const split = terms
-    .map((term) => term.trim())
-    .filter((term) => term.length > 0);
+  const split = terms.map((term) => term.trim()).filter((term) => term.length > 0);
   return [...new Set(split)];
 };
 
@@ -135,8 +133,9 @@ export const MonitorPrimaryView = ({
   );
 
   const credentialsSummary = monitorConfig?.providers.x.credentials;
-  const parsedMaxPosts =
-    /^[1-9]\d*$/.test(maxPostsDraft.trim()) ? Number.parseInt(maxPostsDraft.trim(), 10) : null;
+  const parsedMaxPosts = /^[1-9]\d*$/.test(maxPostsDraft.trim())
+    ? Number.parseInt(maxPostsDraft.trim(), 10)
+    : null;
   const currentConfiguredTerms = monitorConfig?.queryTerms ?? [];
   const nextTermsForSave = normalizeTerms(
     queryTermsDraft.length > 0 ? queryTermsDraft : currentConfiguredTerms,
@@ -235,7 +234,10 @@ export const MonitorPrimaryView = ({
           </div>
 
           <div className="monitor-header-actions">
-            <span className="console-status-pill" data-state={monitorFeed?.isStale ? "stale" : "fresh"}>
+            <span
+              className="console-status-pill"
+              data-state={monitorFeed?.isStale ? "stale" : "fresh"}
+            >
               {monitorFeed?.isStale ? "STALE" : "FRESH"}
             </span>
             <ActionButton
@@ -264,7 +266,10 @@ export const MonitorPrimaryView = ({
 
       {activeSubtab === "configure" ? (
         <section className="monitor-configure" aria-label="Monitor configuration">
-          <section className="monitor-panel monitor-panel--configure" aria-label="Monitor configuration panel">
+          <section
+            className="monitor-panel monitor-panel--configure"
+            aria-label="Monitor configuration panel"
+          >
             <h3>Monitor setup</h3>
             <div className="monitor-config-summary" aria-label="Monitor setup summary">
               <span className="monitor-config-chip">{`Terms ${nextTermsForSave.length}`}</span>
@@ -273,7 +278,9 @@ export const MonitorPrimaryView = ({
             </div>
 
             {monitorError ? <p className="monitor-error">{monitorError}</p> : null}
-            {monitorFeed?.lastError ? <p className="monitor-error">{monitorFeed.lastError}</p> : null}
+            {monitorFeed?.lastError ? (
+              <p className="monitor-error">{monitorFeed.lastError}</p>
+            ) : null}
 
             <div className="monitor-config-layout">
               <div className="monitor-config-column">
@@ -297,7 +304,9 @@ export const MonitorPrimaryView = ({
                   {credentialsSummary && (
                     <div className="monitor-credentials-meta" role="status" aria-live="polite">
                       {credentialsSummary.isConfigured ? (
-                        <span className="monitor-state-badge monitor-state-badge--saved">Saved</span>
+                        <span className="monitor-state-badge monitor-state-badge--saved">
+                          Saved
+                        </span>
                       ) : (
                         <span>Not configured</span>
                       )}
@@ -307,7 +316,11 @@ export const MonitorPrimaryView = ({
 
                 <div className="monitor-config-section">
                   <p className="monitor-section-label">Target terms</p>
-                  <div className="monitor-query-terms-list" role="list" aria-label="Monitor query terms">
+                  <div
+                    className="monitor-query-terms-list"
+                    role="list"
+                    aria-label="Monitor query terms"
+                  >
                     {queryTermsDraft.map((term) => (
                       <div className="monitor-query-term" key={term} role="listitem">
                         <span>{term}</span>
@@ -378,7 +391,10 @@ export const MonitorPrimaryView = ({
                       />
                     </div>
                     <div className="monitor-field">
-                      <p className="monitor-section-label monitor-field-label" id="monitor-search-window-label">
+                      <p
+                        className="monitor-section-label monitor-field-label"
+                        id="monitor-search-window-label"
+                      >
                         Search timeframe
                       </p>
                       <div
@@ -429,7 +445,9 @@ export const MonitorPrimaryView = ({
               <span>{`${monitorFeed?.posts.length ?? 0} / ${configuredMaxPosts}`}</span>
             </header>
             {monitorError ? <p className="monitor-error">{monitorError}</p> : null}
-            {monitorFeed?.lastError ? <p className="monitor-error">{monitorFeed.lastError}</p> : null}
+            {monitorFeed?.lastError ? (
+              <p className="monitor-error">{monitorFeed.lastError}</p>
+            ) : null}
             {monitorFeed && monitorFeed.posts.length === 0 ? (
               <p className="monitor-empty">No posts available yet.</p>
             ) : (

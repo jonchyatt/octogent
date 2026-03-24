@@ -94,7 +94,11 @@
 }
 
 .action-button--accent {
-  --action-button-border: color-mix(in srgb, var(--accent-primary) 50%, var(--control-border-strong));
+  --action-button-border: color-mix(
+    in srgb,
+    var(--accent-primary) 50%,
+    var(--control-border-strong)
+  );
   --action-button-bg: color-mix(in srgb, var(--accent-primary) 14%, var(--control-bg-strong));
   --action-button-color: var(--accent-primary);
 }

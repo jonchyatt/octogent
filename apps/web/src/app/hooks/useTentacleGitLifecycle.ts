@@ -84,10 +84,8 @@ const parseTentacleGitStatus = (payload: unknown): TentacleGitStatusSnapshot | n
     isDirty: record.isDirty,
     aheadCount: record.aheadCount,
     behindCount: record.behindCount,
-    insertedLineCount:
-      typeof record.insertedLineCount === "number" ? record.insertedLineCount : 0,
-    deletedLineCount:
-      typeof record.deletedLineCount === "number" ? record.deletedLineCount : 0,
+    insertedLineCount: typeof record.insertedLineCount === "number" ? record.insertedLineCount : 0,
+    deletedLineCount: typeof record.deletedLineCount === "number" ? record.deletedLineCount : 0,
     hasConflicts: record.hasConflicts,
     changedFiles: [...record.changedFiles],
     defaultBaseBranchName: record.defaultBaseBranchName,
@@ -326,13 +324,14 @@ export const useTentacleGitLifecycle = ({
       setGitDialogError(null);
       setGitCommitMessageDraft("");
 
-      void Promise.all([fetchTentacleGitStatus(tentacleId), fetchTentaclePullRequest(tentacleId)]).catch(
-        (error: unknown) => {
-          setGitDialogError(
-            error instanceof Error ? error.message : "Unable to fetch git lifecycle data.",
-          );
-        },
-      );
+      void Promise.all([
+        fetchTentacleGitStatus(tentacleId),
+        fetchTentaclePullRequest(tentacleId),
+      ]).catch((error: unknown) => {
+        setGitDialogError(
+          error instanceof Error ? error.message : "Unable to fetch git lifecycle data.",
+        );
+      });
     },
     [fetchTentacleGitStatus, fetchTentaclePullRequest],
   );
@@ -439,9 +438,7 @@ export const useTentacleGitLifecycle = ({
           [openGitTentacleId]: payload,
         }));
       } catch (error) {
-        setGitDialogError(
-          error instanceof Error ? error.message : "Unable to merge pull request.",
-        );
+        setGitDialogError(error instanceof Error ? error.message : "Unable to merge pull request.");
       } finally {
         setIsGitDialogMutating(false);
       }
@@ -500,9 +497,9 @@ export const useTentacleGitLifecycle = ({
   }, [runPullRequestMutation]);
 
   const openGitTentacleStatus =
-    openGitTentacleId !== null ? gitStatusByTentacleId[openGitTentacleId] ?? null : null;
+    openGitTentacleId !== null ? (gitStatusByTentacleId[openGitTentacleId] ?? null) : null;
   const openGitTentaclePullRequest =
-    openGitTentacleId !== null ? pullRequestByTentacleId[openGitTentacleId] ?? null : null;
+    openGitTentacleId !== null ? (pullRequestByTentacleId[openGitTentacleId] ?? null) : null;
   const isGitDialogLoading =
     openGitTentacleId !== null
       ? (gitStatusLoadingByTentacleId[openGitTentacleId] ?? false) ||

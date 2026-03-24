@@ -119,7 +119,9 @@ describe("App GitHub runtime views", () => {
     expect(hoverMeta).not.toBeNull();
     expect(hoverMeta).toHaveTextContent("2026-02-27 · 8 commits");
 
-    const graphSvg = container.querySelector(".github-overview-graph-surface svg") as SVGElement | null;
+    const graphSvg = container.querySelector(
+      ".github-overview-graph-surface svg",
+    ) as SVGElement | null;
     expect(graphSvg).not.toBeNull();
     if (!graphSvg) {
       return;

@@ -330,29 +330,30 @@ export const App = () => {
           });
         }}
       />
-    ) :
-    <SidebarActionPanel
-      pendingDeleteTentacle={pendingDeleteTentacle}
-      isDeletingTentacleId={isDeletingTentacleId}
-      clearPendingDeleteTentacle={clearPendingDeleteTentacle}
-      confirmDeleteTentacle={confirmDeleteTentacle}
-      openGitTentacleId={openGitTentacleId}
-      columns={columns}
-      openGitTentacleStatus={openGitTentacleStatus}
-      openGitTentaclePullRequest={openGitTentaclePullRequest}
-      gitCommitMessageDraft={gitCommitMessageDraft}
-      gitDialogError={gitDialogError}
-      isGitDialogLoading={isGitDialogLoading}
-      isGitDialogMutating={isGitDialogMutating}
-      setGitCommitMessageDraft={setGitCommitMessageDraft}
-      closeTentacleGitActions={closeTentacleGitActions}
-      commitTentacleChanges={commitTentacleChanges}
-      commitAndPushTentacleBranch={commitAndPushTentacleBranch}
-      pushTentacleBranch={pushTentacleBranch}
-      syncTentacleBranch={syncTentacleBranch}
-      mergeTentaclePullRequest={mergeTentaclePullRequest}
-      requestDeleteTentacle={requestDeleteTentacle}
-    />
+    ) : (
+      <SidebarActionPanel
+        pendingDeleteTentacle={pendingDeleteTentacle}
+        isDeletingTentacleId={isDeletingTentacleId}
+        clearPendingDeleteTentacle={clearPendingDeleteTentacle}
+        confirmDeleteTentacle={confirmDeleteTentacle}
+        openGitTentacleId={openGitTentacleId}
+        columns={columns}
+        openGitTentacleStatus={openGitTentacleStatus}
+        openGitTentaclePullRequest={openGitTentaclePullRequest}
+        gitCommitMessageDraft={gitCommitMessageDraft}
+        gitDialogError={gitDialogError}
+        isGitDialogLoading={isGitDialogLoading}
+        isGitDialogMutating={isGitDialogMutating}
+        setGitCommitMessageDraft={setGitCommitMessageDraft}
+        closeTentacleGitActions={closeTentacleGitActions}
+        commitTentacleChanges={commitTentacleChanges}
+        commitAndPushTentacleBranch={commitAndPushTentacleBranch}
+        pushTentacleBranch={pushTentacleBranch}
+        syncTentacleBranch={syncTentacleBranch}
+        mergeTentaclePullRequest={mergeTentaclePullRequest}
+        requestDeleteTentacle={requestDeleteTentacle}
+      />
+    )
   ) : null;
 
   useEffect(() => {
@@ -428,9 +429,13 @@ export const App = () => {
               }}
               isActiveAgentsSectionExpanded={isActiveAgentsSectionExpanded}
               onActiveAgentsSectionExpandedChange={setIsActiveAgentsSectionExpanded}
-              isClaudeUsageVisible={activePrimaryNav !== 2 && activePrimaryNav !== 4 && isClaudeUsageVisible}
+              isClaudeUsageVisible={
+                activePrimaryNav !== 2 && activePrimaryNav !== 4 && isClaudeUsageVisible
+              }
               isClaudeUsageSectionExpanded={isClaudeUsageSectionExpanded}
-              isCodexUsageVisible={activePrimaryNav !== 2 && activePrimaryNav !== 4 && isCodexUsageVisible}
+              isCodexUsageVisible={
+                activePrimaryNav !== 2 && activePrimaryNav !== 4 && isCodexUsageVisible
+              }
               onClaudeUsageSectionExpandedChange={setIsClaudeUsageSectionExpanded}
               isCodexUsageSectionExpanded={isCodexUsageSectionExpanded}
               onCodexUsageSectionExpandedChange={setIsCodexUsageSectionExpanded}
@@ -441,8 +446,9 @@ export const App = () => {
               onRefreshCodexUsage={refreshCodexUsage}
               actionPanel={sidebarActionPanel}
               bodyContent={
-                activePrimaryNav === 2 ? (deckSidebarContent ?? undefined) :
-                activePrimaryNav === 4 ? (
+                activePrimaryNav === 2 ? (
+                  (deckSidebarContent ?? undefined)
+                ) : activePrimaryNav === 4 ? (
                   <SidebarConversationsList
                     sessions={conversationSessions}
                     selectedSessionId={selectedSessionId}
@@ -518,6 +524,9 @@ export const App = () => {
               onPreviewTentacleCompletionSound: playCompletionSoundPreview,
               onTentacleCompletionSoundChange: setTentacleCompletionSound,
               tentacleCompletionSound,
+            }}
+            canvasPrimaryViewProps={{
+              columns,
             }}
             conversationsPrimaryViewProps={{
               errorMessage: conversationsErrorMessage,

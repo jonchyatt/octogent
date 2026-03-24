@@ -3,6 +3,7 @@ import type { ComponentProps, RefObject } from "react";
 import type { PrimaryNavIndex } from "../app/constants";
 import type { TentacleView } from "../app/types";
 import type { AgentRuntimeState } from "./AgentStateBadge";
+import { CanvasPrimaryView } from "./CanvasPrimaryView";
 import { ConversationsPrimaryView } from "./ConversationsPrimaryView";
 import { DeckPrimaryView } from "./DeckPrimaryView";
 import { GitHubPrimaryView } from "./GitHubPrimaryView";
@@ -20,6 +21,7 @@ type PrimaryViewRouterProps = {
   monitorPrimaryViewProps: ComponentProps<typeof MonitorPrimaryView>;
   settingsPrimaryViewProps: ComponentProps<typeof SettingsPrimaryView>;
   conversationsPrimaryViewProps: ComponentProps<typeof ConversationsPrimaryView>;
+  canvasPrimaryViewProps: ComponentProps<typeof CanvasPrimaryView>;
   tentacleBoardProps: {
     columns: TentacleView;
     editingTentacleId: string | null;
@@ -73,6 +75,7 @@ export const PrimaryViewRouter = ({
   monitorPrimaryViewProps,
   settingsPrimaryViewProps,
   conversationsPrimaryViewProps,
+  canvasPrimaryViewProps,
   tentacleBoardProps,
 }: PrimaryViewRouterProps) => {
   if (activePrimaryNav === 2) {
@@ -111,6 +114,10 @@ export const PrimaryViewRouter = ({
 
   if (activePrimaryNav === 8) {
     return <StateSandboxPrimaryView />;
+  }
+
+  if (activePrimaryNav === 9) {
+    return <CanvasPrimaryView {...canvasPrimaryViewProps} />;
   }
 
   return <TentacleBoard {...tentacleBoardProps} />;

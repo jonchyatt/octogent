@@ -110,9 +110,7 @@ describe("TentacleTerminal", () => {
   it("renders terminal header with the provided terminal label", async () => {
     vi.stubGlobal("WebSocket", MockWebSocket as unknown as typeof WebSocket);
 
-    render(
-      <TentacleTerminal terminalId="tentacle-a-agent-1" terminalLabel="tentacle-a-agent-1" />,
-    );
+    render(<TentacleTerminal terminalId="tentacle-a-agent-1" terminalLabel="tentacle-a-agent-1" />);
 
     expect(screen.getByText("tentacle-a-agent-1")).toBeInTheDocument();
   });

@@ -1,7 +1,19 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
-import type { DeckOctopusAppearance, DeckTentacleStatus, DeckTentacleSummary } from "@octogent/core";
+import type {
+  DeckOctopusAppearance,
+  DeckTentacleStatus,
+  DeckTentacleSummary,
+} from "@octogent/core";
 
 const TENTACLES_DIR = ".octogent/tentacles";
 const DECK_STATE_PATH = ".octogent/state/deck.json";
@@ -25,7 +37,12 @@ const readDeckState = (workspaceCwd: string): DeckStateDocument => {
   const filePath = join(workspaceCwd, DECK_STATE_PATH);
   try {
     const raw = JSON.parse(readFileSync(filePath, "utf-8"));
-    if (raw && typeof raw === "object" && typeof raw.tentacles === "object" && raw.tentacles !== null) {
+    if (
+      raw &&
+      typeof raw === "object" &&
+      typeof raw.tentacles === "object" &&
+      raw.tentacles !== null
+    ) {
       return raw as DeckStateDocument;
     }
   } catch {
@@ -59,7 +76,12 @@ const parseTentacleState = (raw: unknown): DeckTentacleState => {
       ? (rec.status as DeckTentacleStatus)
       : "idle";
 
-  const octopus: DeckOctopusAppearance = { animation: null, expression: null, accessory: null, hairColor: null };
+  const octopus: DeckOctopusAppearance = {
+    animation: null,
+    expression: null,
+    accessory: null,
+    hairColor: null,
+  };
   if (rec.octopus !== null && typeof rec.octopus === "object") {
     const o = rec.octopus as Record<string, unknown>;
     if (typeof o.animation === "string") octopus.animation = o.animation;
@@ -279,9 +301,7 @@ export const createDeckTentacle = (
   mkdirSync(tentacleDir, { recursive: true });
 
   const description = input.description.trim();
-  const agentMd = description.length > 0
-    ? `# ${name}\n\n${description}\n`
-    : `# ${name}\n`;
+  const agentMd = description.length > 0 ? `# ${name}\n\n${description}\n` : `# ${name}\n`;
   writeFileSync(join(tentacleDir, "agent.md"), agentMd);
   writeFileSync(join(tentacleDir, "todo.md"), "# Todo\n");
 

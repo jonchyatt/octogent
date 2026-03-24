@@ -131,8 +131,6 @@ describe("App claude usage footer", () => {
     render(<App />);
 
     const sidebar = await screen.findByLabelText("Active Agents sidebar");
-    expect(
-      within(sidebar).getByText("Rate limited. Please try again later."),
-    ).toBeInTheDocument();
+    expect(within(sidebar).getByText("Rate limited. Please try again later.")).toBeInTheDocument();
   });
 });

@@ -16,11 +16,7 @@ describe("x monitor provider", () => {
 
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = new URL(
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url,
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url,
       );
       if (url.pathname !== "/2/tweets/search/recent") {
         throw new Error(`Unexpected URL ${url.toString()}`);

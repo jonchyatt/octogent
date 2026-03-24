@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { buildGitHubCommitSeries } from "../src/app/githubMetrics";
 import type { GitHubRepoSummarySnapshot } from "../src/app/types";
 
-const createSummary = (commitsPerDay: Array<{ date: string; count: number }>): GitHubRepoSummarySnapshot => ({
+const createSummary = (
+  commitsPerDay: Array<{ date: string; count: number }>,
+): GitHubRepoSummarySnapshot => ({
   status: "ok",
   fetchedAt: "2026-03-01T00:00:00.000Z",
   source: "gh-cli",

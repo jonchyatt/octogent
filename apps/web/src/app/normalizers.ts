@@ -75,8 +75,7 @@ export const normalizeClaudeUsageSnapshot = (value: unknown): ClaudeUsageSnapsho
   }
 
   const source =
-    record.source === "cli-pty" ? "cli-pty" :
-    record.source === "oauth-api" ? "oauth-api" : "none";
+    record.source === "cli-pty" ? "cli-pty" : record.source === "oauth-api" ? "oauth-api" : "none";
   return {
     status,
     source,
@@ -191,7 +190,12 @@ export const normalizeFrontendUiStateSnapshot = (
   }
 
   const nextState: FrontendUiStateSnapshot = {};
-  if (typeof record.activePrimaryNav === "number" && Number.isInteger(record.activePrimaryNav) && record.activePrimaryNav >= 1 && record.activePrimaryNav <= PRIMARY_NAV_MAX) {
+  if (
+    typeof record.activePrimaryNav === "number" &&
+    Number.isInteger(record.activePrimaryNav) &&
+    record.activePrimaryNav >= 1 &&
+    record.activePrimaryNav <= PRIMARY_NAV_MAX
+  ) {
     nextState.activePrimaryNav = record.activePrimaryNav;
   }
 

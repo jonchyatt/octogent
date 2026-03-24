@@ -107,7 +107,11 @@ export const usePersistedUiState = ({
         return;
       }
 
-      if (snapshot.activePrimaryNav !== undefined && snapshot.activePrimaryNav >= 1 && snapshot.activePrimaryNav <= 7) {
+      if (
+        snapshot.activePrimaryNav !== undefined &&
+        snapshot.activePrimaryNav >= 1 &&
+        snapshot.activePrimaryNav <= 7
+      ) {
         setActivePrimaryNav(snapshot.activePrimaryNav as PrimaryNavIndex);
       }
 

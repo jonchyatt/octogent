@@ -915,7 +915,10 @@ export const createTerminalRuntime = ({
     },
 
     handleHook(hookName: string, payload: unknown, octogentSessionId?: string): { ok: boolean } {
-      console.log(`[Hook] Received hook: ${hookName} octogentSession=${octogentSessionId ?? "(none)"}`, JSON.stringify(payload));
+      console.log(
+        `[Hook] Received hook: ${hookName} octogentSession=${octogentSessionId ?? "(none)"}`,
+        JSON.stringify(payload),
+      );
 
       if (!payload || typeof payload !== "object") {
         return { ok: true };
@@ -1004,12 +1007,16 @@ export const createTerminalRuntime = ({
         console.log(`[Hook] Matched session by octogent_session param: ${matchedSessionId}`);
       } else if (octogentSessionId) {
         // The param was provided but doesn't match any active session — skip.
-        console.log(`[Hook] octogent_session=${octogentSessionId} not found in active sessions, skipping.`);
+        console.log(
+          `[Hook] octogent_session=${octogentSessionId} not found in active sessions, skipping.`,
+        );
         return { ok: true };
       } else {
         // No octogent_session param — this hook likely came from an external Claude
         // session (e.g. VS Code). Skip to avoid conversation bleed.
-        console.log("[Hook] No octogent_session param — ignoring hook from external Claude session.");
+        console.log(
+          "[Hook] No octogent_session param — ignoring hook from external Claude session.",
+        );
         return { ok: true };
       }
 
@@ -1026,9 +1033,14 @@ export const createTerminalRuntime = ({
 
       if (lastAssistantMessage && lastAssistantMessage.length > 0) {
         const effectiveTurns = turns ?? [];
-        const lastTurn = effectiveTurns.length > 0 ? effectiveTurns[effectiveTurns.length - 1] : null;
+        const lastTurn =
+          effectiveTurns.length > 0 ? effectiveTurns[effectiveTurns.length - 1] : null;
 
-        if (!lastTurn || lastTurn.role !== "assistant" || lastTurn.content !== lastAssistantMessage) {
+        if (
+          !lastTurn ||
+          lastTurn.role !== "assistant" ||
+          lastTurn.content !== lastAssistantMessage
+        ) {
           const now = new Date().toISOString();
           effectiveTurns.push({
             turnId: `turn-${effectiveTurns.length + 1}`,
@@ -1042,7 +1054,9 @@ export const createTerminalRuntime = ({
 
         if (effectiveTurns.length > 0) {
           storeClaudeTranscriptTurns(transcriptDirectoryPath, matchedSessionId, effectiveTurns);
-          console.log(`[Hook] Stored ${effectiveTurns.length} turns for session ${matchedSessionId}.`);
+          console.log(
+            `[Hook] Stored ${effectiveTurns.length} turns for session ${matchedSessionId}.`,
+          );
         }
       } else if (turns && turns.length > 0) {
         storeClaudeTranscriptTurns(transcriptDirectoryPath, matchedSessionId, turns);

@@ -38,10 +38,5 @@ export const MarkdownContent = ({ content, className, highlightTerm }: MarkdownC
     return rendered;
   }, [content, highlightTerm]);
 
-  return (
-    <div
-      className={className}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
+  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 };

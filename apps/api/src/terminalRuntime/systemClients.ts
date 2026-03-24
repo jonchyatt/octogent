@@ -47,7 +47,9 @@ const parseChangedFile = (line: string) => {
   return payload.slice(renameIndex + renameMarker.length).trim();
 };
 
-const parseDiffNumstatLineCounts = (numstatOutput: string): { insertedLineCount: number; deletedLineCount: number } =>
+const parseDiffNumstatLineCounts = (
+  numstatOutput: string,
+): { insertedLineCount: number; deletedLineCount: number } =>
   numstatOutput
     .split("\n")
     .map((line) => line.trim())
@@ -58,8 +60,10 @@ const parseDiffNumstatLineCounts = (numstatOutput: string): { insertedLineCount:
         const parsedInserted = Number.parseInt(rawInserted ?? "0", 10);
         const parsedDeleted = Number.parseInt(rawDeleted ?? "0", 10);
         return {
-          insertedLineCount: totals.insertedLineCount + (Number.isFinite(parsedInserted) ? parsedInserted : 0),
-          deletedLineCount: totals.deletedLineCount + (Number.isFinite(parsedDeleted) ? parsedDeleted : 0),
+          insertedLineCount:
+            totals.insertedLineCount + (Number.isFinite(parsedInserted) ? parsedInserted : 0),
+          deletedLineCount:
+            totals.deletedLineCount + (Number.isFinite(parsedDeleted) ? parsedDeleted : 0),
         };
       },
       { insertedLineCount: 0, deletedLineCount: 0 },
@@ -164,8 +168,7 @@ const parsePullRequestPayload = (
     state,
     isDraft: Boolean(record.isDraft),
     mergeable,
-    mergeStateStatus:
-      typeof record.mergeStateStatus === "string" ? record.mergeStateStatus : null,
+    mergeStateStatus: typeof record.mergeStateStatus === "string" ? record.mergeStateStatus : null,
   };
 };
 
@@ -260,7 +263,7 @@ export const createDefaultGitClient = (): GitClient => ({
       .filter((line): line is string => Boolean(line));
     const hasConflicts = statusLines.some((line) => CONFLICT_MARKERS.has(line.slice(0, 2)));
     const lineDiffNumstat = hasHeadCommit
-      ? readOptionalGitCommand(cwd, ["diff", "--numstat", "HEAD", "--"]) ?? ""
+      ? (readOptionalGitCommand(cwd, ["diff", "--numstat", "HEAD", "--"]) ?? "")
       : [
           readOptionalGitCommand(cwd, ["diff", "--numstat", "--cached", "--"]) ?? "",
           readOptionalGitCommand(cwd, ["diff", "--numstat", "--"]) ?? "",
@@ -272,7 +275,12 @@ export const createDefaultGitClient = (): GitClient => ({
     let aheadCount = 0;
     let behindCount = 0;
     if (upstreamBranchName) {
-      const counts = runGitCommand(cwd, ["rev-list", "--left-right", "--count", `${upstreamBranchName}...HEAD`]);
+      const counts = runGitCommand(cwd, [
+        "rev-list",
+        "--left-right",
+        "--count",
+        `${upstreamBranchName}...HEAD`,
+      ]);
       const [rawBehind, rawAhead] = counts.split(/\s+/);
       const parsedBehind = Number.parseInt(rawBehind ?? "0", 10);
       const parsedAhead = Number.parseInt(rawAhead ?? "0", 10);
@@ -409,7 +417,8 @@ export const createDefaultGitClient = (): GitClient => ({
 
   mergeCurrentBranchPullRequest({ cwd, strategy }) {
     try {
-      const strategyArg = strategy === "merge" ? "--merge" : strategy === "rebase" ? "--rebase" : "--squash";
+      const strategyArg =
+        strategy === "merge" ? "--merge" : strategy === "rebase" ? "--rebase" : "--squash";
       runGhCommand(cwd, ["pr", "merge", strategyArg, "--delete-branch=false"]);
     } catch (error) {
       const ghFailureMessage = readGhFailureMessage(error);

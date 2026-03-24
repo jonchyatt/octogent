@@ -102,12 +102,9 @@ describe("parseCliUsageOutput", () => {
   });
 
   it("handles Opus label variant", () => {
-    const output = [
-      "Current session",
-      "  10% used",
-      "Current week (Opus)",
-      "  30% used",
-    ].join("\n");
+    const output = ["Current session", "  10% used", "Current week (Opus)", "  30% used"].join(
+      "\n",
+    );
 
     const result = parseCliUsageOutput(output);
     expect(result.primaryUsedPercent).toBe(10);
@@ -191,7 +188,9 @@ describe("readClaudeUsageSnapshot", () => {
 
     const snapshot = await readClaudeUsageSnapshot({
       now: () => new Date("2026-03-03T12:00:00.000Z"),
-      spawnCliUsage: async () => { throw new Error("pty crashed"); },
+      spawnCliUsage: async () => {
+        throw new Error("pty crashed");
+      },
       readCredentialsJson: async () => validCredentials(),
       fetchImpl: fetchMock,
     });
@@ -231,8 +230,7 @@ describe("readClaudeUsageSnapshot", () => {
     const snapshot = await readClaudeUsageSnapshot({
       now: () => new Date("2026-03-03T12:00:00.000Z"),
       spawnCliUsage: noCliPty,
-      readCredentialsJson: async () =>
-        validCredentials({ scopes: ["offline_access"] }),
+      readCredentialsJson: async () => validCredentials({ scopes: ["offline_access"] }),
     });
 
     expect(snapshot.status).toBe("unavailable");
@@ -363,8 +361,7 @@ describe("readClaudeUsageSnapshot", () => {
     const snapshot = await readClaudeUsageSnapshot({
       now: () => new Date("2026-03-03T12:00:00.000Z"),
       spawnCliUsage: noCliPty,
-      readCredentialsJson: async () =>
-        validCredentials({ rateLimitTier: "default_claude_max_5x" }),
+      readCredentialsJson: async () => validCredentials({ rateLimitTier: "default_claude_max_5x" }),
       fetchImpl: fetchMock,
     });
 

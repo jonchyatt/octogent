@@ -60,13 +60,10 @@ const SplitTentacleButton = ({
     onCreate(defaultProvider);
   }, [onCreate, defaultProvider]);
 
-  const handleToggle = useCallback(
-    (event: React.MouseEvent) => {
-      event.stopPropagation();
-      setIsOpen((prev) => !prev);
-    },
-    [],
-  );
+  const handleToggle = useCallback((event: React.MouseEvent) => {
+    event.stopPropagation();
+    setIsOpen((prev) => !prev);
+  }, []);
 
   const handleSelect = useCallback(
     (provider: TentacleAgentProvider) => {
@@ -111,9 +108,7 @@ const SplitTentacleButton = ({
         size="dense"
         variant={variant}
       >
-        {isCreating
-          ? "Creating..."
-          : `${label} (${PROVIDER_LABELS[defaultProvider]})`}
+        {isCreating ? "Creating..." : `${label} (${PROVIDER_LABELS[defaultProvider]})`}
       </ActionButton>
       <button
         aria-expanded={isOpen}

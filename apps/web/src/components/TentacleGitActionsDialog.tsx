@@ -63,7 +63,9 @@ export const TentacleGitActionsDialog = ({
 
   const pushDisabledReason =
     globalDisabledReason ??
-    ((gitStatus?.aheadCount ?? 0) <= 0 ? "Push blocked: no local commits ahead of upstream." : null);
+    ((gitStatus?.aheadCount ?? 0) <= 0
+      ? "Push blocked: no local commits ahead of upstream."
+      : null);
 
   const syncDisabledReason =
     globalDisabledReason ??
@@ -314,7 +316,9 @@ export const TentacleGitActionsDialog = ({
         <div className="git-action-row git-action-row--cleanup">
           <div className="git-action-content">
             <p className="git-action-title">Cleanup worktree</p>
-            <p className="git-action-hint">Deletes the worktree directory and branch after confirmation.</p>
+            <p className="git-action-hint">
+              Deletes the worktree directory and branch after confirmation.
+            </p>
             {cleanupDisabledReason && <p className="git-action-reason">{cleanupDisabledReason}</p>}
           </div>
           <ActionButton

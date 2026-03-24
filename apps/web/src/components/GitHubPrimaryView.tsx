@@ -65,7 +65,7 @@ export const GitHubPrimaryView = ({
   const tooltipRef = useRef<HTMLDivElement>(null);
   const activeCommitHash = pinnedCommitHash ?? hoveredCommitHash;
   const activeCommit = activeCommitHash
-    ? githubRecentCommits.find((c) => c.hash === activeCommitHash) ?? null
+    ? (githubRecentCommits.find((c) => c.hash === activeCommitHash) ?? null)
     : null;
 
   const dismissCommitTooltip = useCallback(() => {
@@ -80,10 +80,7 @@ export const GitHubPrimaryView = ({
 
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (
-        recentSectionRef.current?.contains(target) ||
-        tooltipRef.current?.contains(target)
-      ) {
+      if (recentSectionRef.current?.contains(target) || tooltipRef.current?.contains(target)) {
         return;
       }
       dismissCommitTooltip();
@@ -96,7 +93,7 @@ export const GitHubPrimaryView = ({
   }, [pinnedCommitHash, dismissCommitTooltip]);
   const hoveredGitHubOverviewPoint =
     hoveredGitHubOverviewPointIndex !== null
-      ? githubOverviewGraphSeries[hoveredGitHubOverviewPointIndex] ?? null
+      ? (githubOverviewGraphSeries[hoveredGitHubOverviewPointIndex] ?? null)
       : null;
   const tooltipLabel = hoveredGitHubOverviewPoint
     ? formatGitHubCommitHoverLabel(hoveredGitHubOverviewPoint)
@@ -291,62 +288,58 @@ export const GitHubPrimaryView = ({
                 <h3>Recent commits</h3>
                 <span>{`Showing last ${GITHUB_RECENT_COMMITS_LIMIT}`}</span>
               </header>
-            {githubRecentCommits.length > 0 ? (
-              <ol className="github-overview-recent-list">
-                {githubRecentCommits.map((commit) => (
-                  <li
-                    className={`github-overview-recent-item${pinnedCommitHash === commit.hash ? " is-selected" : ""}`}
-                    key={commit.hash}
-                    onMouseEnter={(event) => {
-                      if (pinnedCommitHash) {
-                        return;
-                      }
-                      setHoveredCommitHash(commit.hash);
-                      const sectionRect = recentSectionRef.current?.getBoundingClientRect();
-                      if (sectionRect) {
-                        const itemRect = event.currentTarget.getBoundingClientRect();
-                        setCommitTooltipY(
-                          itemRect.top - sectionRect.top + itemRect.height / 2,
-                        );
-                      }
-                    }}
-                    onMouseLeave={() => {
-                      if (pinnedCommitHash) {
-                        return;
-                      }
-                      setHoveredCommitHash(null);
-                      setCommitTooltipY(null);
-                    }}
-                    onClick={(event) => {
-                      if (pinnedCommitHash === commit.hash) {
-                        dismissCommitTooltip();
-                        return;
-                      }
-                      setPinnedCommitHash(commit.hash);
-                      const sectionRect = recentSectionRef.current?.getBoundingClientRect();
-                      if (sectionRect) {
-                        const itemRect = event.currentTarget.getBoundingClientRect();
-                        setCommitTooltipY(
-                          itemRect.top - sectionRect.top + itemRect.height / 2,
-                        );
-                      }
-                    }}
-                  >
-                    <span aria-hidden="true" className="github-overview-recent-node" />
-                    <span className="github-overview-recent-sha">{commit.shortHash}</span>
-                    <div className="github-overview-recent-copy">
-                      <p className="github-overview-recent-subject">{commit.subject}</p>
-                      <p className="github-overview-recent-meta">
-                        <span>{commit.authorName}</span>
-                        <span>{formatRecentCommitTimestamp(commit.authoredAt)}</span>
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="github-overview-recent-empty">Recent commit data is unavailable.</p>
-            )}
+              {githubRecentCommits.length > 0 ? (
+                <ol className="github-overview-recent-list">
+                  {githubRecentCommits.map((commit) => (
+                    <li
+                      className={`github-overview-recent-item${pinnedCommitHash === commit.hash ? " is-selected" : ""}`}
+                      key={commit.hash}
+                      onMouseEnter={(event) => {
+                        if (pinnedCommitHash) {
+                          return;
+                        }
+                        setHoveredCommitHash(commit.hash);
+                        const sectionRect = recentSectionRef.current?.getBoundingClientRect();
+                        if (sectionRect) {
+                          const itemRect = event.currentTarget.getBoundingClientRect();
+                          setCommitTooltipY(itemRect.top - sectionRect.top + itemRect.height / 2);
+                        }
+                      }}
+                      onMouseLeave={() => {
+                        if (pinnedCommitHash) {
+                          return;
+                        }
+                        setHoveredCommitHash(null);
+                        setCommitTooltipY(null);
+                      }}
+                      onClick={(event) => {
+                        if (pinnedCommitHash === commit.hash) {
+                          dismissCommitTooltip();
+                          return;
+                        }
+                        setPinnedCommitHash(commit.hash);
+                        const sectionRect = recentSectionRef.current?.getBoundingClientRect();
+                        if (sectionRect) {
+                          const itemRect = event.currentTarget.getBoundingClientRect();
+                          setCommitTooltipY(itemRect.top - sectionRect.top + itemRect.height / 2);
+                        }
+                      }}
+                    >
+                      <span aria-hidden="true" className="github-overview-recent-node" />
+                      <span className="github-overview-recent-sha">{commit.shortHash}</span>
+                      <div className="github-overview-recent-copy">
+                        <p className="github-overview-recent-subject">{commit.subject}</p>
+                        <p className="github-overview-recent-meta">
+                          <span>{commit.authorName}</span>
+                          <span>{formatRecentCommitTimestamp(commit.authoredAt)}</span>
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="github-overview-recent-empty">Recent commit data is unavailable.</p>
+              )}
               <div
                 ref={tooltipRef}
                 className={`github-overview-recent-tooltip${activeCommit ? " is-visible" : ""}`}
@@ -383,9 +376,16 @@ export const GitHubPrimaryView = ({
                     </p>
                     {activeCommit.filesChanged > 0 && (
                       <p className="github-overview-recent-tooltip-diff">
-                        <span>{activeCommit.filesChanged} {activeCommit.filesChanged === 1 ? "file" : "files"}</span>
-                        <span className="github-overview-recent-tooltip-ins">+{activeCommit.insertions}</span>
-                        <span className="github-overview-recent-tooltip-del">-{activeCommit.deletions}</span>
+                        <span>
+                          {activeCommit.filesChanged}{" "}
+                          {activeCommit.filesChanged === 1 ? "file" : "files"}
+                        </span>
+                        <span className="github-overview-recent-tooltip-ins">
+                          +{activeCommit.insertions}
+                        </span>
+                        <span className="github-overview-recent-tooltip-del">
+                          -{activeCommit.deletions}
+                        </span>
                       </p>
                     )}
                   </>

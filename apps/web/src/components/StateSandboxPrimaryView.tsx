@@ -17,8 +17,10 @@ type StateLogEntry = {
 const STATE_DESCRIPTIONS: Record<AgentRuntimeState, string> = {
   idle: "Agent is idle, waiting for a prompt.",
   processing: "Agent is actively processing a request.",
-  waiting_for_permission: "Agent is asking for tool permission (Notification hook: permission_prompt).",
-  waiting_for_user: "Agent needs user input (PreToolUse: AskUserQuestion or Notification: idle_prompt).",
+  waiting_for_permission:
+    "Agent is asking for tool permission (Notification hook: permission_prompt).",
+  waiting_for_user:
+    "Agent needs user input (PreToolUse: AskUserQuestion or Notification: idle_prompt).",
 };
 
 const MAX_LOG_ENTRIES = 50;
@@ -159,7 +161,10 @@ export const StateSandboxPrimaryView = () => {
           <div className="state-sandbox-panel-section">
             <h3 className="state-sandbox-panel-heading">Current State</h3>
             <div className="state-sandbox-current">
-              <span className="state-sandbox-state-value state-sandbox-state-value--large" data-state={agentState}>
+              <span
+                className="state-sandbox-state-value state-sandbox-state-value--large"
+                data-state={agentState}
+              >
                 {agentState.toUpperCase()}
               </span>
               <p className="state-sandbox-state-desc">{STATE_DESCRIPTIONS[agentState]}</p>
@@ -178,7 +183,10 @@ export const StateSandboxPrimaryView = () => {
                   <span className="state-sandbox-log-time">
                     {new Date(entry.timestamp).toLocaleTimeString()}
                   </span>
-                  <span className="state-sandbox-state-value state-sandbox-state-value--compact" data-state={entry.state}>
+                  <span
+                    className="state-sandbox-state-value state-sandbox-state-value--compact"
+                    data-state={entry.state}
+                  >
                     {entry.state.toUpperCase()}
                   </span>
                 </div>

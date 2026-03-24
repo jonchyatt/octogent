@@ -95,7 +95,8 @@ describe("App usage visibility settings", () => {
             body.isRuntimeStatusStripVisible === false &&
             body.isMonitorVisible === false &&
             body.isBottomTelemetryVisible === false &&
-            body.isCodexUsageVisible === false && body.isClaudeUsageVisible === false,
+            body.isCodexUsageVisible === false &&
+            body.isClaudeUsageVisible === false,
         ),
       ).toBe(true);
     });

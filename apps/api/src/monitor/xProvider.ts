@@ -121,7 +121,11 @@ export const buildXRecentSearchQuery = (queryTerms: string[]): string => {
   return `(${terms.join(" OR ")}) lang:en -is:retweet`;
 };
 
-const buildXApiUrl = (baseUrl: string, pathname: string, searchParams?: URLSearchParams): string => {
+const buildXApiUrl = (
+  baseUrl: string,
+  pathname: string,
+  searchParams?: URLSearchParams,
+): string => {
   const url = new URL(pathname, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
   if (searchParams) {
     url.search = searchParams.toString();
@@ -402,7 +406,9 @@ const fetchXRecentPosts = async ({
   now: Date;
 }): Promise<MonitorPost[]> => {
   const startTime = new Date(now.getTime() - searchWindowDays * 24 * 60 * 60 * 1000).toISOString();
-  const normalizedTerms = [...new Set(queryTerms.map((term) => term.trim()).filter((term) => term.length > 0))];
+  const normalizedTerms = [
+    ...new Set(queryTerms.map((term) => term.trim()).filter((term) => term.length > 0)),
+  ];
   if (normalizedTerms.length === 0) {
     throw new Error("At least one X query term is required.");
   }

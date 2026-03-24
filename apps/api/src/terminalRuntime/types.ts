@@ -5,7 +5,11 @@ import type { IPty } from "node-pty";
 import type { WebSocket } from "ws";
 
 import type { AgentRuntimeState, AgentStateTracker } from "../agentStateDetection";
-import type { ConversationSearchResult, ConversationSessionDetail, ConversationSessionSummary } from "./conversations";
+import type {
+  ConversationSearchResult,
+  ConversationSessionDetail,
+  ConversationSessionSummary,
+} from "./conversations";
 
 export type TerminalStateMessage = {
   type: "state";

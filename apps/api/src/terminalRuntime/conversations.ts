@@ -88,7 +88,6 @@ export type ConversationSessionDetail = ConversationSessionSummary & {
   events: ConversationTranscriptEvent[];
 };
 
-
 export const transcriptFilenameForSession = (sessionId: string) =>
   `${encodeURIComponent(sessionId)}.jsonl`;
 
@@ -193,7 +192,6 @@ const parseTranscriptEvent = (value: unknown): ConversationTranscriptEvent | nul
   return null;
 };
 
-
 const buildConversationSummary = (
   sessionId: string,
   events: ConversationTranscriptEvent[],
@@ -216,8 +214,7 @@ const buildConversationSummary = (
     turnCount: turns.length,
     userTurnCount: userTurns.length,
     assistantTurnCount: assistantTurns.length,
-    firstUserTurnPreview:
-      userTurns.length > 0 ? (userTurns[0]?.content ?? null) : null,
+    firstUserTurnPreview: userTurns.length > 0 ? (userTurns[0]?.content ?? null) : null,
     lastUserTurnPreview:
       userTurns.length > 0 ? (userTurns[userTurns.length - 1]?.content ?? null) : null,
     lastAssistantTurnPreview:
@@ -370,7 +367,10 @@ export const ensureTranscriptDirectory = (transcriptDirectoryPath: string) => {
 
 export const deleteConversation = (transcriptDirectoryPath: string, sessionId: string) => {
   const transcriptFile = join(transcriptDirectoryPath, transcriptFilenameForSession(sessionId));
-  const turnsFile = join(transcriptDirectoryPath, `${encodeURIComponent(sessionId)}.claude-turns.json`);
+  const turnsFile = join(
+    transcriptDirectoryPath,
+    `${encodeURIComponent(sessionId)}.claude-turns.json`,
+  );
 
   try {
     if (existsSync(transcriptFile)) {
@@ -459,7 +459,10 @@ const buildSearchSnippet = (content: string, query: string, contextChars = 80): 
   const lowerQuery = query.toLowerCase();
   const matchIndex = lowerContent.indexOf(lowerQuery);
   if (matchIndex === -1) {
-    return content.slice(0, contextChars * 2).replace(/\s+/g, " ").trim();
+    return content
+      .slice(0, contextChars * 2)
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   const start = Math.max(0, matchIndex - contextChars);

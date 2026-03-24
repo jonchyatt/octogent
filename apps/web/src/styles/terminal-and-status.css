@@ -88,8 +88,12 @@
 }
 
 @keyframes prompt-banner-shine {
-  0% { left: -100%; }
-  100% { left: 100%; }
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
 }
 
 .terminal-prompt-banner::after {

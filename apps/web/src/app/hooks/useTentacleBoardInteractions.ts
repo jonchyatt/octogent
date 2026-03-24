@@ -118,9 +118,7 @@ export const useTentacleBoardInteractions = ({
 
     const dividerTotalWidth = Math.max(0, tentacleIds.length - 1) * TENTACLE_DIVIDER_WIDTH;
     const paneViewportWidth =
-      freshViewportWidth === null
-        ? null
-        : Math.max(0, freshViewportWidth - dividerTotalWidth);
+      freshViewportWidth === null ? null : Math.max(0, freshViewportWidth - dividerTotalWidth);
     setTentacleWidths((currentWidths) =>
       reconcileTentacleWidths(currentWidths, tentacleIds, paneViewportWidth),
     );

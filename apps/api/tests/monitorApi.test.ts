@@ -78,35 +78,31 @@ class FakeGitClient implements GitClient {
 
   syncWithBase(): void {}
 
-  readCurrentBranchPullRequest():
-    | {
-        number: number;
-        url: string;
-        title: string;
-        baseRef: string;
-        headRef: string;
-        state: "OPEN" | "MERGED" | "CLOSED";
-        isDraft: boolean;
-        mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
-        mergeStateStatus: string | null;
-      }
-    | null {
+  readCurrentBranchPullRequest(): {
+    number: number;
+    url: string;
+    title: string;
+    baseRef: string;
+    headRef: string;
+    state: "OPEN" | "MERGED" | "CLOSED";
+    isDraft: boolean;
+    mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+    mergeStateStatus: string | null;
+  } | null {
     return null;
   }
 
-  createPullRequest():
-    | {
-        number: number;
-        url: string;
-        title: string;
-        baseRef: string;
-        headRef: string;
-        state: "OPEN" | "MERGED" | "CLOSED";
-        isDraft: boolean;
-        mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
-        mergeStateStatus: string | null;
-      }
-    | null {
+  createPullRequest(): {
+    number: number;
+    url: string;
+    title: string;
+    baseRef: string;
+    headRef: string;
+    state: "OPEN" | "MERGED" | "CLOSED";
+    isDraft: boolean;
+    mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+    mergeStateStatus: string | null;
+  } | null {
     return null;
   }
 

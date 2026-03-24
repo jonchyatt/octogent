@@ -57,11 +57,14 @@ const TerminalDeleteIcon = () => (
 );
 
 const PromptInjectIcon = () => (
-  <svg aria-hidden="true" className="terminal-inject-icon" viewBox="0 0 16 16" width="14" height="14">
-    <path
-      d="M2 3h12v1H2V3Zm0 3h8v1H2V6Zm0 3h6v1H2V9Zm9 0l3 2.5L11 14v-5Z"
-      fill="currentColor"
-    />
+  <svg
+    aria-hidden="true"
+    className="terminal-inject-icon"
+    viewBox="0 0 16 16"
+    width="14"
+    height="14"
+  >
+    <path d="M2 3h12v1H2V3Zm0 3h8v1H2V6Zm0 3h6v1H2V9Zm9 0l3 2.5L11 14v-5Z" fill="currentColor" />
   </svg>
 );
 

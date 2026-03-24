@@ -10,7 +10,11 @@ import {
   normalizeConversationSessionDetail,
   normalizeConversationSessionSummary,
 } from "../normalizers";
-import type { ConversationSearchHit, ConversationSessionDetail, ConversationSessionSummary } from "../types";
+import type {
+  ConversationSearchHit,
+  ConversationSessionDetail,
+  ConversationSessionSummary,
+} from "../types";
 
 type ConversationExportFormat = "json" | "md";
 
@@ -276,13 +280,10 @@ export const useConversationsRuntime = ({
     setHighlightedTurnId(null);
   }, []);
 
-  const navigateToSearchHit = useCallback(
-    (hit: ConversationSearchHit) => {
-      setSelectedSessionId(hit.sessionId);
-      setHighlightedTurnId(hit.turnId);
-    },
-    [],
-  );
+  const navigateToSearchHit = useCallback((hit: ConversationSearchHit) => {
+    setSelectedSessionId(hit.sessionId);
+    setHighlightedTurnId(hit.turnId);
+  }, []);
 
   useEffect(() => {
     if (!enabled) {

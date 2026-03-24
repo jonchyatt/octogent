@@ -64,7 +64,10 @@ export const TelemetryTape = ({ monitorFeed }: TelemetryTapeProps) => {
 
   return (
     <section className="console-telemetry-tape" aria-label="Telemetry ticker tape">
-      <div className="console-telemetry-track" style={{ animationDuration: `${scrollDurationSeconds}s` }}>
+      <div
+        className="console-telemetry-track"
+        style={{ animationDuration: `${scrollDurationSeconds}s` }}
+      >
         {[...telemetryItems, ...telemetryItems].map((item, index) =>
           item.permalink ? (
             <a
@@ -83,7 +86,11 @@ export const TelemetryTape = ({ monitorFeed }: TelemetryTapeProps) => {
               <span className="console-telemetry-likes">{item.likesLabel}</span>
             </a>
           ) : (
-            <span className="console-telemetry-item" key={`${item.key}-${index}`} title={item.fullText}>
+            <span
+              className="console-telemetry-item"
+              key={`${item.key}-${index}`}
+              title={item.fullText}
+            >
               <span aria-hidden="true" className="console-telemetry-source">
                 {item.sourceIcon}
               </span>

@@ -49,7 +49,9 @@ const buildMonitorErrorMessage = (fallback: string, error: unknown): string => {
   return fallback;
 };
 
-export const useMonitorRuntime = ({ enabled = true }: UseMonitorRuntimeOptions = {}): UseMonitorRuntimeResult => {
+export const useMonitorRuntime = ({
+  enabled = true,
+}: UseMonitorRuntimeOptions = {}): UseMonitorRuntimeResult => {
   const [monitorConfig, setMonitorConfig] = useState<MonitorConfigSnapshot | null>(null);
   const [monitorFeed, setMonitorFeed] = useState<MonitorFeedSnapshot | null>(null);
   const [isRefreshingMonitorFeed, setIsRefreshingMonitorFeed] = useState(false);
@@ -81,46 +83,49 @@ export const useMonitorRuntime = ({ enabled = true }: UseMonitorRuntimeOptions =
     setMonitorConfig(parsed);
   }, [enabled]);
 
-  const refreshMonitorFeed = useCallback(async (manual = false) => {
-    if (!enabled) {
-      return;
-    }
-
-    if (inFlightFeedRef.current) {
-      return;
-    }
-
-    inFlightFeedRef.current = true;
-    setIsRefreshingMonitorFeed(true);
-
-    try {
-      const url = manual ? buildMonitorRefreshUrl() : buildMonitorFeedUrl();
-      const method = manual ? "POST" : "GET";
-      const response = await fetch(url, {
-        method,
-        headers: {
-          Accept: "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Unable to read monitor feed (${response.status})`);
+  const refreshMonitorFeed = useCallback(
+    async (manual = false) => {
+      if (!enabled) {
+        return;
       }
 
-      const parsed = normalizeMonitorFeedSnapshot(await response.json());
-      if (!parsed) {
-        throw new Error("Monitor feed payload is invalid.");
+      if (inFlightFeedRef.current) {
+        return;
       }
 
-      setMonitorFeed(parsed);
-      setMonitorError(null);
-    } catch (error) {
-      setMonitorError(buildMonitorErrorMessage("Unable to read monitor feed.", error));
-    } finally {
-      inFlightFeedRef.current = false;
-      setIsRefreshingMonitorFeed(false);
-    }
-  }, [enabled]);
+      inFlightFeedRef.current = true;
+      setIsRefreshingMonitorFeed(true);
+
+      try {
+        const url = manual ? buildMonitorRefreshUrl() : buildMonitorFeedUrl();
+        const method = manual ? "POST" : "GET";
+        const response = await fetch(url, {
+          method,
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Unable to read monitor feed (${response.status})`);
+        }
+
+        const parsed = normalizeMonitorFeedSnapshot(await response.json());
+        if (!parsed) {
+          throw new Error("Monitor feed payload is invalid.");
+        }
+
+        setMonitorFeed(parsed);
+        setMonitorError(null);
+      } catch (error) {
+        setMonitorError(buildMonitorErrorMessage("Unable to read monitor feed.", error));
+      } finally {
+        inFlightFeedRef.current = false;
+        setIsRefreshingMonitorFeed(false);
+      }
+    },
+    [enabled],
+  );
 
   const patchMonitorConfig = useCallback(
     async (patch: MonitorConfigPatchRequest) => {

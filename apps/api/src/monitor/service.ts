@@ -260,7 +260,8 @@ export const createMonitorService = ({
           }
         }
 
-        config.providers.x.credentials = credentials as PersistedMonitorConfig["providers"]["x"]["credentials"];
+        config.providers.x.credentials =
+          credentials as PersistedMonitorConfig["providers"]["x"]["credentials"];
       }
 
       repository.writeConfig(config);

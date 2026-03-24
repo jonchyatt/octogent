@@ -208,7 +208,9 @@ describe("App Monitor runtime", () => {
       "aria-current",
       "page",
     );
-    expect(within(monitorView).queryByRole("textbox", { name: "Monitor query terms" })).not.toBeInTheDocument();
+    expect(
+      within(monitorView).queryByRole("textbox", { name: "Monitor query terms" }),
+    ).not.toBeInTheDocument();
     fireEvent.click(within(monitorView).getByRole("radio", { name: "3D" }));
     fireEvent.change(within(monitorView).getByLabelText("Add monitor query term"), {
       target: {
@@ -256,7 +258,9 @@ describe("App Monitor runtime", () => {
     expect(within(monitorView).getByText("Codex")).toBeInTheDocument();
     fireEvent.click(within(monitorView).getByRole("button", { name: "Refresh monitor feed" }));
 
-    expect(await within(monitorView).findByText("Manual refresh delivered this post")).toBeInTheDocument();
+    expect(
+      await within(monitorView).findByText("Manual refresh delivered this post"),
+    ).toBeInTheDocument();
     expect(refreshCount).toBe(1);
   });
 

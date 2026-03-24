@@ -439,11 +439,20 @@ describe("createApiServer", () => {
   const writeClaudeTurns = (
     workspaceCwd: string,
     sessionId: string,
-    turns: Array<{ turnId: string; role: string; content: string; startedAt: string; endedAt: string }>,
+    turns: Array<{
+      turnId: string;
+      role: string;
+      content: string;
+      startedAt: string;
+      endedAt: string;
+    }>,
   ) => {
     const transcriptDirectory = join(workspaceCwd, ".octogent", "state", "transcripts");
     mkdirSync(transcriptDirectory, { recursive: true });
-    const turnsPath = join(transcriptDirectory, `${encodeURIComponent(sessionId)}.claude-turns.json`);
+    const turnsPath = join(
+      transcriptDirectory,
+      `${encodeURIComponent(sessionId)}.claude-turns.json`,
+    );
     writeFileSync(turnsPath, JSON.stringify(turns), "utf8");
   };
 

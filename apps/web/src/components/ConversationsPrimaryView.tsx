@@ -57,97 +57,110 @@ export const ConversationsPrimaryView = ({
   }, [highlightedTurnId, selectedSession]);
 
   return (
-  <section className="conversations-view" aria-label="Conversations primary view">
-    {errorMessage ? <p className="conversations-error">{errorMessage}</p> : null}
+    <section className="conversations-view" aria-label="Conversations primary view">
+      {errorMessage ? <p className="conversations-error">{errorMessage}</p> : null}
 
-    <section className="conversations-transcript" aria-label="Conversation transcript pane">
-      {isLoadingSelectedSession ? (
-        <p className="conversations-empty">Loading conversation...</p>
-      ) : selectedSession ? (
-        <>
-          <header className="conversations-transcript-header">
-            <div className="conversations-transcript-header-top">
-              <h3>{selectedSession.sessionId}</h3>
-              <div className="conversations-transcript-header-actions">
-                <ActionButton
-                  aria-label="Export conversation as JSON"
-                  className="conversations-export"
-                  disabled={isExporting}
-                  onClick={() => {
-                    onExport("json");
-                  }}
-                  size="dense"
-                  variant="info"
+      <section className="conversations-transcript" aria-label="Conversation transcript pane">
+        {isLoadingSelectedSession ? (
+          <p className="conversations-empty">Loading conversation...</p>
+        ) : selectedSession ? (
+          <>
+            <header className="conversations-transcript-header">
+              <div className="conversations-transcript-header-top">
+                <h3>{selectedSession.sessionId}</h3>
+                <div className="conversations-transcript-header-actions">
+                  <ActionButton
+                    aria-label="Export conversation as JSON"
+                    className="conversations-export"
+                    disabled={isExporting}
+                    onClick={() => {
+                      onExport("json");
+                    }}
+                    size="dense"
+                    variant="info"
+                  >
+                    {isExporting ? "Exporting..." : "Export JSON"}
+                  </ActionButton>
+                  <ActionButton
+                    aria-label="Export conversation as Markdown"
+                    className="conversations-export"
+                    disabled={isExporting}
+                    onClick={() => {
+                      onExport("md");
+                    }}
+                    size="dense"
+                    variant="info"
+                  >
+                    {isExporting ? "Exporting..." : "Export Markdown"}
+                  </ActionButton>
+                  <button
+                    aria-label="Delete this conversation"
+                    className="conversations-delete-btn"
+                    disabled={isDeletingSession}
+                    onClick={onDeleteSession}
+                    type="button"
+                  >
+                    <svg
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M3 4h10" />
+                      <path d="M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1" />
+                      <path d="M4.5 4l.5 9a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l.5-9" />
+                      <path d="M6.5 7v4" />
+                      <path d="M9.5 7v4" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <dl>
+                <div>
+                  <dt>Started</dt>
+                  <dd>{formatTimestamp(selectedSession.startedAt)}</dd>
+                </div>
+                <div>
+                  <dt>Ended</dt>
+                  <dd>{formatTimestamp(selectedSession.endedAt)}</dd>
+                </div>
+                <div>
+                  <dt>Events</dt>
+                  <dd>{selectedSession.eventCount}</dd>
+                </div>
+              </dl>
+            </header>
+            <ol className="conversations-turn-list">
+              {selectedSession.turns.map((turn) => (
+                <li
+                  className="conversations-turn"
+                  data-role={turn.role}
+                  data-highlighted={turn.turnId === highlightedTurnId ? "true" : undefined}
+                  key={turn.turnId}
+                  ref={turn.turnId === highlightedTurnId ? highlightedRef : undefined}
                 >
-                  {isExporting ? "Exporting..." : "Export JSON"}
-                </ActionButton>
-                <ActionButton
-                  aria-label="Export conversation as Markdown"
-                  className="conversations-export"
-                  disabled={isExporting}
-                  onClick={() => {
-                    onExport("md");
-                  }}
-                  size="dense"
-                  variant="info"
-                >
-                  {isExporting ? "Exporting..." : "Export Markdown"}
-                </ActionButton>
-                <button
-                  aria-label="Delete this conversation"
-                  className="conversations-delete-btn"
-                  disabled={isDeletingSession}
-                  onClick={onDeleteSession}
-                  type="button"
-                >
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 4h10" />
-                    <path d="M6 4V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1" />
-                    <path d="M4.5 4l.5 9a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l.5-9" />
-                    <path d="M6.5 7v4" />
-                    <path d="M9.5 7v4" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <dl>
-              <div>
-                <dt>Started</dt>
-                <dd>{formatTimestamp(selectedSession.startedAt)}</dd>
-              </div>
-              <div>
-                <dt>Ended</dt>
-                <dd>{formatTimestamp(selectedSession.endedAt)}</dd>
-              </div>
-              <div>
-                <dt>Events</dt>
-                <dd>{selectedSession.eventCount}</dd>
-              </div>
-            </dl>
-          </header>
-          <ol className="conversations-turn-list">
-            {selectedSession.turns.map((turn) => (
-              <li
-                className="conversations-turn"
-                data-role={turn.role}
-                data-highlighted={turn.turnId === highlightedTurnId ? "true" : undefined}
-                key={turn.turnId}
-                ref={turn.turnId === highlightedTurnId ? highlightedRef : undefined}
-              >
-                <time className="conversations-turn-time" dateTime={turn.startedAt}>{formatTimestamp(turn.startedAt)}</time>
-                <MarkdownContent
-                  content={turn.content}
-                  className="conversations-turn-content"
-                  highlightTerm={turn.turnId === highlightedTurnId && searchQuery.length > 0 ? searchQuery : undefined}
-                />
-              </li>
-            ))}
-          </ol>
-        </>
-      ) : (
-        <p className="conversations-empty">Select a conversation from the sidebar.</p>
-      )}
+                  <time className="conversations-turn-time" dateTime={turn.startedAt}>
+                    {formatTimestamp(turn.startedAt)}
+                  </time>
+                  <MarkdownContent
+                    content={turn.content}
+                    className="conversations-turn-content"
+                    highlightTerm={
+                      turn.turnId === highlightedTurnId && searchQuery.length > 0
+                        ? searchQuery
+                        : undefined
+                    }
+                  />
+                </li>
+              ))}
+            </ol>
+          </>
+        ) : (
+          <p className="conversations-empty">Select a conversation from the sidebar.</p>
+        )}
+      </section>
     </section>
-  </section>
   );
 };

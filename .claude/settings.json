@@ -34,9 +34,7 @@
             "headers": {
               "X-Octogent-Session": "$OCTOGENT_SESSION_ID"
             },
-            "allowedEnvVars": [
-              "OCTOGENT_SESSION_ID"
-            ],
+            "allowedEnvVars": ["OCTOGENT_SESSION_ID"],
             "timeout": 5
           }
         ]
@@ -52,9 +50,7 @@
             "headers": {
               "X-Octogent-Session": "$OCTOGENT_SESSION_ID"
             },
-            "allowedEnvVars": [
-              "OCTOGENT_SESSION_ID"
-            ],
+            "allowedEnvVars": ["OCTOGENT_SESSION_ID"],
             "timeout": 5
           }
         ]
