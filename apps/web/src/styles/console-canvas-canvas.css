@@ -88,6 +88,112 @@
   r: attr(r + 2);
 }
 
+/* ─── Force tuner panel (top-left) ─────────────────────────────────────────── */
+
+.canvas-tuner-toggle {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #4b5563;
+  border-radius: 6px;
+  background: #2b3040;
+  color: #e5e7eb;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.canvas-tuner-toggle:hover {
+  background: #3b4252;
+  border-color: #6b7280;
+}
+
+.canvas-tuner {
+  position: absolute;
+  left: 16px;
+  top: 56px;
+  z-index: 10;
+  width: 240px;
+  padding: 10px 12px;
+  border: 1px solid #2b2f36;
+  border-radius: 6px;
+  background: #0d1017ee;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.canvas-tuner-title {
+  font-family: "PP Neue Machina Plain", sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7280;
+  margin-bottom: 2px;
+}
+
+.canvas-tuner-row {
+  display: grid;
+  grid-template-columns: 72px 1fr 48px;
+  align-items: center;
+  gap: 6px;
+}
+
+.canvas-tuner-label {
+  font-family: "PP Neue Machina Plain", sans-serif;
+  font-size: 11px;
+  color: #c8cdd5;
+}
+
+.canvas-tuner-slider {
+  width: 100%;
+  height: 4px;
+  appearance: none;
+  background: #2b3040;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.canvas-tuner-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: #ff6b2b;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.canvas-tuner-value {
+  font-family: monospace;
+  font-size: 10px;
+  color: #6b7280;
+  text-align: right;
+}
+
+.canvas-tuner-reset {
+  margin-top: 4px;
+  padding: 4px 0;
+  border: 1px solid #4b5563;
+  border-radius: 4px;
+  background: #2b3040;
+  color: #c8cdd5;
+  font-family: "PP Neue Machina Plain", sans-serif;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.canvas-tuner-reset:hover {
+  background: #3b4252;
+}
+
 /* ─── Zoom controls (bottom-right) ─────────────────────────────────────────── */
 
 .canvas-controls {

@@ -4,7 +4,11 @@ import type { GraphNode } from "../app/canvas/types";
 import type { TentacleView } from "../app/types";
 import { useCanvasGraphData } from "../app/hooks/useCanvasGraphData";
 import { useCanvasTransform } from "../app/hooks/useCanvasTransform";
-import { useForceSimulation } from "../app/hooks/useForceSimulation";
+import {
+  useForceSimulation,
+  DEFAULT_FORCE_PARAMS,
+  type ForceParams,
+} from "../app/hooks/useForceSimulation";
 import { OctopusNode } from "./canvas/OctopusNode";
 import { SessionNode } from "./canvas/SessionNode";
 import { CanvasTerminalOverlay } from "./canvas/CanvasTerminalOverlay";
@@ -13,10 +17,31 @@ type CanvasPrimaryViewProps = {
   columns: TentacleView;
 };
 
+const PARAM_SLIDERS: {
+  key: keyof ForceParams;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+}[] = [
+  { key: "repelStrength", label: "Repel", min: -500, max: 0, step: 5 },
+  { key: "repelDistanceMax", label: "Repel range", min: 50, max: 800, step: 10 },
+  { key: "linkDistance", label: "Link dist", min: 5, max: 300, step: 5 },
+  { key: "linkStrength", label: "Link str", min: 0, max: 1, step: 0.05 },
+  { key: "centerStrength", label: "Center", min: 0, max: 1, step: 0.05 },
+  { key: "radialRadius", label: "Ring radius", min: 50, max: 500, step: 10 },
+  { key: "radialStrength", label: "Ring str", min: 0, max: 1, step: 0.05 },
+  { key: "collisionPadding", label: "Collision", min: 0, max: 40, step: 1 },
+  { key: "velocityDecay", label: "Vel decay", min: 0, max: 1, step: 0.05 },
+  { key: "alphaDecay", label: "Alpha decay", min: 0.001, max: 0.1, step: 0.001 },
+];
+
 export const CanvasPrimaryView = ({ columns }: CanvasPrimaryViewProps) => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [overlayNode, setOverlayNode] = useState<GraphNode | null>(null);
   const [dragNodeId, setDragNodeId] = useState<string | null>(null);
+  const [forceParams, setForceParams] = useState<ForceParams>({ ...DEFAULT_FORCE_PARAMS });
+  const [showTuner, setShowTuner] = useState(false);
 
   const { nodes, edges } = useCanvasGraphData({ columns, enabled: true });
 
@@ -39,6 +64,7 @@ export const CanvasPrimaryView = ({ columns }: CanvasPrimaryViewProps) => {
     edges,
     centerX: 0,
     centerY: 0,
+    params: forceParams,
   });
 
   const nodesById = useMemo(() => {
@@ -208,6 +234,47 @@ export const CanvasPrimaryView = ({ columns }: CanvasPrimaryViewProps) => {
           screenY={overlayScreen.y - 200}
           onClose={handleCloseOverlay}
         />
+      )}
+
+      {/* Force tuner toggle */}
+      <button
+        type="button"
+        className="canvas-tuner-toggle"
+        onClick={() => setShowTuner((v) => !v)}
+        title="Tune forces"
+      >
+        {showTuner ? "\u2715" : "\u2699"}
+      </button>
+
+      {/* Force tuner panel */}
+      {showTuner && (
+        <div className="canvas-tuner">
+          <div className="canvas-tuner-title">Force params</div>
+          {PARAM_SLIDERS.map(({ key, label, min, max, step }) => (
+            <label key={key} className="canvas-tuner-row">
+              <span className="canvas-tuner-label">{label}</span>
+              <input
+                type="range"
+                className="canvas-tuner-slider"
+                min={min}
+                max={max}
+                step={step}
+                value={forceParams[key]}
+                onChange={(e) =>
+                  setForceParams((prev) => ({ ...prev, [key]: Number(e.target.value) }))
+                }
+              />
+              <span className="canvas-tuner-value">{forceParams[key]}</span>
+            </label>
+          ))}
+          <button
+            type="button"
+            className="canvas-tuner-reset"
+            onClick={() => setForceParams({ ...DEFAULT_FORCE_PARAMS })}
+          >
+            Reset
+          </button>
+        </div>
       )}
     </section>
   );

@@ -4,6 +4,7 @@ import {
   forceCollide,
   forceLink,
   forceManyBody,
+  forceRadial,
   forceSimulation,
   type Simulation,
   type SimulationLinkDatum,
@@ -12,14 +13,32 @@ import {
 
 import type { GraphEdge, GraphNode } from "../canvas/types";
 
-// Obsidian-style force parameters
-const REPEL_STRENGTH = -30;
-const LINK_DISTANCE = 40;
-const LINK_STRENGTH = 0.6;
-const CENTER_STRENGTH = 0.4;
-const COLLISION_PADDING = 4;
-const VELOCITY_DECAY = 0.4; // fraction of velocity removed per tick (d3 default)
-const ALPHA_DECAY = 0.0228;
+export type ForceParams = {
+  repelStrength: number;
+  repelDistanceMax: number;
+  linkDistance: number;
+  linkStrength: number;
+  centerStrength: number;
+  radialRadius: number;
+  radialStrength: number;
+  collisionPadding: number;
+  velocityDecay: number;
+  alphaDecay: number;
+};
+
+export const DEFAULT_FORCE_PARAMS: ForceParams = {
+  repelStrength: -95,
+  repelDistanceMax: 150,
+  linkDistance: 50,
+  linkStrength: 0.6,
+  centerStrength: 0.45,
+  radialRadius: 100,
+  radialStrength: 0.15,
+  collisionPadding: 16,
+  velocityDecay: 0.4,
+  alphaDecay: 0.0228,
+};
+
 const ALPHA_MIN = 0.001;
 const ALPHA_TARGET = 0;
 const REHEAT_ALPHA = 0.8;
@@ -32,6 +51,7 @@ type UseForceSimulationOptions = {
   edges: GraphEdge[];
   centerX: number;
   centerY: number;
+  params?: ForceParams;
 };
 
 type UseForceSimulationResult = {
@@ -47,6 +67,7 @@ export const useForceSimulation = ({
   edges,
   centerX,
   centerY,
+  params = DEFAULT_FORCE_PARAMS,
 }: UseForceSimulationOptions): UseForceSimulationResult => {
   const simRef = useRef<Simulation<SimNode, SimLink> | null>(null);
   const simNodeMapRef = useRef<Map<string, SimNode>>(new Map());
@@ -55,8 +76,10 @@ export const useForceSimulation = ({
   // Keep latest inputs in refs so the effect can read them without depending on them
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
+  const paramsRef = useRef(params);
   nodesRef.current = nodes;
   edgesRef.current = edges;
+  paramsRef.current = params;
 
   // Stable topology keys — effect only fires when graph structure actually changes
   const nodeIdKey = useMemo(() => nodes.map((n) => n.id).join("\0"), [nodes]);
@@ -68,6 +91,7 @@ export const useForceSimulation = ({
   useEffect(() => {
     const currentNodes = nodesRef.current;
     const currentEdges = edgesRef.current;
+    const p = paramsRef.current;
 
     if (currentNodes.length === 0) {
       simRef.current?.stop();
@@ -79,7 +103,6 @@ export const useForceSimulation = ({
 
     const prevMap = simNodeMapRef.current;
 
-    // Reconcile: preserve positions for existing nodes, initialize new ones
     const simNodes: SimNode[] = currentNodes.map((gn) => {
       const prev = prevMap.get(gn.id);
       if (prev) {
@@ -103,7 +126,6 @@ export const useForceSimulation = ({
     }
     simNodeMapRef.current = nextMap;
 
-    // Build link data with node references
     const simLinks: SimLink[] = currentEdges
       .map((e) => {
         const source = nextMap.get(e.source);
@@ -118,30 +140,43 @@ export const useForceSimulation = ({
         .force(
           "link",
           forceLink<SimNode, SimLink>(simLinks)
-            .distance(LINK_DISTANCE)
-            .strength(LINK_STRENGTH),
+            .distance(p.linkDistance)
+            .strength(p.linkStrength),
         )
-        .force("charge", forceManyBody<SimNode>().strength(REPEL_STRENGTH))
+        .force(
+          "charge",
+          forceManyBody<SimNode>()
+            .strength((d: SimNode) =>
+              d._gn.type === "tentacle" ? p.repelStrength : p.repelStrength * 0.2,
+            )
+            .distanceMax(p.repelDistanceMax),
+        )
         .force(
           "center",
-          forceCenter<SimNode>(centerX, centerY).strength(CENTER_STRENGTH),
+          forceCenter<SimNode>(centerX, centerY).strength(p.centerStrength),
+        )
+        .force(
+          "radial",
+          forceRadial<SimNode>(p.radialRadius, centerX, centerY)
+            .strength((d: SimNode) =>
+              // Tentacles anchor the ring; sessions get moderate pull to fill the circle
+              d._gn.type === "tentacle" ? p.radialStrength : p.radialStrength * 0.3,
+            ),
         )
         .force(
           "collide",
-          forceCollide<SimNode>((d) => d._gn.radius + COLLISION_PADDING),
+          forceCollide<SimNode>((d) => d._gn.radius + p.collisionPadding),
         );
     };
 
     if (simRef.current) {
-      // Update existing simulation with new topology
       simRef.current.nodes(simNodes);
       applyForces(simRef.current);
       simRef.current.alpha(REHEAT_ALPHA).restart();
     } else {
-      // Create new simulation
       const sim = forceSimulation<SimNode>(simNodes)
-        .velocityDecay(VELOCITY_DECAY)
-        .alphaDecay(ALPHA_DECAY)
+        .velocityDecay(p.velocityDecay)
+        .alphaDecay(p.alphaDecay)
         .alphaMin(ALPHA_MIN)
         .alphaTarget(ALPHA_TARGET);
 
@@ -162,7 +197,49 @@ export const useForceSimulation = ({
     }
   }, [nodeIdKey, edgeKey, centerX, centerY]);
 
-  // Cleanup on unmount
+  // Apply param changes without rebuilding the simulation
+  useEffect(() => {
+    const sim = simRef.current;
+    if (!sim) return;
+
+    sim.velocityDecay(params.velocityDecay).alphaDecay(params.alphaDecay);
+
+    const linkForce = sim.force("link") as ReturnType<typeof forceLink<SimNode, SimLink>> | null;
+    if (linkForce) {
+      linkForce.distance(params.linkDistance).strength(params.linkStrength);
+    }
+
+    const chargeForce = sim.force("charge") as ReturnType<typeof forceManyBody<SimNode>> | null;
+    if (chargeForce) {
+      chargeForce
+        .strength((d: SimNode) =>
+          d._gn.type === "tentacle" ? params.repelStrength : params.repelStrength * 0.2,
+        )
+        .distanceMax(params.repelDistanceMax);
+    }
+
+    const centerForce = sim.force("center") as ReturnType<typeof forceCenter<SimNode>> | null;
+    if (centerForce) {
+      centerForce.strength(params.centerStrength);
+    }
+
+    const radialForce = sim.force("radial") as ReturnType<typeof forceRadial<SimNode>> | null;
+    if (radialForce) {
+      radialForce
+        .radius(params.radialRadius)
+        .strength((d: SimNode) =>
+          d._gn.type === "tentacle" ? params.radialStrength : params.radialStrength * 0.3,
+        );
+    }
+
+    const collideForce = sim.force("collide") as ReturnType<typeof forceCollide<SimNode>> | null;
+    if (collideForce) {
+      collideForce.radius((d: SimNode) => d._gn.radius + params.collisionPadding);
+    }
+
+    sim.alpha(REHEAT_ALPHA).restart();
+  }, [params]);
+
   useEffect(() => {
     return () => {
       simRef.current?.stop();
