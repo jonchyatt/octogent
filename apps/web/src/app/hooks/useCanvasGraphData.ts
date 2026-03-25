@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { DeckTentacleSummary } from "@octogent/core";
 import type { ConversationSessionSummary, TentacleView } from "../types";
 import type { GraphEdge, GraphNode } from "../canvas/types";
-import { buildConversationsUrl } from "../../runtime/runtimeEndpoints";
+import { buildConversationsUrl, buildDeckTentaclesUrl } from "../../runtime/runtimeEndpoints";
 import { normalizeConversationSessionSummary } from "../normalizers";
 
 const TENTACLE_RADIUS = 40;
@@ -31,8 +32,10 @@ function hashString(str: string): number {
   return Math.abs(h);
 }
 
-const tentacleColor = (tentacleId: string) =>
-  NODE_COLORS[hashString(tentacleId) % NODE_COLORS.length] as string;
+const tentacleColor = (tentacleId: string, deckColor: string | null | undefined) =>
+  deckColor && deckColor.length > 0
+    ? deckColor
+    : (NODE_COLORS[hashString(tentacleId) % NODE_COLORS.length] as string);
 
 type UseCanvasGraphDataOptions = {
   columns: TentacleView;
@@ -48,12 +51,42 @@ const buildTentacleNodeId = (tentacleId: string) => `t:${tentacleId}`;
 const buildActiveSessionNodeId = (agentId: string) => `a:${agentId}`;
 const buildInactiveSessionNodeId = (sessionId: string) => `i:${sessionId}`;
 
+type DeckTentacleMinimal = Pick<DeckTentacleSummary, "tentacleId" | "displayName" | "color">;
+
 export const useCanvasGraphData = ({
   columns,
   enabled,
 }: UseCanvasGraphDataOptions): UseCanvasGraphDataResult => {
+  const [deckTentacles, setDeckTentacles] = useState<DeckTentacleMinimal[]>([]);
   const [inactiveSessions, setInactiveSessions] = useState<ConversationSessionSummary[]>([]);
   const prevNodesRef = useRef<Map<string, GraphNode>>(new Map());
+
+  const fetchDeckTentacles = useCallback(async () => {
+    try {
+      const response = await fetch(buildDeckTentaclesUrl(), {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) return;
+      const payload = (await response.json()) as unknown;
+      if (!Array.isArray(payload)) return;
+      const items: DeckTentacleMinimal[] = payload
+        .filter(
+          (t: unknown): t is { tentacleId: string; displayName: string; color: string | null } =>
+            t !== null &&
+            typeof t === "object" &&
+            typeof (t as Record<string, unknown>).tentacleId === "string",
+        )
+        .map((t) => ({
+          tentacleId: t.tentacleId,
+          displayName: t.displayName ?? t.tentacleId,
+          color: t.color ?? null,
+        }));
+      setDeckTentacles(items);
+    } catch {
+      // silent
+    }
+  }, []);
 
   const fetchInactiveSessions = useCallback(async () => {
     try {
@@ -61,9 +94,7 @@ export const useCanvasGraphData = ({
         method: "GET",
         headers: { Accept: "application/json" },
       });
-
       if (!response.ok) return;
-
       const payload = (await response.json()) as unknown;
       const normalized = Array.isArray(payload)
         ? payload
@@ -78,29 +109,57 @@ export const useCanvasGraphData = ({
 
   useEffect(() => {
     if (!enabled) {
+      setDeckTentacles([]);
       setInactiveSessions([]);
       return;
     }
+    void fetchDeckTentacles();
     void fetchInactiveSessions();
-  }, [enabled, fetchInactiveSessions]);
+  }, [enabled, fetchDeckTentacles, fetchInactiveSessions]);
 
   const activeAgentIds = new Set(
     columns.flatMap((col) => col.agents.map((agent) => agent.agentId)),
   );
 
+  // Build a map of deck tentacles for color/label lookup
+  const deckMap = new Map<string, DeckTentacleMinimal>();
+  for (const dt of deckTentacles) {
+    deckMap.set(dt.tentacleId, dt);
+  }
+
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   const prevNodes = prevNodesRef.current;
+  const seenTentacleIds = new Set<string>();
 
-  const tentacleCount = columns.length;
+  // Merge: start with all deck tentacles, overlay active agent data from columns
+  const activeTentacleMap = new Map(columns.map((col) => [col.tentacleId, col]));
 
-  for (let i = 0; i < columns.length; i++) {
-    const col = columns[i]!;
-    const tentacleNodeId = buildTentacleNodeId(col.tentacleId);
+  // Build tentacle list: all deck tentacles + any columns-only tentacles
+  const allTentacleIds: string[] = [];
+  for (const dt of deckTentacles) {
+    allTentacleIds.push(dt.tentacleId);
+    seenTentacleIds.add(dt.tentacleId);
+  }
+  for (const col of columns) {
+    if (!seenTentacleIds.has(col.tentacleId)) {
+      allTentacleIds.push(col.tentacleId);
+      seenTentacleIds.add(col.tentacleId);
+    }
+  }
+
+  const totalTentacles = allTentacleIds.length;
+
+  for (let i = 0; i < allTentacleIds.length; i++) {
+    const tentacleId = allTentacleIds[i]!;
+    const tentacleNodeId = buildTentacleNodeId(tentacleId);
     const prev = prevNodes.get(tentacleNodeId);
-    const color = tentacleColor(col.tentacleId);
+    const deck = deckMap.get(tentacleId);
+    const activeCol = activeTentacleMap.get(tentacleId);
+    const color = tentacleColor(tentacleId, deck?.color);
+    const label = deck?.displayName ?? activeCol?.tentacleName ?? tentacleId;
 
-    const angle = (2 * Math.PI * i) / Math.max(tentacleCount, 1);
+    const angle = (2 * Math.PI * i) / Math.max(totalTentacles, 1);
     const spread = 200;
 
     const node: GraphNode = {
@@ -112,45 +171,44 @@ export const useCanvasGraphData = ({
       vy: prev?.vy ?? 0,
       pinned: prev?.pinned ?? false,
       radius: TENTACLE_RADIUS,
-      tentacleId: col.tentacleId,
-      label: col.tentacleName,
+      tentacleId,
+      label,
       color,
-      workspaceMode: col.tentacleWorkspaceMode,
+      workspaceMode: activeCol?.tentacleWorkspaceMode,
     };
     nodes.push(node);
 
-    for (let j = 0; j < col.agents.length; j++) {
-      const agent = col.agents[j]!;
-      const sessionNodeId = buildActiveSessionNodeId(agent.agentId);
-      const prevSession = prevNodes.get(sessionNodeId);
-      const jitter = () => (Math.random() - 0.5) * 60;
+    // Active agents from columns
+    if (activeCol) {
+      for (const agent of activeCol.agents) {
+        const sessionNodeId = buildActiveSessionNodeId(agent.agentId);
+        const prevSession = prevNodes.get(sessionNodeId);
+        const jitter = () => (Math.random() - 0.5) * 60;
 
-      const sessionNode: GraphNode = {
-        id: sessionNodeId,
-        type: "active-session",
-        x: prevSession?.x ?? node.x + jitter(),
-        y: prevSession?.y ?? node.y + jitter(),
-        vx: prevSession?.vx ?? 0,
-        vy: prevSession?.vy ?? 0,
-        pinned: prevSession?.pinned ?? false,
-        radius: ACTIVE_SESSION_RADIUS,
-        tentacleId: col.tentacleId,
-        label: agent.label || agent.agentId,
-        color,
-        sessionId: agent.agentId,
-        agentState: agent.state,
-      };
-      nodes.push(sessionNode);
-      edges.push({ source: tentacleNodeId, target: sessionNodeId });
+        const sessionNode: GraphNode = {
+          id: sessionNodeId,
+          type: "active-session",
+          x: prevSession?.x ?? node.x + jitter(),
+          y: prevSession?.y ?? node.y + jitter(),
+          vx: prevSession?.vx ?? 0,
+          vy: prevSession?.vy ?? 0,
+          pinned: prevSession?.pinned ?? false,
+          radius: ACTIVE_SESSION_RADIUS,
+          tentacleId,
+          label: agent.label || agent.agentId,
+          color,
+          sessionId: agent.agentId,
+          agentState: agent.state,
+        };
+        nodes.push(sessionNode);
+        edges.push({ source: tentacleNodeId, target: sessionNodeId });
+      }
     }
   }
 
   // Inactive sessions from conversations
-  const tentacleIdSet = new Set(columns.map((col) => col.tentacleId));
-
   for (const session of inactiveSessions) {
-    if (!session.tentacleId || !tentacleIdSet.has(session.tentacleId)) continue;
-
+    if (!session.tentacleId || !seenTentacleIds.has(session.tentacleId)) continue;
     if (activeAgentIds.has(session.sessionId)) continue;
 
     const tentacleNodeId = buildTentacleNodeId(session.tentacleId);
@@ -160,7 +218,7 @@ export const useCanvasGraphData = ({
     const parentNode = nodes.find((n) => n.id === tentacleNodeId);
     const parentX = parentNode?.x ?? 0;
     const parentY = parentNode?.y ?? 0;
-    const color = tentacleColor(session.tentacleId);
+    const color = tentacleColor(session.tentacleId, deckMap.get(session.tentacleId)?.color);
     const jitter = () => (Math.random() - 0.5) * 60;
 
     const sessionNode: GraphNode = {

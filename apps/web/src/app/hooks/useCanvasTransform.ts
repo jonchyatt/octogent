@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type CanvasTransform = {
   translateX: number;
@@ -19,6 +19,9 @@ type UseCanvasTransformResult = {
   handlePointerUp: (e: React.PointerEvent<SVGSVGElement>) => void;
   screenToGraph: (screenX: number, screenY: number) => { x: number; y: number };
   graphToScreen: (graphX: number, graphY: number) => { x: number; y: number };
+  zoomIn: () => void;
+  zoomOut: () => void;
+  fitAll: (nodes: { x: number; y: number }[]) => void;
 };
 
 export const useCanvasTransform = (): UseCanvasTransformResult => {
@@ -28,6 +31,23 @@ export const useCanvasTransform = (): UseCanvasTransformResult => {
     scale: 1,
   });
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const centeredRef = useRef(false);
+
+  // Auto-center on mount so graph origin (0,0) is in the middle of the viewport
+  useEffect(() => {
+    if (centeredRef.current) return;
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    centeredRef.current = true;
+    setTransform({
+      translateX: rect.width / 2,
+      translateY: rect.height / 2,
+      scale: 1,
+    });
+  });
+
   const panState = useRef<{
     startX: number;
     startY: number;
@@ -117,6 +137,73 @@ export const useCanvasTransform = (): UseCanvasTransformResult => {
     panState.current = null;
   }, []);
 
+  const zoomIn = useCallback(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    setTransform((prev) => {
+      const nextScale = Math.min(MAX_SCALE, prev.scale * (1 + ZOOM_FACTOR));
+      const ratio = nextScale / prev.scale;
+      return {
+        scale: nextScale,
+        translateX: cx - (cx - prev.translateX) * ratio,
+        translateY: cy - (cy - prev.translateY) * ratio,
+      };
+    });
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    setTransform((prev) => {
+      const nextScale = Math.max(MIN_SCALE, prev.scale * (1 - ZOOM_FACTOR));
+      const ratio = nextScale / prev.scale;
+      return {
+        scale: nextScale,
+        translateX: cx - (cx - prev.translateX) * ratio,
+        translateY: cy - (cy - prev.translateY) * ratio,
+      };
+    });
+  }, []);
+
+  const fitAll = useCallback((nodes: { x: number; y: number }[]) => {
+    const svg = svgRef.current;
+    if (!svg || nodes.length === 0) return;
+    const rect = svg.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const n of nodes) {
+      if (n.x < minX) minX = n.x;
+      if (n.y < minY) minY = n.y;
+      if (n.x > maxX) maxX = n.x;
+      if (n.y > maxY) maxY = n.y;
+    }
+
+    const graphW = maxX - minX || 1;
+    const graphH = maxY - minY || 1;
+    const padding = 80;
+    const scaleX = (rect.width - padding * 2) / graphW;
+    const scaleY = (rect.height - padding * 2) / graphH;
+    const scale = Math.min(Math.max(Math.min(scaleX, scaleY), MIN_SCALE), MAX_SCALE);
+    const centerGx = (minX + maxX) / 2;
+    const centerGy = (minY + maxY) / 2;
+
+    setTransform({
+      scale,
+      translateX: rect.width / 2 - centerGx * scale,
+      translateY: rect.height / 2 - centerGy * scale,
+    });
+  }, []);
+
   return {
     transform,
     svgRef,
@@ -126,5 +213,8 @@ export const useCanvasTransform = (): UseCanvasTransformResult => {
     handlePointerUp,
     screenToGraph,
     graphToScreen,
+    zoomIn,
+    zoomOut,
+    fitAll,
   };
 };

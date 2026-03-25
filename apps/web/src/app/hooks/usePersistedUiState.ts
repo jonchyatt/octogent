@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 
 import { buildUiStateUrl } from "../../runtime/runtimeEndpoints";
 import type { PrimaryNavIndex } from "../constants";
-import { DEFAULT_SIDEBAR_WIDTH, UI_STATE_SAVE_DEBOUNCE_MS } from "../constants";
+import { DEFAULT_SIDEBAR_WIDTH, PRIMARY_NAV_ITEMS, UI_STATE_SAVE_DEBOUNCE_MS } from "../constants";
 import {
   DEFAULT_TENTACLE_COMPLETION_SOUND,
   type TentacleCompletionSoundId,
@@ -110,7 +110,7 @@ export const usePersistedUiState = ({
       if (
         snapshot.activePrimaryNav !== undefined &&
         snapshot.activePrimaryNav >= 1 &&
-        snapshot.activePrimaryNav <= 7
+        snapshot.activePrimaryNav <= PRIMARY_NAV_ITEMS.length
       ) {
         setActivePrimaryNav(snapshot.activePrimaryNav as PrimaryNavIndex);
       }

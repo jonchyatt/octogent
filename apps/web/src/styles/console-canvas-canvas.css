@@ -88,6 +88,48 @@
   r: attr(r + 2);
 }
 
+/* ─── Zoom controls (bottom-right) ─────────────────────────────────────────── */
+
+.canvas-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 10;
+}
+
+.canvas-control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #4b5563;
+  border-radius: 6px;
+  background: #2b3040;
+  color: #e5e7eb;
+  font-size: 16px;
+  font-family: "PP Neue Machina Plain", sans-serif;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.15s ease;
+}
+
+.canvas-control-btn:hover {
+  background: #3b4252;
+  border-color: #6b7280;
+}
+
+.canvas-control-btn:active {
+  background: #4b5563;
+}
+
+.canvas-control-btn--fit {
+  font-size: 14px;
+}
+
 /* ─── Terminal overlay (HTML over SVG) ─────────────────────────────────────── */
 
 .canvas-terminal-overlay {

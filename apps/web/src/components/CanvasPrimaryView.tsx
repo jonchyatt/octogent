@@ -29,6 +29,9 @@ export const CanvasPrimaryView = ({ columns }: CanvasPrimaryViewProps) => {
     handlePointerUp: handleCanvasPointerUp,
     screenToGraph,
     graphToScreen,
+    zoomIn,
+    zoomOut,
+    fitAll,
   } = useCanvasTransform();
 
   const { simulatedNodes, pinNode, unpinNode, moveNode, reheat } = useForceSimulation({
@@ -161,6 +164,41 @@ export const CanvasPrimaryView = ({ columns }: CanvasPrimaryViewProps) => {
           ))}
         </g>
       </svg>
+
+      {/* Zoom controls */}
+      <div className="canvas-controls">
+        <button
+          type="button"
+          className="canvas-control-btn"
+          onClick={zoomIn}
+          aria-label="Zoom in"
+          title="Zoom in"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          className="canvas-control-btn"
+          onClick={zoomOut}
+          aria-label="Zoom out"
+          title="Zoom out"
+        >
+          &minus;
+        </button>
+        <button
+          type="button"
+          className="canvas-control-btn canvas-control-btn--fit"
+          onClick={() => {
+            fitAll(simulatedNodes);
+          }}
+          aria-label="Show all"
+          title="Show all"
+        >
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+            <path d="M2 2h4v1.5H3.5V6H2V2Zm8 0h4v4h-1.5V3.5H10V2ZM2 10h1.5v2.5H6V14H2v-4Zm10 2.5V10h1.5v4h-4v-1.5H12Z" />
+          </svg>
+        </button>
+      </div>
 
       {/* Terminal overlay (HTML, positioned over SVG) */}
       {overlayNode && overlayScreen && (
