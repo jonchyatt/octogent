@@ -6,9 +6,6 @@ import type { GraphEdge, GraphNode } from "../canvas/types";
 import { buildConversationsUrl, buildDeckTentaclesUrl } from "../../runtime/runtimeEndpoints";
 import { normalizeConversationSessionSummary } from "../normalizers";
 
-const MOCK_SESSIONS_ENABLED = true;
-const MOCK_SESSIONS_COUNTS = [40, 14, 5, 1, 8];
-
 const TENTACLE_RADIUS = 40;
 const ACTIVE_SESSION_RADIUS = 12;
 const INACTIVE_SESSION_RADIUS = 10;
@@ -245,62 +242,6 @@ export const useCanvasGraphData = ({
     };
     nodes.push(sessionNode);
     edges.push({ source: tentacleNodeId, target: sessionNodeId });
-  }
-
-  // Mock session nodes attached to real tentacles for layout development
-  if (MOCK_SESSIONS_ENABLED) {
-    const MOCK_LABELS = [
-      "fix auth token refresh",
-      "add retry logic",
-      "update CI config",
-      "redesign sidebar",
-      "implement rate limiting",
-      "migrate schema",
-      "add full-text search",
-      "push notification worker",
-      "redis cache invalidation",
-      "structured log format",
-    ];
-    const MOCK_STATES = ["live", "idle", "queued", "blocked"] as const;
-
-    const tentacleNodes = nodes.filter((n) => n.type === "tentacle");
-    let mockSeed = 42;
-    const rng = () => {
-      mockSeed = (mockSeed * 16807 + 0) % 2147483647;
-      return (mockSeed - 1) / 2147483646;
-    };
-
-    for (let ti = 0; ti < tentacleNodes.length; ti++) {
-      const tNode = tentacleNodes[ti]!;
-      const count = MOCK_SESSIONS_COUNTS[ti % MOCK_SESSIONS_COUNTS.length]!;
-      for (let j = 0; j < count; j++) {
-        const isActive = rng() > 0.4;
-        const mockId = `mock-${tNode.tentacleId}-${j}`;
-        const nodeId = isActive ? `a:${mockId}` : `i:${mockId}`;
-        const prev = prevNodes.get(nodeId);
-        const jitterX = (rng() - 0.5) * 120;
-        const jitterY = (rng() - 0.5) * 120;
-        const label = MOCK_LABELS[Math.floor(rng() * MOCK_LABELS.length)]!;
-
-        const sessionNode: GraphNode = {
-          id: nodeId,
-          type: isActive ? "active-session" : "inactive-session",
-          x: prev?.x ?? tNode.x + jitterX,
-          y: prev?.y ?? tNode.y + jitterY,
-          vx: prev?.vx ?? 0,
-          vy: prev?.vy ?? 0,
-          pinned: prev?.pinned ?? false,
-          radius: isActive ? ACTIVE_SESSION_RADIUS : INACTIVE_SESSION_RADIUS,
-          tentacleId: tNode.tentacleId,
-          label,
-          color: tNode.color,
-          sessionId: mockId,
-          ...(isActive ? { agentState: MOCK_STATES[Math.floor(rng() * MOCK_STATES.length)]! } : {}),
-        };
-        nodes.push(sessionNode);
-        edges.push({ source: tNode.id, target: nodeId });
-      }
-    }
   }
 
   // Update position cache
