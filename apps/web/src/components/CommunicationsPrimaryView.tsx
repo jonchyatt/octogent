@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { buildChannelMessagesUrl, buildTerminalSnapshotsUrl } from "../runtime/runtimeEndpoints";
+import { buildChannelMessagesUrl, buildTerminalSnapshotsUrl, buildTerminalsUrl } from "../runtime/runtimeEndpoints";
+import type { AgentRuntimeState } from "./AgentStateBadge";
+import { Terminal } from "./Terminal";
 
 type ChannelMessage = {
   messageId: string;
@@ -16,14 +18,96 @@ type TerminalSnapshot = {
   tentacleName: string;
 };
 
+type CommsAgent = {
+  tentacleId: string;
+  terminalId: string;
+};
+
 const POLL_INTERVAL_MS = 3_000;
 
+const COMMS_INITIAL_PROMPT = `You are a parent agent in the Octogent communication channel sandbox.
+
+Your terminal ID is available in the environment variable OCTOGENT_SESSION_ID.
+
+You can create child agents and communicate with them using the Octogent CLI:
+
+## Create a child terminal
+\`\`\`bash
+node bin/octogent terminal create --name "child-task-1" --initial-prompt "You are a child agent spawned by parent terminal $OCTOGENT_SESSION_ID. Your job is to respond to messages from your parent. To send a message back, run: node bin/octogent channel send $OCTOGENT_SESSION_ID \\"your reply here\\""
+\`\`\`
+
+## Send a message to a terminal
+\`\`\`bash
+node bin/octogent channel send <targetTerminalId> "your message" --from $OCTOGENT_SESSION_ID
+\`\`\`
+
+## List messages for a terminal
+\`\`\`bash
+node bin/octogent channel list <terminalId>
+\`\`\`
+
+Try it now: create a child agent, then send it a message. The child will receive the message when it becomes idle.
+`;
+
 export const CommunicationsPrimaryView = () => {
+  const [agent, setAgent] = useState<CommsAgent | null>(null);
+  const [agentState, setAgentState] = useState<AgentRuntimeState>("idle");
   const [messages, setMessages] = useState<ChannelMessage[]>([]);
   const [terminals, setTerminals] = useState<TerminalSnapshot[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const initializedRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const handleStateChange = useCallback((state: AgentRuntimeState) => {
+    setAgentState(state);
+  }, []);
+
+  const createAgent = useCallback(async () => {
+    try {
+      setIsCreating(true);
+      setError(null);
+      const response = await fetch(buildTerminalsUrl(), {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceMode: "shared",
+          agentProvider: "claude-code",
+          tentacleName: "comms-sandbox",
+          initialPrompt: COMMS_INITIAL_PROMPT,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to create terminal (${response.status})`);
+      }
+
+      const snapshot = (await response.json()) as {
+        tentacleId?: string;
+        terminalId?: string;
+      };
+      if (!snapshot.tentacleId) {
+        throw new Error("Missing tentacleId in response");
+      }
+
+      setAgent({
+        tentacleId: snapshot.tentacleId,
+        terminalId: snapshot.terminalId ?? snapshot.tentacleId,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create agent");
+    } finally {
+      setIsCreating(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    void createAgent();
+  }, [createAgent]);
+
+  // Poll channel messages across all terminals.
   const fetchMessages = useCallback(async (terminalIds: string[]) => {
     const allMessages: ChannelMessage[] = [];
     for (const id of terminalIds) {
@@ -45,15 +129,11 @@ export const CommunicationsPrimaryView = () => {
   const fetchTerminals = useCallback(async () => {
     try {
       const res = await fetch(buildTerminalSnapshotsUrl());
-      if (!res.ok) {
-        setError("Failed to fetch terminals.");
-        return [];
-      }
+      if (!res.ok) return [];
       const data: TerminalSnapshot[] = await res.json();
       setTerminals(data);
       return data.map((t) => t.terminalId);
     } catch {
-      setError("Could not reach API server.");
       return [];
     }
   }, []);
@@ -81,51 +161,88 @@ export const CommunicationsPrimaryView = () => {
   const formatTimestamp = (ts: string) => {
     try {
       const d = new Date(ts);
-      return d.toLocaleTimeString(undefined, {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
+      return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     } catch {
       return ts;
     }
   };
 
+  if (error && !agent) {
+    return (
+      <section className="communications-view" aria-label="Communications">
+        <div className="communications-view__status">
+          <p>Failed to initialize: {error}</p>
+          <button type="button" onClick={() => void createAgent()}>
+            Retry
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (!agent) {
+    return (
+      <section className="communications-view" aria-label="Communications">
+        <div className="communications-view__status">
+          <p>{isCreating ? "Initializing comms sandbox agent..." : "No agent"}</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className="communications-view" aria-label="Communications channel log">
-      <header className="communications-view__header">
+    <section className="communications-view" aria-label="Communications channel sandbox">
+      <div className="communications-view__header">
         <h2>Communications Channel</h2>
-        <span className="communications-view__count">
-          {messages.length} message{messages.length !== 1 ? "s" : ""}
-        </span>
-      </header>
+        <div className="communications-view__header-info">
+          <span className="communications-view__agent-id">{agent.terminalId}</span>
+          <span className="communications-view__agent-state" data-state={agentState}>
+            {agentState.toUpperCase()}
+          </span>
+          <span className="communications-view__count">
+            {messages.length} msg{messages.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+      </div>
 
-      {error && <div className="communications-view__error">{error}</div>}
+      <div className="communications-view__body">
+        <div className="communications-view__terminal">
+          <Terminal
+            terminalId={agent.terminalId}
+            terminalLabel="Comms Sandbox — Parent Agent"
+            onAgentRuntimeStateChange={handleStateChange}
+          />
+        </div>
 
-      <div className="communications-view__log">
-        {messages.length === 0 && !error && (
-          <div className="communications-view__empty">
-            No channel messages yet. Agents can send messages using:
-            <code>octogent channel send &lt;terminalId&gt; "message"</code>
+        <div className="communications-view__panel">
+          <div className="communications-view__panel-header">
+            <h3>Channel Log</h3>
           </div>
-        )}
-        {messages.map((m) => (
-          <div
-            key={m.messageId}
-            className={`communications-view__message ${m.delivered ? "communications-view__message--delivered" : "communications-view__message--pending"}`}
-          >
-            <span className="communications-view__time">{formatTimestamp(m.timestamp)}</span>
-            <span className="communications-view__from">
-              {terminalLabel(m.fromTerminalId) || "external"}
-            </span>
-            <span className="communications-view__arrow">&rarr;</span>
-            <span className="communications-view__to">{terminalLabel(m.toTerminalId)}</span>
-            <span className="communications-view__status">
-              {m.delivered ? "[delivered]" : "[pending]"}
-            </span>
-            <span className="communications-view__content">{m.content}</span>
+          <div className="communications-view__log">
+            {messages.length === 0 && (
+              <div className="communications-view__empty">
+                No channel messages yet. The parent agent has instructions to create a child and send messages.
+              </div>
+            )}
+            {messages.map((m) => (
+              <div
+                key={m.messageId}
+                className={`communications-view__message ${m.delivered ? "communications-view__message--delivered" : "communications-view__message--pending"}`}
+              >
+                <span className="communications-view__time">{formatTimestamp(m.timestamp)}</span>
+                <span className="communications-view__from">
+                  {terminalLabel(m.fromTerminalId) || "external"}
+                </span>
+                <span className="communications-view__arrow">&rarr;</span>
+                <span className="communications-view__to">{terminalLabel(m.toTerminalId)}</span>
+                <span className="communications-view__status">
+                  {m.delivered ? "[delivered]" : "[pending]"}
+                </span>
+                <span className="communications-view__content">{m.content}</span>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
       </div>
     </section>
   );

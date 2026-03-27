@@ -24,10 +24,97 @@
   margin: 0;
 }
 
+.communications-view__header-info {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+}
+
+.communications-view__agent-id {
+  color: #6b7280;
+}
+
+.communications-view__agent-state {
+  font-weight: 700;
+  padding: 0.1rem 0.36rem;
+  border-radius: 3px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.communications-view__agent-state[data-state="idle"] {
+  color: #00ffaa;
+  background: rgba(0, 255, 170, 0.08);
+}
+
+.communications-view__agent-state[data-state="processing"] {
+  color: #ff6b2b;
+  background: rgba(255, 107, 43, 0.08);
+}
+
+.communications-view__agent-state[data-state="waiting_for_permission"] {
+  color: #ffee00;
+  background: rgba(255, 238, 0, 0.08);
+}
+
+.communications-view__agent-state[data-state="waiting_for_user"] {
+  color: #00c8ff;
+  background: rgba(0, 200, 255, 0.08);
+}
+
 .communications-view__count {
   font-size: 0.72rem;
   color: #6b7280;
   font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+}
+
+.communications-view__status-text {
+  padding: 1.2rem 0.56rem;
+  color: #6b7280;
+  text-align: center;
+}
+
+.communications-view__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.communications-view__terminal {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #2b2f36;
+}
+
+.communications-view__terminal .terminal-wrapper {
+  flex: 1;
+  min-height: 0;
+}
+
+.communications-view__panel {
+  width: 360px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  background: #0d1017;
+}
+
+.communications-view__panel-header {
+  padding: 0.36rem 0.56rem;
+  border-bottom: 1px solid #2b2f36;
+}
+
+.communications-view__panel-header h3 {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #c8cdd4;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0;
 }
 
 .communications-view__error {
@@ -43,7 +130,7 @@
   overflow-y: auto;
   padding: 0.36rem 0;
   font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
 }
 
 .communications-view__empty {
@@ -51,23 +138,15 @@
   color: #6b7280;
   text-align: center;
   line-height: 1.6;
-}
-
-.communications-view__empty code {
-  display: block;
-  margin-top: 0.5rem;
-  color: #c8cdd4;
-  background: #1a1d24;
-  padding: 0.3rem 0.5rem;
-  border-radius: 3px;
-  font-size: 0.74rem;
+  font-size: 0.72rem;
 }
 
 .communications-view__message {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.5rem;
-  padding: 0.24rem 0.56rem;
+  gap: 0.36rem;
+  padding: 0.28rem 0.56rem;
   border-bottom: 1px solid #1a1d24;
   line-height: 1.4;
 }
@@ -79,7 +158,7 @@
 .communications-view__time {
   color: #4b5563;
   flex-shrink: 0;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
 }
 
 .communications-view__from {
@@ -101,7 +180,7 @@
 
 .communications-view__status {
   flex-shrink: 0;
-  font-size: 0.68rem;
+  font-size: 0.64rem;
 }
 
 .communications-view__message--delivered .communications-view__status {
@@ -115,4 +194,31 @@
 .communications-view__content {
   color: #c8cdd4;
   word-break: break-word;
+  flex-basis: 100%;
+  padding-left: 0.2rem;
+}
+
+/* Loading / error states */
+.communications-view__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: #6b7280;
+  font-size: 0.82rem;
+}
+
+.communications-view__status button {
+  margin-top: 0.5rem;
+  padding: 0.3rem 0.8rem;
+  background: #1a1d24;
+  color: #c8cdd4;
+  border: 1px solid #2b2f36;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.communications-view__status button:hover {
+  background: #2b2f36;
 }
