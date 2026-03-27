@@ -13,6 +13,7 @@
   padding: 0.36rem 0.56rem;
   border-bottom: 1px solid #2b2f36;
   background: #0d1017;
+  flex-shrink: 0;
 }
 
 .communications-view__header h2 {
@@ -70,11 +71,7 @@
   font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
 }
 
-.communications-view__status-text {
-  padding: 1.2rem 0.56rem;
-  color: #6b7280;
-  text-align: center;
-}
+/* Main body: terminal columns + channel log panel */
 
 .communications-view__body {
   display: flex;
@@ -82,34 +79,69 @@
   min-height: 0;
 }
 
-.communications-view__terminal {
+/* Scrollable row of terminal columns */
+
+.communications-view__terminals {
+  display: flex;
   flex: 1;
   min-width: 0;
+  overflow-x: auto;
+}
+
+.communications-view__terminal-col {
   display: flex;
   flex-direction: column;
+  min-width: 420px;
+  flex: 1 1 0;
   border-right: 1px solid #2b2f36;
 }
 
-.communications-view__terminal .terminal-wrapper {
+.communications-view__terminal-label {
+  padding: 0.28rem 0.56rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+  color: #00ffaa;
+  background: #0d1017;
+  border-bottom: 1px solid #2b2f36;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.communications-view__terminal-label--child {
+  color: #00c8ff;
+}
+
+.communications-view__terminal-embed {
   flex: 1;
+  min-height: 0;
+  display: grid;
+}
+
+.communications-view__terminal-embed > .terminal-pane {
+  height: 100%;
   min-height: 0;
 }
 
+/* Right-side channel log panel */
+
 .communications-view__panel {
-  width: 360px;
-  min-width: 280px;
+  width: 340px;
+  min-width: 260px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   background: #0d1017;
+  border-left: 1px solid #2b2f36;
 }
 
 .communications-view__panel-header {
-  padding: 0.36rem 0.56rem;
+  padding: 0.28rem 0.56rem;
   border-bottom: 1px solid #2b2f36;
 }
 
 .communications-view__panel-header h3 {
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   font-weight: 600;
   color: #c8cdd4;
   text-transform: uppercase;
@@ -117,20 +149,12 @@
   margin: 0;
 }
 
-.communications-view__error {
-  padding: 0.5rem 0.56rem;
-  color: #ff4d4d;
-  font-size: 0.78rem;
-  background: #1a0808;
-  border-bottom: 1px solid #2b2f36;
-}
-
 .communications-view__log {
   flex: 1;
   overflow-y: auto;
   padding: 0.36rem 0;
   font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
-  font-size: 0.74rem;
+  font-size: 0.72rem;
 }
 
 .communications-view__empty {
@@ -145,7 +169,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.36rem;
+  gap: 0.3rem;
   padding: 0.28rem 0.56rem;
   border-bottom: 1px solid #1a1d24;
   line-height: 1.4;
@@ -158,7 +182,7 @@
 .communications-view__time {
   color: #4b5563;
   flex-shrink: 0;
-  font-size: 0.68rem;
+  font-size: 0.66rem;
 }
 
 .communications-view__from {
@@ -178,16 +202,16 @@
   font-weight: 600;
 }
 
-.communications-view__status {
+.communications-view__msg-status {
   flex-shrink: 0;
-  font-size: 0.64rem;
+  font-size: 0.62rem;
 }
 
-.communications-view__message--delivered .communications-view__status {
+.communications-view__message--delivered .communications-view__msg-status {
   color: #4b5563;
 }
 
-.communications-view__message--pending .communications-view__status {
+.communications-view__message--pending .communications-view__msg-status {
   color: #ffee00;
 }
 
@@ -198,9 +222,11 @@
   padding-left: 0.2rem;
 }
 
-/* Loading / error states */
-.communications-view__status {
+/* Init/loading/error states */
+
+.communications-view__init-status {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   flex: 1;
@@ -208,7 +234,7 @@
   font-size: 0.82rem;
 }
 
-.communications-view__status button {
+.communications-view__init-status button {
   margin-top: 0.5rem;
   padding: 0.3rem 0.8rem;
   background: #1a1d24;
@@ -219,6 +245,6 @@
   font-size: 0.78rem;
 }
 
-.communications-view__status button:hover {
+.communications-view__init-status button:hover {
   background: #2b2f36;
 }

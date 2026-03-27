@@ -88,6 +88,7 @@ export const createApiServer = ({
           }
           resolveStop();
         });
+        server.closeAllConnections();
       });
     },
   };

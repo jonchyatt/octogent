@@ -58,6 +58,8 @@ export const CommunicationsPrimaryView = () => {
   const [isCreating, setIsCreating] = useState(false);
   const initializedRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Track terminal IDs that existed before the parent was created.
+  const preExistingTerminalIdsRef = useRef<Set<string> | null>(null);
 
   const handleStateChange = useCallback((state: AgentRuntimeState) => {
     setAgentState(state);
@@ -67,6 +69,18 @@ export const CommunicationsPrimaryView = () => {
     try {
       setIsCreating(true);
       setError(null);
+
+      // Snapshot current terminals so we can detect new ones later.
+      try {
+        const snap = await fetch(buildTerminalSnapshotsUrl());
+        if (snap.ok) {
+          const existing: TerminalSnapshot[] = await snap.json();
+          preExistingTerminalIdsRef.current = new Set(existing.map((t) => t.terminalId));
+        }
+      } catch {
+        preExistingTerminalIdsRef.current = new Set();
+      }
+
       const response = await fetch(buildTerminalsUrl(), {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json" },
@@ -90,9 +104,13 @@ export const CommunicationsPrimaryView = () => {
         throw new Error("Missing tentacleId in response");
       }
 
+      const parentId = snapshot.terminalId ?? snapshot.tentacleId;
+      // Also include the parent in the pre-existing set so it's shown as the parent, not a child.
+      preExistingTerminalIdsRef.current?.add(parentId);
+
       setAgent({
         tentacleId: snapshot.tentacleId,
-        terminalId: snapshot.terminalId ?? snapshot.tentacleId,
+        terminalId: parentId,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create agent");
@@ -107,7 +125,7 @@ export const CommunicationsPrimaryView = () => {
     void createAgent();
   }, [createAgent]);
 
-  // Poll channel messages across all terminals.
+  // Poll channel messages and terminals.
   const fetchMessages = useCallback(async (terminalIds: string[]) => {
     const allMessages: ChannelMessage[] = [];
     for (const id of terminalIds) {
@@ -167,10 +185,16 @@ export const CommunicationsPrimaryView = () => {
     }
   };
 
+  // Compute child terminals: any terminal that appeared after the parent was created.
+  const childTerminals = terminals.filter((t) => {
+    if (!preExistingTerminalIdsRef.current) return false;
+    return !preExistingTerminalIdsRef.current.has(t.terminalId);
+  });
+
   if (error && !agent) {
     return (
       <section className="communications-view" aria-label="Communications">
-        <div className="communications-view__status">
+        <div className="communications-view__init-status">
           <p>Failed to initialize: {error}</p>
           <button type="button" onClick={() => void createAgent()}>
             Retry
@@ -183,7 +207,7 @@ export const CommunicationsPrimaryView = () => {
   if (!agent) {
     return (
       <section className="communications-view" aria-label="Communications">
-        <div className="communications-view__status">
+        <div className="communications-view__init-status">
           <p>{isCreating ? "Initializing comms sandbox agent..." : "No agent"}</p>
         </div>
       </section>
@@ -200,18 +224,42 @@ export const CommunicationsPrimaryView = () => {
             {agentState.toUpperCase()}
           </span>
           <span className="communications-view__count">
+            {childTerminals.length} child{childTerminals.length !== 1 ? "ren" : ""}
+          </span>
+          <span className="communications-view__count">
             {messages.length} msg{messages.length !== 1 ? "s" : ""}
           </span>
         </div>
       </div>
 
       <div className="communications-view__body">
-        <div className="communications-view__terminal">
-          <Terminal
-            terminalId={agent.terminalId}
-            terminalLabel="Comms Sandbox — Parent Agent"
-            onAgentRuntimeStateChange={handleStateChange}
-          />
+        <div className="communications-view__terminals">
+          <div className="communications-view__terminal-col">
+            <div className="communications-view__terminal-label">
+              Parent &mdash; {agent.terminalId}
+            </div>
+            <div className="communications-view__terminal-embed">
+              <Terminal
+                terminalId={agent.terminalId}
+                terminalLabel="Comms Sandbox — Parent Agent"
+                onAgentRuntimeStateChange={handleStateChange}
+              />
+            </div>
+          </div>
+
+          {childTerminals.map((child) => (
+            <div key={child.terminalId} className="communications-view__terminal-col">
+              <div className="communications-view__terminal-label communications-view__terminal-label--child">
+                Child &mdash; {child.tentacleName || child.terminalId}
+              </div>
+              <div className="communications-view__terminal-embed">
+                <Terminal
+                  terminalId={child.terminalId}
+                  terminalLabel={`Child — ${child.tentacleName || child.terminalId}`}
+                />
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="communications-view__panel">
@@ -221,7 +269,7 @@ export const CommunicationsPrimaryView = () => {
           <div className="communications-view__log">
             {messages.length === 0 && (
               <div className="communications-view__empty">
-                No channel messages yet. The parent agent has instructions to create a child and send messages.
+                No channel messages yet.
               </div>
             )}
             {messages.map((m) => (
@@ -235,7 +283,7 @@ export const CommunicationsPrimaryView = () => {
                 </span>
                 <span className="communications-view__arrow">&rarr;</span>
                 <span className="communications-view__to">{terminalLabel(m.toTerminalId)}</span>
-                <span className="communications-view__status">
+                <span className="communications-view__msg-status">
                   {m.delivered ? "[delivered]" : "[pending]"}
                 </span>
                 <span className="communications-view__content">{m.content}</span>
