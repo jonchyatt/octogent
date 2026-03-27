@@ -374,7 +374,9 @@ export const App = () => {
             <ActiveAgentsSidebar
               claudeUsageSnapshot={claudeUsageSnapshot}
               claudeUsageStatus={claudeUsageSnapshot?.status ?? "loading"}
-              terminals={terminals}
+              terminals={terminals.filter(
+                (t) => !t.tentacleName?.includes("sandbox"),
+              )}
               codexUsageSnapshot={codexUsageSnapshot}
               codexUsageStatus={codexUsageSnapshot?.status ?? "loading"}
               isLoading={isLoading}
