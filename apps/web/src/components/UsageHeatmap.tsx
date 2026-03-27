@@ -1,42 +1,29 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { UsageHeatmapDay } from "../app/hooks/useUsageHeatmapPolling";
+import type { UsageChartData, UsageDayEntry } from "../app/hooks/useUsageHeatmapPolling";
 import { ActionButton } from "./ui/ActionButton";
 
-type UsageHeatmapProps = {
-  days: UsageHeatmapDay[];
-  scope: "all" | "project";
+type UsageChartSectionProps = {
+  data: UsageChartData | null;
   isLoading: boolean;
-  onScopeChange: (scope: "all" | "project") => void;
   onRefresh: () => void;
 };
 
-const CELL_SIZE = 13;
-const CELL_GAP = 3;
-const CELL_RADIUS = 2;
-const WEEKS_TO_SHOW = 52;
-const DAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
-const MONTH_LABELS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
+type BarSegmentMode = "project" | "model";
 
-const INTENSITY_COLORS = [
-  "#161b22", // empty
-  "#3d2008", // low
-  "#6b3a0e", // medium-low
-  "#b5611a", // medium
-  "#d7a622", // high (accent-primary)
+const SEGMENT_COLORS = [
+  "#d7a622",
+  "#e07b39",
+  "#4ea8de",
+  "#a78bfa",
+  "#34d399",
+  "#f472b6",
+  "#fbbf24",
+  "#60a5fa",
+  "#c084fc",
+  "#2dd4bf",
+  "#fb923c",
+  "#a3e635",
 ];
 
 const formatTokenCount = (tokens: number): string => {
@@ -45,46 +32,250 @@ const formatTokenCount = (tokens: number): string => {
   return tokens.toString();
 };
 
+const formatDateLabel = (date: string): string => {
+  const d = new Date(`${date}T00:00:00`);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+};
+
+/* ── Shared types ───────────────────────────────────── */
+
+type Segment = { label: string; tokens: number; color: string };
+
+type BarData = {
+  date: string;
+  totalTokens: number;
+  sessions: number;
+  segments: Segment[];
+};
+
+const buildColorMap = (keys: string[]) =>
+  new Map(keys.map((k, i) => [k, SEGMENT_COLORS[i % SEGMENT_COLORS.length]!]));
+
+const buildBars = (
+  days: UsageDayEntry[],
+  keys: string[],
+  mode: BarSegmentMode,
+): BarData[] => {
+  const colorMap = buildColorMap(keys);
+  return days.map((day) => {
+    const slices = mode === "model" ? day.models : day.projects;
+    return {
+      date: day.date,
+      totalTokens: day.totalTokens,
+      sessions: day.sessions,
+      segments: slices.map((s) => ({
+        label: s.key,
+        tokens: s.tokens,
+        color: colorMap.get(s.key) ?? "#555",
+      })),
+    };
+  });
+};
+
+const buildYTicks = (maxTokens: number): { value: number; label: string }[] => {
+  if (maxTokens === 0) return [];
+  const ticks: { value: number; label: string }[] = [];
+  const step = maxTokens / 4;
+  for (let i = 0; i <= 4; i++) {
+    const value = step * i;
+    ticks.push({ value, label: formatTokenCount(Math.round(value)) });
+  }
+  return ticks;
+};
+
+/* ── Tooltip (shared) ───────────────────────────────── */
+
+const ChartTooltip = ({ bar }: { bar: BarData }) => (
+  <div className="usage-heatmap-tooltip" aria-live="polite">
+    <p className="usage-heatmap-tooltip-date">{formatDateLabel(bar.date)}</p>
+    <dl className="usage-heatmap-tooltip-stats">
+      <div>
+        <dt>Total</dt>
+        <dd>{formatTokenCount(bar.totalTokens)}</dd>
+      </div>
+      {bar.segments.map((seg) => (
+        <div key={seg.label}>
+          <dt>
+            <span className="usage-chart-legend-dot" style={{ backgroundColor: seg.color }} />
+            {seg.label}
+          </dt>
+          <dd>{formatTokenCount(seg.tokens)}</dd>
+        </div>
+      ))}
+      <div>
+        <dt>Sessions</dt>
+        <dd>{bar.sessions}</dd>
+      </div>
+    </dl>
+  </div>
+);
+
+/* ── Bar chart view ─────────────────────────────────── */
+
+const Y_AXIS_WIDTH = 52;
+const X_LABEL_HEIGHT = 18;
+const TOP_PAD = 6;
+const BAR_GAP_RATIO = 0.3;
+
+const BarChartView = ({
+  bars,
+  maxTokens,
+  containerWidth,
+  containerHeight,
+  hoveredBar,
+  setHoveredBar,
+}: {
+  bars: BarData[];
+  maxTokens: number;
+  containerWidth: number;
+  containerHeight: number;
+  hoveredBar: BarData | null;
+  setHoveredBar: (bar: BarData | null) => void;
+}) => {
+  const chartAreaWidth = containerWidth - Y_AXIS_WIDTH;
+  const barCount = bars.length || 1;
+  const barSlotWidth = chartAreaWidth / barCount;
+  const barWidth = barSlotWidth * (1 - BAR_GAP_RATIO);
+  const barGap = barSlotWidth * BAR_GAP_RATIO;
+  const chartHeight = Math.max(60, containerHeight - X_LABEL_HEIGHT - TOP_PAD);
+  const svgHeight = TOP_PAD + chartHeight + X_LABEL_HEIGHT;
+
+  const yTicks = useMemo(() => buildYTicks(maxTokens), [maxTokens]);
+  const xLabelStep = Math.max(1, Math.ceil(barCount / Math.floor(chartAreaWidth / 60)));
+
+  return (
+    <svg
+      className="usage-chart-svg"
+      viewBox={`0 0 ${containerWidth} ${svgHeight}`}
+      role="img"
+      aria-label="Token usage bar chart"
+    >
+      {yTicks.map((tick) => {
+        const y =
+          TOP_PAD + chartHeight - (maxTokens > 0 ? (tick.value / maxTokens) * chartHeight : 0);
+        return (
+          <g key={tick.value}>
+            <line
+              x1={Y_AXIS_WIDTH}
+              y1={y}
+              x2={containerWidth}
+              y2={y}
+              className="usage-chart-grid-line"
+            />
+            <text x={Y_AXIS_WIDTH - 6} y={y + 3.5} className="usage-chart-y-label">
+              {tick.label}
+            </text>
+          </g>
+        );
+      })}
+
+      {bars.map((bar, i) => {
+        const x = Y_AXIS_WIDTH + i * barSlotWidth + barGap / 2;
+        let yOffset = TOP_PAD + chartHeight;
+
+        return (
+          <g
+            key={bar.date}
+            onMouseEnter={() => setHoveredBar(bar)}
+            onMouseLeave={() => setHoveredBar(null)}
+            className="usage-chart-bar-group"
+          >
+            <rect
+              x={x}
+              y={TOP_PAD}
+              width={barWidth}
+              height={chartHeight}
+              fill="transparent"
+              className="usage-chart-bar-hit"
+            />
+            {bar.segments.map((seg) => {
+              const segHeight = maxTokens > 0 ? (seg.tokens / maxTokens) * chartHeight : 0;
+              yOffset -= segHeight;
+              return (
+                <rect
+                  key={seg.label}
+                  x={x}
+                  y={yOffset}
+                  width={barWidth}
+                  height={Math.max(0.5, segHeight)}
+                  fill={seg.color}
+                  rx={1}
+                />
+              );
+            })}
+          </g>
+        );
+      })}
+
+      {bars.map((bar, i) => {
+        if (i % xLabelStep !== 0) return null;
+        const x = Y_AXIS_WIDTH + i * barSlotWidth + barSlotWidth / 2;
+        return (
+          <text
+            key={`label-${bar.date}`}
+            x={x}
+            y={TOP_PAD + chartHeight + X_LABEL_HEIGHT - 2}
+            className="usage-chart-x-label"
+          >
+            {formatDateLabel(bar.date)}
+          </text>
+        );
+      })}
+    </svg>
+  );
+};
+
+/* ── Heatmap view ───────────────────────────────────── */
+
+const CELL_GAP = 3;
+const CELL_RADIUS = 2;
+const WEEKS_TO_SHOW = 52;
+const DAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
+const MONTH_LABELS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+const INTENSITY_COLORS = [
+  "#161b22",
+  "#3d2008",
+  "#6b3a0e",
+  "#b5611a",
+  "#d7a622",
+];
+
 type HeatmapCell = {
   date: string;
   week: number;
   dayOfWeek: number;
   totalTokens: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
   sessions: number;
   intensity: number;
+  bar: BarData | null;
 };
 
-const buildHeatmapGrid = (days: UsageHeatmapDay[]): HeatmapCell[] => {
-  const dayMap = new Map(days.map((d) => [d.date, d]));
-  const today = new Date();
-  const todayDow = today.getUTCDay();
-
-  // End of grid is this Saturday (end of current week)
-  const endDate = new Date(today);
-  endDate.setUTCDate(today.getUTCDate() + (6 - todayDow));
-
-  // Start is 52 weeks before end
-  const startDate = new Date(endDate);
-  startDate.setUTCDate(endDate.getUTCDate() - WEEKS_TO_SHOW * 7 + 1);
-
-  // Collect all token values for quantile thresholds
-  const tokenValues = days.map((d) => d.totalTokens).filter((v) => v > 0);
+const buildHeatmapGrid = (bars: BarData[]): HeatmapCell[] => {
+  const barMap = new Map(bars.map((b) => [b.date, b]));
+  const tokenValues = bars.map((b) => b.totalTokens).filter((v) => v > 0);
   tokenValues.sort((a, b) => a - b);
 
   const getIntensity = (tokens: number): number => {
     if (tokens === 0 || tokenValues.length === 0) return 0;
-    const index = tokenValues.findIndex((v) => v >= tokens);
-    const position = index === -1 ? tokenValues.length : index;
-    const ratio = position / tokenValues.length;
+    const idx = tokenValues.findIndex((v) => v >= tokens);
+    const pos = idx === -1 ? tokenValues.length : idx;
+    const ratio = pos / tokenValues.length;
     if (ratio <= 0.25) return 1;
     if (ratio <= 0.5) return 2;
     if (ratio <= 0.75) return 3;
     return 4;
   };
+
+  const today = new Date();
+  const todayDow = today.getUTCDay();
+  const endDate = new Date(today);
+  endDate.setUTCDate(today.getUTCDate() + (6 - todayDow));
+  const startDate = new Date(endDate);
+  startDate.setUTCDate(endDate.getUTCDate() - WEEKS_TO_SHOW * 7 + 1);
 
   const cells: HeatmapCell[] = [];
   const cursor = new Date(startDate);
@@ -93,25 +284,18 @@ const buildHeatmapGrid = (days: UsageHeatmapDay[]): HeatmapCell[] => {
   while (cursor <= endDate) {
     const dateStr = cursor.toISOString().slice(0, 10);
     const dayOfWeek = cursor.getUTCDay();
-    const dayData = dayMap.get(dateStr);
-
+    const bar = barMap.get(dateStr) ?? null;
     cells.push({
       date: dateStr,
       week,
       dayOfWeek,
-      totalTokens: dayData?.totalTokens ?? 0,
-      inputTokens: dayData?.inputTokens ?? 0,
-      outputTokens: dayData?.outputTokens ?? 0,
-      cacheReadTokens: dayData?.cacheReadTokens ?? 0,
-      cacheCreationTokens: dayData?.cacheCreationTokens ?? 0,
-      sessions: dayData?.sessions ?? 0,
-      intensity: getIntensity(dayData?.totalTokens ?? 0),
+      totalTokens: bar?.totalTokens ?? 0,
+      sessions: bar?.sessions ?? 0,
+      intensity: getIntensity(bar?.totalTokens ?? 0),
+      bar,
     });
-
     cursor.setUTCDate(cursor.getUTCDate() + 1);
-    if (cursor.getUTCDay() === 0) {
-      week++;
-    }
+    if (cursor.getUTCDay() === 0) week++;
   }
 
   return cells;
@@ -120,7 +304,6 @@ const buildHeatmapGrid = (days: UsageHeatmapDay[]): HeatmapCell[] => {
 const buildMonthLabels = (cells: HeatmapCell[]): { label: string; week: number }[] => {
   const labels: { label: string; week: number }[] = [];
   let lastMonth = -1;
-
   for (const cell of cells) {
     if (cell.dayOfWeek !== 0) continue;
     const month = new Date(cell.date).getUTCMonth();
@@ -129,35 +312,154 @@ const buildMonthLabels = (cells: HeatmapCell[]): { label: string; week: number }
       lastMonth = month;
     }
   }
-
   return labels;
 };
 
-export const UsageHeatmap = ({
-  days,
-  scope,
-  isLoading,
-  onScopeChange,
-  onRefresh,
-}: UsageHeatmapProps) => {
-  const [hoveredCell, setHoveredCell] = useState<HeatmapCell | null>(null);
-
-  const cells = useMemo(() => buildHeatmapGrid(days), [days]);
+const HeatmapView = ({
+  bars,
+  containerWidth,
+  containerHeight,
+  hoveredBar,
+  setHoveredBar,
+}: {
+  bars: BarData[];
+  containerWidth: number;
+  containerHeight: number;
+  hoveredBar: BarData | null;
+  setHoveredBar: (bar: BarData | null) => void;
+}) => {
+  const cells = useMemo(() => buildHeatmapGrid(bars), [bars]);
   const monthLabels = useMemo(() => buildMonthLabels(cells), [cells]);
-
-  const totalTokens = useMemo(() => days.reduce((sum, d) => sum + d.totalTokens, 0), [days]);
-  const totalSessions = useMemo(() => days.reduce((sum, d) => sum + d.sessions, 0), [days]);
-  const activeDays = useMemo(() => days.filter((d) => d.totalTokens > 0).length, [days]);
 
   const dayLabelWidth = 32;
   const monthLabelHeight = 16;
-  const gridWidth = WEEKS_TO_SHOW * (CELL_SIZE + CELL_GAP);
-  const gridHeight = 7 * (CELL_SIZE + CELL_GAP);
+  const availableHeight = containerHeight - monthLabelHeight - 8;
+  const availableWidth = containerWidth - dayLabelWidth - 8;
+  const cellSize = Math.max(
+    8,
+    Math.min(
+      Math.floor((availableHeight - 6 * CELL_GAP) / 7),
+      Math.floor((availableWidth - (WEEKS_TO_SHOW - 1) * CELL_GAP) / WEEKS_TO_SHOW),
+    ),
+  );
+  const gridWidth = WEEKS_TO_SHOW * (cellSize + CELL_GAP);
+  const gridHeight = 7 * (cellSize + CELL_GAP);
   const svgWidth = dayLabelWidth + gridWidth + 8;
   const svgHeight = monthLabelHeight + gridHeight + 8;
 
   return (
-    <section className="usage-heatmap" aria-label="Claude token usage heatmap">
+    <svg
+      className="usage-chart-svg"
+      viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+      role="img"
+      aria-label="Token usage heatmap"
+    >
+      {monthLabels.map(({ label, week }) => (
+        <text
+          key={`month-${week}`}
+          x={dayLabelWidth + week * (cellSize + CELL_GAP)}
+          y={monthLabelHeight - 4}
+          className="usage-heatmap-month-label"
+        >
+          {label}
+        </text>
+      ))}
+
+      {DAY_LABELS.map((label, dayIndex) =>
+        label ? (
+          <text
+            key={`day-${dayIndex}`}
+            x={dayLabelWidth - 6}
+            y={monthLabelHeight + dayIndex * (cellSize + CELL_GAP) + cellSize - 2}
+            className="usage-heatmap-day-label"
+          >
+            {label}
+          </text>
+        ) : null,
+      )}
+
+      {cells.map((cell) => (
+        <rect
+          key={cell.date}
+          x={dayLabelWidth + cell.week * (cellSize + CELL_GAP)}
+          y={monthLabelHeight + cell.dayOfWeek * (cellSize + CELL_GAP)}
+          width={cellSize}
+          height={cellSize}
+          rx={CELL_RADIUS}
+          fill={INTENSITY_COLORS[cell.intensity]!}
+          className="usage-heatmap-cell"
+          onMouseEnter={() => {
+            if (cell.bar) setHoveredBar(cell.bar);
+          }}
+          onMouseLeave={() => setHoveredBar(null)}
+        />
+      ))}
+    </svg>
+  );
+};
+
+/* ── Measured panel wrapper ──────────────────────────── */
+
+const usePanelSize = () => {
+  const [width, setWidth] = useState(400);
+  const [height, setHeight] = useState(200);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const measure = useCallback(() => {
+    if (ref.current) {
+      setWidth(ref.current.clientWidth);
+      setHeight(ref.current.clientHeight);
+    }
+  }, []);
+
+  useEffect(() => {
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [measure]);
+
+  return { ref, width, height };
+};
+
+/* ── Main component ─────────────────────────────────── */
+
+export const UsageBarChart = ({ data, isLoading, onRefresh }: UsageChartSectionProps) => {
+  const [segmentMode, setSegmentMode] = useState<BarSegmentMode>("project");
+  const [hoveredBar, setHoveredBar] = useState<BarData | null>(null);
+  const barPanel = usePanelSize();
+  const heatmapPanel = usePanelSize();
+
+  const days = data?.days ?? [];
+  const projects = data?.projects ?? [];
+  const models = data?.models ?? [];
+
+  const segmentKeys = segmentMode === "model" ? models : projects;
+
+  const maxTokens = useMemo(() => {
+    let max = 0;
+    for (const d of days) {
+      if (d.totalTokens > max) max = d.totalTokens;
+    }
+    return max;
+  }, [days]);
+
+  const totalTokens = useMemo(() => days.reduce((s, d) => s + d.totalTokens, 0), [days]);
+  const totalSessions = useMemo(() => days.reduce((s, d) => s + d.sessions, 0), [days]);
+  const activeDays = useMemo(() => days.filter((d) => d.totalTokens > 0).length, [days]);
+
+  const bars = useMemo(
+    () => buildBars(days, segmentKeys, segmentMode),
+    [days, segmentKeys, segmentMode],
+  );
+  const heatmapBars = useMemo(
+    () => buildBars(days, projects, "project"),
+    [days, projects],
+  );
+  const colorMap = useMemo(() => buildColorMap(segmentKeys), [segmentKeys]);
+
+  return (
+    <section className="usage-heatmap" aria-label="Claude token usage chart">
       <header className="usage-heatmap-header">
         <div className="usage-heatmap-header-left">
           <h3>Claude Token Usage</h3>
@@ -167,24 +469,8 @@ export const UsageHeatmap = ({
           </span>
         </div>
         <div className="usage-heatmap-header-actions">
-          <div className="usage-heatmap-scope-toggle">
-            <button
-              type="button"
-              className={`usage-heatmap-scope-btn${scope === "project" ? " is-active" : ""}`}
-              onClick={() => onScopeChange("project")}
-            >
-              This project
-            </button>
-            <button
-              type="button"
-              className={`usage-heatmap-scope-btn${scope === "all" ? " is-active" : ""}`}
-              onClick={() => onScopeChange("all")}
-            >
-              All projects
-            </button>
-          </div>
           <ActionButton
-            aria-label="Refresh usage heatmap data"
+            aria-label="Refresh usage chart data"
             className="usage-heatmap-refresh"
             disabled={isLoading}
             onClick={onRefresh}
@@ -196,101 +482,59 @@ export const UsageHeatmap = ({
         </div>
       </header>
 
-      <div className="usage-heatmap-grid-container">
-        <svg
-          className="usage-heatmap-svg"
-          viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-          role="img"
-          aria-label="Token usage heatmap grid"
-        >
-          {monthLabels.map(({ label, week }) => (
-            <text
-              key={`month-${week}`}
-              x={dayLabelWidth + week * (CELL_SIZE + CELL_GAP)}
-              y={monthLabelHeight - 4}
-              className="usage-heatmap-month-label"
-            >
-              {label}
-            </text>
-          ))}
-
-          {DAY_LABELS.map((label, dayIndex) =>
-            label ? (
-              <text
-                key={`day-${dayIndex}`}
-                x={dayLabelWidth - 6}
-                y={monthLabelHeight + dayIndex * (CELL_SIZE + CELL_GAP) + CELL_SIZE - 2}
-                className="usage-heatmap-day-label"
-              >
-                {label}
-              </text>
-            ) : null,
-          )}
-
-          {cells.map((cell) => (
-            <rect
-              key={cell.date}
-              x={dayLabelWidth + cell.week * (CELL_SIZE + CELL_GAP)}
-              y={monthLabelHeight + cell.dayOfWeek * (CELL_SIZE + CELL_GAP)}
-              width={CELL_SIZE}
-              height={CELL_SIZE}
-              rx={CELL_RADIUS}
-              fill={INTENSITY_COLORS[cell.intensity]!}
-              className="usage-heatmap-cell"
-              onMouseEnter={() => setHoveredCell(cell)}
-              onMouseLeave={() => setHoveredCell(null)}
-            >
-              <title>
-                {cell.date}: {formatTokenCount(cell.totalTokens)} tokens, {cell.sessions} sessions
-              </title>
-            </rect>
-          ))}
-        </svg>
-
-        {hoveredCell && hoveredCell.totalTokens > 0 && (
-          <div className="usage-heatmap-tooltip" aria-live="polite">
-            <p className="usage-heatmap-tooltip-date">{hoveredCell.date}</p>
-            <dl className="usage-heatmap-tooltip-stats">
-              <div>
-                <dt>Total</dt>
-                <dd>{formatTokenCount(hoveredCell.totalTokens)}</dd>
-              </div>
-              <div>
-                <dt>Input</dt>
-                <dd>{formatTokenCount(hoveredCell.inputTokens)}</dd>
-              </div>
-              <div>
-                <dt>Output</dt>
-                <dd>{formatTokenCount(hoveredCell.outputTokens)}</dd>
-              </div>
-              <div>
-                <dt>Cache read</dt>
-                <dd>{formatTokenCount(hoveredCell.cacheReadTokens)}</dd>
-              </div>
-              <div>
-                <dt>Cache write</dt>
-                <dd>{formatTokenCount(hoveredCell.cacheCreationTokens)}</dd>
-              </div>
-              <div>
-                <dt>Sessions</dt>
-                <dd>{hoveredCell.sessions}</dd>
-              </div>
-            </dl>
-          </div>
-        )}
-
-        <div className="usage-heatmap-legend">
-          <span>Less</span>
-          {INTENSITY_COLORS.map((color, i) => (
-            <span
-              key={i}
-              className="usage-heatmap-legend-cell"
-              style={{ backgroundColor: color }}
-            />
-          ))}
-          <span>More</span>
+      <div className="usage-chart-split">
+        <div className="usage-chart-bar-segment-toggle">
+          <button
+            type="button"
+            className={`usage-chart-bar-segment-btn${segmentMode === "project" ? " is-active" : ""}`}
+            onClick={() => setSegmentMode("project")}
+          >
+            Project
+          </button>
+          <button
+            type="button"
+            className={`usage-chart-bar-segment-btn${segmentMode === "model" ? " is-active" : ""}`}
+            onClick={() => setSegmentMode("model")}
+          >
+            Model
+          </button>
         </div>
+        <div className="usage-chart-panel" ref={barPanel.ref}>
+          <BarChartView
+            bars={bars}
+            maxTokens={maxTokens}
+            containerWidth={barPanel.width}
+            containerHeight={barPanel.height}
+            hoveredBar={hoveredBar}
+            setHoveredBar={setHoveredBar}
+          />
+        </div>
+        <div className="usage-chart-panel" ref={heatmapPanel.ref}>
+          <HeatmapView
+            bars={heatmapBars}
+            containerWidth={heatmapPanel.width}
+            containerHeight={heatmapPanel.height}
+            hoveredBar={hoveredBar}
+            setHoveredBar={setHoveredBar}
+          />
+        </div>
+
+        {hoveredBar && hoveredBar.totalTokens > 0 && <ChartTooltip bar={hoveredBar} />}
       </div>
+
+      {segmentKeys.length > 1 && (
+        <div className="usage-chart-legend">
+          {segmentKeys.map((key) => (
+            <span key={key} className="usage-chart-legend-item">
+              <span
+                className="usage-chart-legend-dot"
+                style={{ backgroundColor: colorMap.get(key) }}
+              />
+              {key}
+            </span>
+          ))}
+        </div>
+      )}
     </section>
   );
 };

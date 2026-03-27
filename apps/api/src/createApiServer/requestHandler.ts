@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { ClaudeUsageSnapshot } from "../claudeUsage";
-import type { UsageHeatmapResponse } from "../claudeSessionScanner";
+import type { UsageChartResponse } from "../claudeSessionScanner";
 import type { CodexUsageSnapshot } from "../codexUsage";
 import {
   createDeckTentacle,
@@ -45,7 +45,7 @@ type CreateApiRequestHandlerOptions = {
   readClaudeUsageSnapshot: () => Promise<ClaudeUsageSnapshot>;
   readCodexUsageSnapshot: () => Promise<CodexUsageSnapshot>;
   readGithubRepoSummary: () => Promise<GitHubRepoSummarySnapshot>;
-  scanUsageHeatmap: (scope: "all" | "project") => Promise<UsageHeatmapResponse>;
+  scanUsageHeatmap: (scope: "all" | "project") => Promise<UsageChartResponse>;
   monitorService: MonitorService;
   invalidateClaudeUsageCache: () => void;
   allowRemoteAccess: boolean;
@@ -57,7 +57,7 @@ type RouteHandlerDependencies = {
   readClaudeUsageSnapshot: () => Promise<ClaudeUsageSnapshot>;
   readCodexUsageSnapshot: () => Promise<CodexUsageSnapshot>;
   readGithubRepoSummary: () => Promise<GitHubRepoSummarySnapshot>;
-  scanUsageHeatmap: (scope: "all" | "project") => Promise<UsageHeatmapResponse>;
+  scanUsageHeatmap: (scope: "all" | "project") => Promise<UsageChartResponse>;
   monitorService: MonitorService;
   invalidateClaudeUsageCache: () => void;
 };

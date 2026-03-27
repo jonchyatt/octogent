@@ -241,10 +241,9 @@ export const App = () => {
     enabled: isUiStateHydrated && activePrimaryNav === 5,
   });
 
-  const { heatmapData, heatmapScope, isLoadingHeatmap, changeHeatmapScope, refreshHeatmap } =
-    useUsageHeatmapPolling({
-      enabled: isUiStateHydrated && activePrimaryNav === 3,
-    });
+  const { heatmapData, isLoadingHeatmap, refreshHeatmap } = useUsageHeatmapPolling({
+    enabled: isUiStateHydrated && activePrimaryNav === 3,
+  });
 
   useConsoleKeyboardShortcuts({ setActivePrimaryNav });
 
@@ -420,11 +419,9 @@ export const App = () => {
             onDeckSidebarContent={setDeckSidebarContent}
             isMonitorVisible={isMonitorVisible}
             activityPrimaryViewProps={{
-              usageHeatmapProps: {
-                days: heatmapData?.days ?? [],
-                scope: heatmapScope,
+              usageChartProps: {
+                data: heatmapData,
                 isLoading: isLoadingHeatmap,
-                onScopeChange: changeHeatmapScope,
                 onRefresh: refreshHeatmap,
               },
               githubPrimaryViewProps: {

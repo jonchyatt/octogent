@@ -4,20 +4,23 @@ import { join } from "node:path";
 
 const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
 
-export type UsageHeatmapDay = {
+export type UsageSlice = {
+  key: string;
+  tokens: number;
+};
+
+export type UsageDayEntry = {
   date: string;
   totalTokens: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
+  projects: UsageSlice[];
+  models: UsageSlice[];
   sessions: number;
 };
 
-export type UsageHeatmapResponse = {
-  days: UsageHeatmapDay[];
-  scope: "all" | "project";
-  projectSlug: string | null;
+export type UsageChartResponse = {
+  days: UsageDayEntry[];
+  projects: string[];
+  models: string[];
 };
 
 type AssistantEvent = {
@@ -25,6 +28,7 @@ type AssistantEvent = {
   timestamp: string;
   sessionId: string;
   message?: {
+    model?: string;
     usage?: {
       input_tokens?: number;
       output_tokens?: number;
@@ -46,9 +50,17 @@ const toDateKey = (timestamp: string): string | null => {
   return new Date(parsed).toISOString().slice(0, 10);
 };
 
+type DayBucket = {
+  totalTokens: number;
+  projectTokens: Map<string, number>;
+  modelTokens: Map<string, number>;
+  sessions: Set<string>;
+};
+
 const scanJsonlFile = async (
   filePath: string,
-  buckets: Map<string, { tokens: UsageHeatmapDay; sessions: Set<string> }>,
+  projectLabel: string,
+  buckets: Map<string, DayBucket>,
 ): Promise<void> => {
   let content: string;
   try {
@@ -76,36 +88,33 @@ const scanJsonlFile = async (
     const usage = parsed.message?.usage;
     if (!usage) continue;
 
-    const inputTokens = usage.input_tokens ?? 0;
-    const outputTokens = usage.output_tokens ?? 0;
-    const cacheCreationTokens = usage.cache_creation_input_tokens ?? 0;
-    const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
-    const totalTokens = inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens;
+    const totalTokens =
+      (usage.input_tokens ?? 0) +
+      (usage.output_tokens ?? 0) +
+      (usage.cache_creation_input_tokens ?? 0) +
+      (usage.cache_read_input_tokens ?? 0);
 
     if (totalTokens === 0) continue;
 
     let bucket = buckets.get(dateKey);
     if (!bucket) {
       bucket = {
-        tokens: {
-          date: dateKey,
-          totalTokens: 0,
-          inputTokens: 0,
-          outputTokens: 0,
-          cacheReadTokens: 0,
-          cacheCreationTokens: 0,
-          sessions: 0,
-        },
+        totalTokens: 0,
+        projectTokens: new Map(),
+        modelTokens: new Map(),
         sessions: new Set(),
       };
       buckets.set(dateKey, bucket);
     }
 
-    bucket.tokens.totalTokens += totalTokens;
-    bucket.tokens.inputTokens += inputTokens;
-    bucket.tokens.outputTokens += outputTokens;
-    bucket.tokens.cacheReadTokens += cacheReadTokens;
-    bucket.tokens.cacheCreationTokens += cacheCreationTokens;
+    bucket.totalTokens += totalTokens;
+    bucket.projectTokens.set(
+      projectLabel,
+      (bucket.projectTokens.get(projectLabel) ?? 0) + totalTokens,
+    );
+
+    const modelKey = parsed.message?.model ?? "unknown";
+    bucket.modelTokens.set(modelKey, (bucket.modelTokens.get(modelKey) ?? 0) + totalTokens);
 
     if (parsed.sessionId) {
       bucket.sessions.add(parsed.sessionId);
@@ -115,7 +124,8 @@ const scanJsonlFile = async (
 
 const scanProjectDirectory = async (
   projectDir: string,
-  buckets: Map<string, { tokens: UsageHeatmapDay; sessions: Set<string> }>,
+  projectLabel: string,
+  buckets: Map<string, DayBucket>,
 ): Promise<void> => {
   let entries: string[];
   try {
@@ -125,33 +135,61 @@ const scanProjectDirectory = async (
   }
 
   const jsonlFiles = entries.filter((entry) => entry.endsWith(".jsonl"));
-  await Promise.all(jsonlFiles.map((file) => scanJsonlFile(join(projectDir, file), buckets)));
+  await Promise.all(
+    jsonlFiles.map((file) => scanJsonlFile(join(projectDir, file), projectLabel, buckets)),
+  );
 };
+
+const slugToLabel = (slug: string): string => {
+  const parts = slug.replace(/^-/, "").split("-");
+  const codebaseIndex = parts.findIndex((p) => p.toLowerCase() === "codebase");
+  const relevant = codebaseIndex >= 0 ? parts.slice(codebaseIndex + 1) : parts.slice(-1);
+  if (relevant.length === 0) return slug;
+
+  const joined = relevant.join("-");
+  const worktreeMatch = joined.match(/^(.+?)--.*?-worktrees-(.+)$/);
+  if (worktreeMatch) {
+    return `${worktreeMatch[1]}/${worktreeMatch[2]}`;
+  }
+  return joined;
+};
+
+const sortedKeys = (totals: Map<string, number>): string[] =>
+  Array.from(totals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([name]) => name);
+
+const mapToSlices = (map: Map<string, number>): UsageSlice[] =>
+  Array.from(map.entries())
+    .map(([key, tokens]) => ({ key, tokens }))
+    .sort((a, b) => b.tokens - a.tokens);
 
 const projectSlugFromCwd = (cwd: string): string => cwd.replace(/\//g, "-");
 
-let cachedResult: { response: UsageHeatmapResponse; fetchedAt: number } | null = null;
+let cachedResult: { response: UsageChartResponse; fetchedAt: number; cacheKey: string } | null =
+  null;
 const CACHE_TTL_MS = 120_000;
 
-export const scanClaudeUsageHeatmap = async (
+export const scanClaudeUsageChart = async (
   scope: "all" | "project",
   workspaceCwd: string,
-): Promise<UsageHeatmapResponse> => {
+): Promise<UsageChartResponse> => {
   const projectSlug = scope === "project" ? projectSlugFromCwd(workspaceCwd) : null;
-
   const cacheKey = `${scope}:${projectSlug ?? "all"}`;
+
   if (
     cachedResult &&
     Date.now() - cachedResult.fetchedAt < CACHE_TTL_MS &&
-    `${cachedResult.response.scope}:${cachedResult.response.projectSlug ?? "all"}` === cacheKey
+    cachedResult.cacheKey === cacheKey
   ) {
     return cachedResult.response;
   }
 
-  const buckets = new Map<string, { tokens: UsageHeatmapDay; sessions: Set<string> }>();
+  const buckets = new Map<string, DayBucket>();
 
   if (scope === "project" && projectSlug) {
-    await scanProjectDirectory(join(CLAUDE_PROJECTS_DIR, projectSlug), buckets);
+    const label = slugToLabel(projectSlug);
+    await scanProjectDirectory(join(CLAUDE_PROJECTS_DIR, projectSlug), label, buckets);
   } else {
     let projectDirs: string[];
     try {
@@ -160,18 +198,38 @@ export const scanClaudeUsageHeatmap = async (
       projectDirs = [];
     }
     await Promise.all(
-      projectDirs.map((dir) => scanProjectDirectory(join(CLAUDE_PROJECTS_DIR, dir), buckets)),
+      projectDirs.map((dir) =>
+        scanProjectDirectory(join(CLAUDE_PROJECTS_DIR, dir), slugToLabel(dir), buckets),
+      ),
     );
   }
 
-  const days = Array.from(buckets.values())
-    .map(({ tokens, sessions }) => ({
-      ...tokens,
-      sessions: sessions.size,
-    }))
+  const projectTotals = new Map<string, number>();
+  const modelTotals = new Map<string, number>();
+
+  const days: UsageDayEntry[] = Array.from(buckets.entries())
+    .map(([date, bucket]) => {
+      for (const [p, t] of bucket.projectTokens) {
+        projectTotals.set(p, (projectTotals.get(p) ?? 0) + t);
+      }
+      for (const [m, t] of bucket.modelTokens) {
+        modelTotals.set(m, (modelTotals.get(m) ?? 0) + t);
+      }
+      return {
+        date,
+        totalTokens: bucket.totalTokens,
+        projects: mapToSlices(bucket.projectTokens),
+        models: mapToSlices(bucket.modelTokens),
+        sessions: bucket.sessions.size,
+      };
+    })
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  const response: UsageHeatmapResponse = { days, scope, projectSlug };
-  cachedResult = { response, fetchedAt: Date.now() };
+  const response: UsageChartResponse = {
+    days,
+    projects: sortedKeys(projectTotals),
+    models: sortedKeys(modelTotals),
+  };
+  cachedResult = { response, fetchedAt: Date.now(), cacheKey };
   return response;
 };

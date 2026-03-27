@@ -2,47 +2,49 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { buildUsageHeatmapUrl } from "../../runtime/runtimeEndpoints";
 
-export type UsageHeatmapDay = {
+export type UsageSlice = {
+  key: string;
+  tokens: number;
+};
+
+export type UsageDayEntry = {
   date: string;
   totalTokens: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
+  projects: UsageSlice[];
+  models: UsageSlice[];
   sessions: number;
 };
 
-export type UsageHeatmapData = {
-  days: UsageHeatmapDay[];
-  scope: "all" | "project";
-  projectSlug: string | null;
+export type UsageChartData = {
+  days: UsageDayEntry[];
+  projects: string[];
+  models: string[];
 };
 
 const POLL_INTERVAL_MS = 120_000;
 
 export const useUsageHeatmapPolling = (options: { enabled: boolean }) => {
-  const [heatmapData, setHeatmapData] = useState<UsageHeatmapData | null>(null);
-  const [heatmapScope, setHeatmapScope] = useState<"all" | "project">("project");
+  const [heatmapData, setHeatmapData] = useState<UsageChartData | null>(null);
   const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
   const isInFlightRef = useRef(false);
   const isDisposedRef = useRef(false);
 
-  const fetchHeatmap = useCallback(async (scope: "all" | "project") => {
+  const fetchHeatmap = useCallback(async () => {
     if (isDisposedRef.current || isInFlightRef.current) return;
     isInFlightRef.current = true;
     setIsLoadingHeatmap(true);
 
     try {
-      const response = await fetch(buildUsageHeatmapUrl(scope), {
+      const response = await fetch(buildUsageHeatmapUrl("all"), {
         method: "GET",
         headers: { Accept: "application/json" },
       });
 
       if (!response.ok) {
-        throw new Error(`Usage heatmap request failed (${response.status})`);
+        throw new Error(`Usage chart request failed (${response.status})`);
       }
 
-      const parsed = (await response.json()) as UsageHeatmapData;
+      const parsed = (await response.json()) as UsageChartData;
       if (!isDisposedRef.current) {
         setHeatmapData(parsed);
       }
@@ -60,34 +62,24 @@ export const useUsageHeatmapPolling = (options: { enabled: boolean }) => {
     if (!options.enabled) return;
     isDisposedRef.current = false;
 
-    void fetchHeatmap(heatmapScope);
+    void fetchHeatmap();
     const timerId = window.setInterval(() => {
-      void fetchHeatmap(heatmapScope);
+      void fetchHeatmap();
     }, POLL_INTERVAL_MS);
 
     return () => {
       isDisposedRef.current = true;
       window.clearInterval(timerId);
     };
-  }, [options.enabled, heatmapScope, fetchHeatmap]);
-
-  const changeScope = useCallback(
-    (scope: "all" | "project") => {
-      setHeatmapScope(scope);
-      void fetchHeatmap(scope);
-    },
-    [fetchHeatmap],
-  );
+  }, [options.enabled, fetchHeatmap]);
 
   const refresh = useCallback(() => {
-    void fetchHeatmap(heatmapScope);
-  }, [fetchHeatmap, heatmapScope]);
+    void fetchHeatmap();
+  }, [fetchHeatmap]);
 
   return {
     heatmapData,
-    heatmapScope,
     isLoadingHeatmap,
-    changeHeatmapScope: changeScope,
     refreshHeatmap: refresh,
   };
 };

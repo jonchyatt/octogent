@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 
-import { scanClaudeUsageHeatmap } from "./claudeSessionScanner";
+import { scanClaudeUsageChart } from "./claudeSessionScanner";
 import {
   invalidateUsageCache as invalidateUsageCacheDefault,
   readClaudeUsageSnapshot as readClaudeUsageSnapshotDefault,
@@ -48,7 +48,7 @@ export const createApiServer = ({
     });
   const scanUsageHeatmapWithDefault =
     scanUsageHeatmap ??
-    ((scope: "all" | "project") => scanClaudeUsageHeatmap(scope, resolvedWorkspaceCwd));
+    ((scope: "all" | "project") => scanClaudeUsageChart(scope, resolvedWorkspaceCwd));
 
   const requestHandler = createApiRequestHandler({
     runtime,

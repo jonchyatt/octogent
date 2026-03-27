@@ -1,20 +1,20 @@
 import type { ComponentProps } from "react";
 
 import { GitHubPrimaryView } from "./GitHubPrimaryView";
-import { UsageHeatmap } from "./UsageHeatmap";
+import { UsageBarChart } from "./UsageHeatmap";
 
 type ActivityPrimaryViewProps = {
-  usageHeatmapProps: ComponentProps<typeof UsageHeatmap>;
+  usageChartProps: ComponentProps<typeof UsageBarChart>;
   githubPrimaryViewProps: ComponentProps<typeof GitHubPrimaryView>;
 };
 
 export const ActivityPrimaryView = ({
-  usageHeatmapProps,
+  usageChartProps,
   githubPrimaryViewProps,
 }: ActivityPrimaryViewProps) => {
   return (
     <section className="activity-view" aria-label="Activity primary view">
-      <UsageHeatmap {...usageHeatmapProps} />
+      <UsageBarChart {...usageChartProps} />
       <GitHubPrimaryView {...githubPrimaryViewProps} />
     </section>
   );
