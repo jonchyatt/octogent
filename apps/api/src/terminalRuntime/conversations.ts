@@ -327,7 +327,9 @@ export const listConversationSessions = (
   const summaries = sessionIds
     .map((sessionId) => {
       const detail = readConversationSession(transcriptDirectoryPath, sessionId);
-      if (!detail) {
+      // Skip sessions that have no actual conversation turns — these are
+      // PTY sessions that were spawned but never received any user input.
+      if (!detail || detail.turnCount === 0) {
         return null;
       }
 
