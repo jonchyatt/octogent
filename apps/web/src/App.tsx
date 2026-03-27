@@ -240,7 +240,7 @@ export const App = () => {
     clearSearch: clearConversationsSearch,
     navigateToSearchHit: navigateToConversationSearchHit,
   } = useConversationsRuntime({
-    enabled: isUiStateHydrated && activePrimaryNav === 4,
+    enabled: isUiStateHydrated && activePrimaryNav === 5,
   });
 
   useConsoleKeyboardShortcuts({ setActivePrimaryNav });
@@ -370,11 +370,11 @@ export const App = () => {
               isActiveAgentsSectionExpanded={isActiveAgentsSectionExpanded}
               onActiveAgentsSectionExpandedChange={setIsActiveAgentsSectionExpanded}
               isClaudeUsageVisible={
-                activePrimaryNav !== 2 && activePrimaryNav !== 4 && isClaudeUsageVisible
+                activePrimaryNav !== 2 && activePrimaryNav !== 5 && isClaudeUsageVisible
               }
               isClaudeUsageSectionExpanded={isClaudeUsageSectionExpanded}
               isCodexUsageVisible={
-                activePrimaryNav !== 2 && activePrimaryNav !== 4 && isCodexUsageVisible
+                activePrimaryNav !== 2 && activePrimaryNav !== 5 && isCodexUsageVisible
               }
               onClaudeUsageSectionExpandedChange={setIsClaudeUsageSectionExpanded}
               isCodexUsageSectionExpanded={isCodexUsageSectionExpanded}
@@ -388,7 +388,7 @@ export const App = () => {
               bodyContent={
                 activePrimaryNav === 2 ? (
                   (deckSidebarContent ?? undefined)
-                ) : activePrimaryNav === 4 ? (
+                ) : activePrimaryNav === 5 ? (
                   <SidebarConversationsList
                     sessions={conversationSessions}
                     selectedSessionId={selectedSessionId}
