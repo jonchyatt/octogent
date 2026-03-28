@@ -1,4 +1,27 @@
+import { useMemo } from "react";
+
 import type { GraphNode } from "../../app/canvas/types";
+
+const LINE_MAX = 24;
+
+const splitLabel = (label: string): [string] | [string, string] => {
+  if (label.length <= LINE_MAX) return [label];
+  // Try to break at a space near the midpoint
+  const mid = Math.floor(label.length / 2);
+  let best = -1;
+  for (let i = 0; i < label.length; i++) {
+    if (label[i] === " " && (best === -1 || Math.abs(i - mid) < Math.abs(best - mid))) {
+      best = i;
+    }
+  }
+  if (best > 0 && best < label.length - 1) {
+    const line1 = label.slice(0, best);
+    let line2 = label.slice(best + 1);
+    if (line2.length > LINE_MAX) line2 = `${line2.slice(0, LINE_MAX - 1)}…`;
+    return [line1.length > LINE_MAX ? `${line1.slice(0, LINE_MAX - 1)}…` : line1, line2];
+  }
+  return [label.slice(0, LINE_MAX - 1) + "…", label.slice(LINE_MAX - 1, LINE_MAX * 2 - 2) + (label.length > LINE_MAX * 2 - 2 ? "…" : "")];
+};
 
 type SessionNodeProps = {
   node: GraphNode;
@@ -11,6 +34,7 @@ export const SessionNode = ({ node, isSelected, onPointerDown, onClick }: Sessio
   const isActive = node.type === "active-session";
   const isLive = isActive && node.agentState === "live";
   const color = isActive ? node.color : "#9ca3af";
+  const lines = useMemo(() => splitLabel(node.label), [node.label]);
 
   return (
     <g
@@ -49,14 +73,15 @@ export const SessionNode = ({ node, isSelected, onPointerDown, onClick }: Sessio
         opacity={isActive ? 1 : 0.4}
       />
 
-      {/* Label — always visible */}
+      {/* Label — always visible, up to two lines */}
       <text
         y={node.radius + 16}
         textAnchor="middle"
         className="canvas-node-label canvas-node-label--session canvas-node-label--always"
         fill="var(--accent-primary)"
       >
-        {node.label.length > 24 ? `${node.label.slice(0, 22)}..` : node.label}
+        <tspan x="0" dy="0">{lines[0]}</tspan>
+        {lines[1] && <tspan x="0" dy="1.2em">{lines[1]}</tspan>}
       </text>
     </g>
   );

@@ -8,6 +8,26 @@ import {
   OctopusGlyph,
 } from "../EmptyOctopus";
 
+const LINE_MAX = 22;
+
+const splitLabel = (label: string): [string] | [string, string] => {
+  if (label.length <= LINE_MAX) return [label];
+  const mid = Math.floor(label.length / 2);
+  let best = -1;
+  for (let i = 0; i < label.length; i++) {
+    if (label[i] === " " && (best === -1 || Math.abs(i - mid) < Math.abs(best - mid))) {
+      best = i;
+    }
+  }
+  if (best > 0 && best < label.length - 1) {
+    const line1 = label.slice(0, best);
+    let line2 = label.slice(best + 1);
+    if (line2.length > LINE_MAX) line2 = `${line2.slice(0, LINE_MAX - 1)}…`;
+    return [line1.length > LINE_MAX ? `${line1.slice(0, LINE_MAX - 1)}…` : line1, line2];
+  }
+  return [`${label.slice(0, LINE_MAX - 1)}…`, label.slice(LINE_MAX - 1, LINE_MAX * 2 - 2) + (label.length > LINE_MAX * 2 - 2 ? "…" : "")];
+};
+
 const ANIMATIONS: OctopusAnimation[] = ["sway", "walk", "jog", "bounce", "float", "swim-up"];
 const EXPRESSIONS: OctopusExpression[] = ["normal", "happy", "angry", "surprised"];
 const ACCESSORIES: OctopusAccessory[] = ["none", "none", "long", "mohawk", "side-sweep", "curly"];
@@ -93,6 +113,7 @@ export const OctopusNode = ({
   onClick,
 }: OctopusNodeProps) => {
   const isOctoboss = node.type === "octoboss";
+  const lines = useMemo(() => splitLabel(node.label), [node.label]);
   const visuals = useMemo(
     () =>
       isOctoboss
@@ -171,14 +192,15 @@ export const OctopusNode = ({
         </div>
       </foreignObject>
 
-      {/* Label — always visible */}
+      {/* Label — always visible, up to two lines */}
       <text
         y={glyphH / 2 - 12}
         textAnchor="middle"
         className="canvas-node-label canvas-node-label--tentacle canvas-node-label--always"
         fill={isOctoboss ? "var(--accent-primary, #d4a017)" : "#faa32c"}
       >
-        {node.label.length > 18 ? `${node.label.slice(0, 16)}..` : node.label}
+        <tspan x="0" dy="0">{lines[0]}</tspan>
+        {lines[1] && <tspan x="0" dy="1.2em">{lines[1]}</tspan>}
       </text>
     </g>
   );

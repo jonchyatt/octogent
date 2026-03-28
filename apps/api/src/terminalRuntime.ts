@@ -57,6 +57,20 @@ export type {
 export { isTerminalAgentProvider, isTerminalCompletionSound } from "./terminalRuntime/types";
 export { RuntimeInputError } from "./terminalRuntime/types";
 
+const MAX_AUTO_NAME_LENGTH = 50;
+
+const deriveTerminalNameFromPrompt = (prompt: string): string => {
+  const normalized = prompt.replace(/\s+/g, " ").trim();
+  if (normalized.length <= MAX_AUTO_NAME_LENGTH) {
+    return normalized;
+  }
+
+  // Truncate at the last space before the limit to avoid cutting mid-word.
+  const truncated = normalized.slice(0, MAX_AUTO_NAME_LENGTH);
+  const lastSpace = truncated.lastIndexOf(" ");
+  return lastSpace > 0 ? `${truncated.slice(0, lastSpace)}…` : `${truncated}…`;
+};
+
 export const createTerminalRuntime = ({
   workspaceCwd,
   gitClient = createDefaultGitClient(),
@@ -883,6 +897,33 @@ export const createTerminalRuntime = ({
           session.agentState = "waiting_for_user";
           session.stateTracker.forceState("waiting_for_user");
           broadcastMessage(session, { type: "state", state: "waiting_for_user" });
+        }
+
+        return { ok: true };
+      }
+
+      if (hookName === "user-prompt-submit") {
+        if (!octogentSessionId) {
+          return { ok: true };
+        }
+
+        const terminal = terminals.get(octogentSessionId);
+        if (!terminal) {
+          return { ok: true };
+        }
+
+        // Auto-name the terminal from the first prompt when it still has its default name.
+        if (terminal.tentacleName === terminal.terminalId) {
+          const prompt =
+            typeof hookPayloadRecord.prompt === "string" ? hookPayloadRecord.prompt.trim() : "";
+          if (prompt.length > 0) {
+            const derived = deriveTerminalNameFromPrompt(prompt);
+            terminal.tentacleName = derived;
+            persistRegistry();
+            console.log(
+              `[Hook] Auto-named terminal ${terminal.terminalId} → "${derived}"`,
+            );
+          }
         }
 
         return { ok: true };

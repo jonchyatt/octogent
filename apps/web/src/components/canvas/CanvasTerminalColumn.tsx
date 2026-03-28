@@ -41,15 +41,15 @@ export const CanvasTerminalColumn = ({
       <div className="canvas-terminal-column-header">
         <div className="canvas-terminal-column-heading">
           <h2>
-            <span className="canvas-terminal-column-name">{node.label}</span>
+            <span className="canvas-terminal-column-name">{tentacleName}</span>
             {workspaceMode === "worktree" && (
               <span className="canvas-terminal-column-badge">WT</span>
             )}
           </h2>
         </div>
         <div className="canvas-terminal-column-actions">
-          <span className="canvas-terminal-column-tag" style={{ background: node.color }}>
-            {tentacleName}
+          <span className="canvas-terminal-column-tentacle-tag" style={{ background: node.color }}>
+            {node.tentacleId}
           </span>
           <AgentStateBadge state={agentState} />
           <button
