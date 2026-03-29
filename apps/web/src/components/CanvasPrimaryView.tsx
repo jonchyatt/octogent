@@ -7,6 +7,7 @@ import { useCanvasTransform } from "../app/hooks/useCanvasTransform";
 import { DEFAULT_FORCE_PARAMS, useForceSimulation } from "../app/hooks/useForceSimulation";
 import type { TerminalView } from "../app/types";
 import { CanvasTerminalColumn } from "./canvas/CanvasTerminalColumn";
+import { CanvasTentaclePanel } from "./canvas/CanvasTentaclePanel";
 import { DeleteTentacleDialog } from "./DeleteTentacleDialog";
 import { OctopusNode } from "./canvas/OctopusNode";
 import { SessionNode } from "./canvas/SessionNode";
@@ -70,6 +71,7 @@ export const CanvasPrimaryView = ({
 }: CanvasPrimaryViewProps) => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [openTerminals, setOpenTerminals] = useState<Map<string, GraphNode>>(new Map());
+  const [openTentacles, setOpenTentacles] = useState<Map<string, GraphNode>>(new Map());
   const [dragNodeId, setDragNodeId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [terminalsPanelWidth, setTerminalsPanelWidth] = useState<number | null>(null);
@@ -192,12 +194,30 @@ export const CanvasPrimaryView = ({
           }
           return next;
         });
+      } else if (node.type === "tentacle" || node.type === "octoboss") {
+        setOpenTentacles((prev) => {
+          const next = new Map(prev);
+          if (next.has(nodeId)) {
+            next.delete(nodeId);
+          } else {
+            next.set(nodeId, { ...node });
+          }
+          return next;
+        });
       } else if (node.type === "inactive-session" && node.sessionId) {
         onNavigateToConversation?.(node.sessionId);
       }
     },
     [nodesById, onNavigateToConversation],
   );
+
+  const handleCloseTentacle = useCallback((nodeId: string) => {
+    setOpenTentacles((prev) => {
+      const next = new Map(prev);
+      next.delete(nodeId);
+      return next;
+    });
+  }, []);
 
   const handleCloseTerminal = useCallback((nodeId: string) => {
     setOpenTerminals((prev) => {
@@ -414,11 +434,11 @@ export const CanvasPrimaryView = ({
     (n) => n.type !== "tentacle" && n.type !== "octoboss",
   );
 
-  const hasTerminals = openTerminals.size > 0;
+  const hasPanels = openTerminals.size > 0 || openTentacles.size > 0;
 
   return (
     <section ref={containerRef} className="canvas-view" aria-label="Canvas graph view">
-      <div className={`canvas-graph-panel${hasTerminals ? " canvas-graph-panel--split" : ""}`}>
+      <div className={`canvas-graph-panel${hasPanels ? " canvas-graph-panel--split" : ""}`}>
         <svg
           ref={svgRef}
           className={`canvas-svg${isPanning || dragNodeId ? " canvas-svg--panning" : ""}`}
@@ -464,7 +484,7 @@ export const CanvasPrimaryView = ({
         </svg>
       </div>
 
-      {hasTerminals && (
+      {hasPanels && (
         <>
           <div
             className="canvas-panel-divider"
@@ -482,6 +502,22 @@ export const CanvasPrimaryView = ({
               terminalsPanelWidth != null ? { flex: `0 0 ${terminalsPanelWidth}px` } : undefined
             }
           >
+            {Array.from(openTentacles.entries()).map(([nodeId, node]) => (
+              <CanvasTentaclePanel
+                key={nodeId}
+                node={node}
+                isFocused={selectedNodeId === nodeId}
+                onClose={() => handleCloseTentacle(nodeId)}
+                onFocus={() => setSelectedNodeId(nodeId)}
+                onCreateAgent={(tentacleId) => {
+                  handleCreateAgent(tentacleId);
+                }}
+                onSpawnSwarm={(tentacleId) => {
+                  handleSpawnSwarm(tentacleId);
+                }}
+                onNavigateToConversation={onNavigateToConversation}
+              />
+            ))}
             {Array.from(openTerminals.entries()).map(([nodeId, node]) => (
               <CanvasTerminalColumn
                 key={nodeId}

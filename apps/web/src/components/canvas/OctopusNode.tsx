@@ -128,7 +128,7 @@ export const OctopusNode = ({
         : deriveOctopusVisuals(node.tentacleId),
     [node.tentacleId, isOctoboss],
   );
-  const glyphScale = isOctoboss ? 5.4 : GLYPH_SCALE;
+  const glyphScale = isOctoboss ? 6 : GLYPH_SCALE;
   const glyphW = Math.round(GLYPH_W * (glyphScale / GLYPH_SCALE));
   const glyphH = Math.round(GLYPH_H * (glyphScale / GLYPH_SCALE));
   const color = node.color;

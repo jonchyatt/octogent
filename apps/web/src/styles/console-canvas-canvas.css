@@ -497,6 +497,300 @@
   cursor: not-allowed;
 }
 
+/* ─── Tentacle info panel (right side, alongside terminal columns) ──────── */
+
+.canvas-tentacle-panel {
+  flex: 1 0 340px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-surface-0, #0c1018);
+  overflow-y: auto;
+}
+
+.canvas-tentacle-panel:first-child {
+  border-left: none;
+}
+
+.canvas-tentacle-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-surface-1, #111720);
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-main);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.canvas-tentacle-panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.canvas-tentacle-panel-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+}
+
+.canvas-tentacle-panel-color {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.canvas-tentacle-panel-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-tentacle-panel-status {
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.canvas-tentacle-panel-status--idle { background: #1a1f28; color: #6b7280; }
+.canvas-tentacle-panel-status--active { background: #0a2f1a; color: #34d399; }
+.canvas-tentacle-panel-status--blocked { background: #2f1a0a; color: #f59e0b; }
+.canvas-tentacle-panel-status--needs-review { background: #2a1a2f; color: #a78bfa; }
+
+.canvas-tentacle-panel-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.canvas-tentacle-panel-close:hover {
+  color: var(--accent-primary);
+}
+
+.canvas-tentacle-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.canvas-tentacle-panel-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.canvas-tentacle-panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.canvas-tentacle-panel-section-title {
+  margin: 0;
+  font-family: var(--font-main);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.canvas-tentacle-panel-description {
+  margin: 0;
+  font-family: var(--font-main);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.canvas-tentacle-panel-empty {
+  margin: 0;
+  font-family: var(--font-main);
+  font-size: 0.65rem;
+  color: var(--text-secondary, #6b7280);
+  font-style: italic;
+}
+
+/* Progress */
+
+.canvas-tentacle-panel-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.canvas-tentacle-panel-progress-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: #1a1f28;
+  overflow: hidden;
+}
+
+.canvas-tentacle-panel-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.canvas-tentacle-panel-progress-label {
+  font-family: var(--font-main);
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--text-secondary, #9ca3af);
+  flex-shrink: 0;
+}
+
+/* Todos */
+
+.canvas-tentacle-panel-todos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.canvas-tentacle-panel-todo {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-family: var(--font-main);
+  font-size: 0.65rem;
+  color: var(--text-primary);
+}
+
+.canvas-tentacle-panel-todo--done {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.canvas-tentacle-panel-todo input[type="checkbox"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--accent-primary);
+}
+
+/* Sessions list */
+
+.canvas-tentacle-panel-sessions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.canvas-tentacle-panel-session-btn {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 4px;
+  background: var(--bg-surface-1, #111720);
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  font-size: 0.65rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvas-tentacle-panel-session-btn:hover {
+  background: color-mix(in srgb, var(--accent-primary) 15%, var(--bg-surface-1, #111720));
+}
+
+.canvas-tentacle-panel-session-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.canvas-tentacle-panel-session-meta {
+  font-size: 0.55rem;
+  color: var(--text-secondary, #6b7280);
+}
+
+/* Actions */
+
+.canvas-tentacle-panel-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.canvas-tentacle-panel-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--bg-surface-1, #111720);
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.canvas-tentacle-panel-action:hover {
+  background: color-mix(in srgb, var(--accent-primary) 20%, var(--bg-surface-1, #111720));
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.canvas-tentacle-panel-action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2em;
+  opacity: 0.7;
+  font-size: 1rem;
+}
+
+.canvas-tentacle-panel-action:hover .canvas-tentacle-panel-action-icon {
+  opacity: 1;
+}
+
 /* ── Delete confirmation dialog (bottom-left corner) ── */
 
 .canvas-delete-dialog {
