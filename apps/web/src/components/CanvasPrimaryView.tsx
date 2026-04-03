@@ -131,38 +131,53 @@ export const CanvasPrimaryView = ({
     return map;
   }, [simulatedNodes]);
 
-  // Hydrate open terminals from persisted IDs once UI state and graph nodes are available
+  // Hydrate open terminals after a settling delay so all async data (columns,
+  // graph nodes, simulation) has time to land before we attempt the lookup.
+  const [isHydratingTerminals, setIsHydratingTerminals] = useState(false);
+
   useEffect(() => {
     if (hasHydratedTerminals.current) return;
     if (!isUiStateHydrated) return;
-    if (simulatedNodes.length === 0) return;
+    if (!canvasOpenTerminalIds || canvasOpenTerminalIds.length === 0) {
+      hasHydratedTerminals.current = true;
+      return;
+    }
 
-    if (canvasOpenTerminalIds && canvasOpenTerminalIds.length > 0) {
-      const restoredMap = new Map<string, GraphNode>();
-      for (const nodeId of canvasOpenTerminalIds) {
-        const node = nodesById.get(nodeId);
-        if (node && node.type === "active-session") {
-          restoredMap.set(nodeId, { ...node });
-        }
+    setIsHydratingTerminals(true);
+    const timer = window.setTimeout(() => {
+      setIsHydratingTerminals(false);
+      hasHydratedTerminals.current = true;
+    }, 800);
+
+    return () => window.clearTimeout(timer);
+  }, [isUiStateHydrated, canvasOpenTerminalIds]);
+
+  // Once the settling timer fires, perform the actual hydration from the
+  // simulation graph which should now be fully populated.
+  useEffect(() => {
+    if (isHydratingTerminals) return;
+    if (!hasHydratedTerminals.current) return;
+    if (openTerminals.size > 0) return;
+    if (!canvasOpenTerminalIds || canvasOpenTerminalIds.length === 0) return;
+
+    const restoredMap = new Map<string, GraphNode>();
+    for (const nodeId of canvasOpenTerminalIds) {
+      const node = nodesById.get(nodeId);
+      if (node && node.type === "active-session") {
+        restoredMap.set(nodeId, { ...node });
       }
-      if (restoredMap.size > 0) {
-        setOpenTerminals(restoredMap);
-      } else {
-        // Nodes not yet in the simulation graph — wait for the next tick
-        return;
-      }
+    }
+    if (restoredMap.size > 0) {
+      setOpenTerminals(restoredMap);
     }
 
     if (persistedTerminalsPanelWidth != null && persistedTerminalsPanelWidth > 0) {
       setTerminalsPanelWidth(persistedTerminalsPanelWidth);
     }
-
-    hasHydratedTerminals.current = true;
   }, [
-    isUiStateHydrated,
+    isHydratingTerminals,
     canvasOpenTerminalIds,
     persistedTerminalsPanelWidth,
-    simulatedNodes.length,
     nodesById,
   ]);
 
@@ -516,7 +531,7 @@ export const CanvasPrimaryView = ({
     refreshGraphData();
   }, [refreshGraphData]);
 
-  const hasPanels = openTerminals.size > 0 || openTentacles.size > 0;
+  const hasPanels = isHydratingTerminals || openTerminals.size > 0 || openTentacles.size > 0;
 
   return (
     <section ref={containerRef} className="canvas-view" aria-label="Canvas graph view">
@@ -664,6 +679,16 @@ export const CanvasPrimaryView = ({
                 onNavigateToConversation={onNavigateToConversation}
               />
             ))}
+            {isHydratingTerminals && openTerminals.size === 0 && (
+              <div className="canvas-terminal-skeleton">
+                <div className="canvas-terminal-skeleton__header" />
+                <div className="canvas-terminal-skeleton__body">
+                  <div className="canvas-terminal-skeleton__line" style={{ width: "60%" }} />
+                  <div className="canvas-terminal-skeleton__line" style={{ width: "80%" }} />
+                  <div className="canvas-terminal-skeleton__line" style={{ width: "45%" }} />
+                </div>
+              </div>
+            )}
             {Array.from(openTerminals.entries()).map(([nodeId, node]) => (
               <CanvasTerminalColumn
                 key={nodeId}

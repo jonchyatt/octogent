@@ -376,6 +376,42 @@
   background: #0a0e14;
 }
 
+/* ─── Terminal skeleton loading ───────────────────────────────────────────── */
+
+.canvas-terminal-skeleton {
+  flex: 1 0 370px;
+  display: flex;
+  flex-direction: column;
+  background: #0a0e14;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.canvas-terminal-skeleton__header {
+  height: 32px;
+  background: #151b24;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.canvas-terminal-skeleton__body {
+  flex: 1;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.canvas-terminal-skeleton__line {
+  height: 12px;
+  background: #151b24;
+  border-radius: 3px;
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+
 /* ─── Individual terminal column in the panel ──────────────────────────────── */
 
 .canvas-terminal-column {
