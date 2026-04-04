@@ -48,8 +48,9 @@ Only begin merging after ALL {{workerCount}} workers have reported DONE.
 
 ### Step-by-step merge process
 
-1. **Create an integration branch** from `{{baseBranch}}`:
+1. **Create an integration branch** from `{{baseBranch}}`. First check if a stale integration branch exists from a previous swarm attempt — if so, delete it before proceeding:
    ```bash
+   git branch -D octogent_integration_{{tentacleId}} 2>/dev/null || true
    git checkout {{baseBranch}}
    git checkout -b octogent_integration_{{tentacleId}}
    ```
