@@ -4,7 +4,6 @@
 /* Shared UI primitives and surfaces */
 @import "./styles/chrome-and-buttons.css";
 @import "./styles/sidebar-and-scrollbars.css";
-@import "./styles/board-and-dialog.css";
 @import "./styles/terminal-and-status.css";
 
 /* Console theme tokens and console-specific overrides */

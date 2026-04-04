@@ -13,7 +13,6 @@ export const PRIMARY_NAV_ITEMS = [
   { index: 3, label: "Activity" },
   { index: 4, label: "Monitor" },
   { index: 5, label: "Conversations" },
-  { index: 6, label: "Board" },
   { index: 7, label: "Code Intel" },
   { index: 8, label: "Settings" },
 ] as const;

@@ -1,5 +1,5 @@
 import { buildTerminalList } from "@octogent/core";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 import { useBackendLivenessPolling } from "./app/hooks/useBackendLivenessPolling";
 import { OCTOBOSS_ID } from "./app/hooks/useCanvasGraphData";
@@ -13,10 +13,8 @@ import { useInitialColumnsHydration } from "./app/hooks/useInitialColumnsHydrati
 import { useMonitorRuntime } from "./app/hooks/useMonitorRuntime";
 import { usePersistedUiState } from "./app/hooks/usePersistedUiState";
 import { useTentacleGitLifecycle } from "./app/hooks/useTentacleGitLifecycle";
-import { useTerminalBoardInteractions } from "./app/hooks/useTerminalBoardInteractions";
 import { useTerminalCompletionNotification } from "./app/hooks/useTerminalCompletionNotification";
 import { useTerminalMutations } from "./app/hooks/useTerminalMutations";
-import { useTerminalNameInputFocus } from "./app/hooks/useTerminalNameInputFocus";
 import { useTerminalStateReconciliation } from "./app/hooks/useTerminalStateReconciliation";
 import { useUsageHeatmapPolling } from "./app/hooks/useUsageHeatmapPolling";
 import { clampSidebarWidth } from "./app/normalizers";
@@ -38,14 +36,11 @@ export const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [terminalStates, setTerminalStates] = useState<Record<string, AgentRuntimeState>>({});
-  const [selectedTerminalId, setSelectedTerminalId] = useState<string | null>(null);
   const [hoveredGitHubOverviewPointIndex, setHoveredGitHubOverviewPointIndex] = useState<
     number | null
   >(null);
   const [deckSidebarContent, setDeckSidebarContent] = useState<ReactNode>(null);
   const [isPendingClearAllConversations, setIsPendingClearAllConversations] = useState(false);
-  const terminalsRef = useRef<HTMLElement | null>(null);
-  const terminalNameInputRef = useRef<HTMLInputElement | null>(null);
 
   const {
     activePrimaryNav,
@@ -76,10 +71,8 @@ export const App = () => {
     setMinimizedTerminalIds,
     setSidebarWidth,
     setTerminalCompletionSound,
-    setTerminalWidths,
     sidebarWidth,
     terminalCompletionSound,
-    terminalWidths,
     canvasOpenTerminalIds,
     setCanvasOpenTerminalIds,
     canvasOpenTentacleIds,
@@ -87,22 +80,6 @@ export const App = () => {
     canvasTerminalsPanelWidth,
     setCanvasTerminalsPanelWidth,
   } = usePersistedUiState({ columns: terminals });
-
-  const visibleTerminals = useMemo(
-    () => terminals.filter((terminal) => !minimizedTerminalIds.includes(terminal.terminalId)),
-    [terminals, minimizedTerminalIds],
-  );
-
-  useEffect(() => {
-    const visibleTerminalIds = new Set(visibleTerminals.map((terminal) => terminal.terminalId));
-    setSelectedTerminalId((currentSelectedTerminalId) => {
-      if (currentSelectedTerminalId !== null && visibleTerminalIds.has(currentSelectedTerminalId)) {
-        return currentSelectedTerminalId;
-      }
-
-      return visibleTerminals[0]?.terminalId ?? null;
-    });
-  }, [visibleTerminals]);
 
   const readColumns = useCallback(async (signal?: AbortSignal) => {
     const readerOptions: { endpoint: string; signal?: AbortSignal } = {
@@ -116,20 +93,13 @@ export const App = () => {
   }, []);
 
   const {
-    beginTerminalNameEdit,
-    cancelTerminalRename,
     clearPendingDeleteTerminal,
     confirmDeleteTerminal,
     createTerminal,
-    editingTerminalId,
     isCreatingTerminal,
     isDeletingTerminalId,
     pendingDeleteTerminal,
     requestDeleteTerminal,
-    setEditingTerminalId,
-    setTerminalNameDraft,
-    submitTerminalRename,
-    terminalNameDraft,
   } = useTerminalMutations({
     readColumns: async () => readColumns(),
     setColumns: setTerminals,
@@ -176,29 +146,15 @@ export const App = () => {
   const backendLivenessStatus = useBackendLivenessPolling();
   const { githubRepoSummary, isRefreshingGitHubSummary, refreshGitHubRepoSummary } =
     useGithubSummaryPolling();
-  const {
-    handleMaximizeTerminal,
-    handleMinimizeTerminal,
-    handleTerminalDividerKeyDown,
-    handleTerminalDividerPointerDown,
-    handleTerminalHeaderWheel,
-  } = useTerminalBoardInteractions({
-    terminalsRef,
-    visibleColumns: visibleTerminals,
-    terminalWidths,
-    setTerminalWidths,
-    setMinimizedTerminalIds,
-    editingTerminalId,
-    setEditingTerminalId,
-    setTerminalNameDraft,
-  });
+  const handleMaximizeTerminal = useCallback(
+    (terminalId: string) => {
+      setMinimizedTerminalIds((current) =>
+        current.filter((currentTerminalId) => currentTerminalId !== terminalId),
+      );
+    },
+    [setMinimizedTerminalIds],
+  );
 
-  useTerminalNameInputFocus({
-    columns: terminals,
-    editingTerminalId,
-    setEditingTerminalId,
-    terminalNameInputRef,
-  });
   useTerminalStateReconciliation({
     columns: terminals,
     setMinimizedTerminalIds,
@@ -590,48 +546,6 @@ export const App = () => {
               },
               selectedSession,
               sessions: conversationSessions,
-            }}
-            terminalBoardProps={{
-              terminals,
-              editingTerminalId: editingTerminalId,
-              gitStatusByTentacleId,
-              gitStatusLoadingByTentacleId,
-              pullRequestByTentacleId,
-              pullRequestLoadingByTentacleId,
-              isDeletingTerminalId: isDeletingTerminalId,
-              isLoading,
-              loadError,
-              onBeginTerminalNameEdit: beginTerminalNameEdit,
-              onCancelTerminalRename: cancelTerminalRename,
-              onMinimizeTerminal: handleMinimizeTerminal,
-              onOpenTerminalGitActions: (terminalId) => {
-                setIsAgentsSidebarVisible(true);
-                openTentacleGitActions(terminalId);
-              },
-              onRequestDeleteTerminal: (terminalId, terminalName, workspaceMode) => {
-                setIsAgentsSidebarVisible(true);
-                closeTentacleGitActions();
-                requestDeleteTerminal(terminalId, terminalName, {
-                  workspaceMode,
-                  intent: "delete-terminal",
-                });
-              },
-              onSubmitTerminalRename: (terminalId, currentTerminalName) => {
-                void submitTerminalRename(terminalId, currentTerminalName);
-              },
-              onTerminalDividerKeyDown: handleTerminalDividerKeyDown,
-              onTerminalDividerPointerDown: handleTerminalDividerPointerDown,
-              onTerminalHeaderWheel: handleTerminalHeaderWheel,
-              onTerminalNameDraftChange: setTerminalNameDraft,
-              onSelectTerminal: setSelectedTerminalId,
-              onTerminalStateChange: handleTerminalStateChange,
-              onTerminalRenamed: handleTerminalRenamed,
-              selectedTerminalId,
-              terminalNameDraft: terminalNameDraft,
-              terminalNameInputRef,
-              terminalWidths: terminalWidths,
-              terminalsRef,
-              visibleTerminals,
             }}
           />
         </div>

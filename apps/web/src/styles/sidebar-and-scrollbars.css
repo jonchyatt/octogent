@@ -1,18 +1,3 @@
-.terminals {
-  display: flex;
-  flex-direction: row;
-  gap: 0;
-  padding: 0;
-  align-items: stretch;
-  min-height: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-
-.terminals > .empty-state {
-  flex: 1 0 100%;
-}
-
 .dashboard-deck-shell {
   min-height: 0;
   display: grid;
