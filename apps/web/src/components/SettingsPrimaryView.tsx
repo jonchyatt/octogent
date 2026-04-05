@@ -8,11 +8,13 @@ import { SettingsToggle } from "./ui/SettingsToggle";
 type SettingsPrimaryViewProps = {
   terminalCompletionSound: TerminalCompletionSoundId;
   isRuntimeStatusStripVisible: boolean;
+  isMonitorVisible: boolean;
   isCodexUsageVisible: boolean;
   isClaudeUsageVisible: boolean;
   onTerminalCompletionSoundChange: (soundId: TerminalCompletionSoundId) => void;
   onPreviewTerminalCompletionSound: (soundId: TerminalCompletionSoundId) => void;
   onRuntimeStatusStripVisibilityChange: (visible: boolean) => void;
+  onMonitorVisibilityChange: (visible: boolean) => void;
   onCodexUsageVisibilityChange: (visible: boolean) => void;
   onClaudeUsageVisibilityChange: (visible: boolean) => void;
 };
@@ -20,11 +22,13 @@ type SettingsPrimaryViewProps = {
 export const SettingsPrimaryView = ({
   terminalCompletionSound,
   isRuntimeStatusStripVisible,
+  isMonitorVisible,
   isCodexUsageVisible,
   isClaudeUsageVisible,
   onTerminalCompletionSoundChange,
   onPreviewTerminalCompletionSound,
   onRuntimeStatusStripVisibilityChange,
+  onMonitorVisibilityChange,
   onCodexUsageVisibilityChange,
   onClaudeUsageVisibilityChange,
 }: SettingsPrimaryViewProps) => (
@@ -81,6 +85,13 @@ export const SettingsPrimaryView = ({
       </header>
 
       <div className="settings-toggle-grid" role="group" aria-label="Workspace surface visibility">
+        <SettingsToggle
+          label="X Monitor"
+          description="Auto-fetch X feed and show monitor tab"
+          ariaLabel="Enable X Monitor"
+          checked={isMonitorVisible}
+          onChange={onMonitorVisibilityChange}
+        />
         <SettingsToggle
           label="Runtime status strip"
           description="Top console status strip metrics"

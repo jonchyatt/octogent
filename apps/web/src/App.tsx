@@ -411,9 +411,11 @@ export const App = () => {
             settingsPrimaryViewProps={{
               isClaudeUsageVisible,
               isCodexUsageVisible,
+              isMonitorVisible,
               isRuntimeStatusStripVisible,
               onClaudeUsageVisibilityChange: setIsClaudeUsageVisible,
               onCodexUsageVisibilityChange: setIsCodexUsageVisible,
+              onMonitorVisibilityChange: setIsMonitorVisible,
               onRuntimeStatusStripVisibilityChange: setIsRuntimeStatusStripVisible,
               onPreviewTerminalCompletionSound: playCompletionSoundPreview,
               onTerminalCompletionSoundChange: setTerminalCompletionSound,
