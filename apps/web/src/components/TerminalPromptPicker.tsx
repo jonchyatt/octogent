@@ -5,18 +5,32 @@ import { buildPromptItemUrl, buildPromptsUrl } from "../runtime/runtimeEndpoints
 
 type TerminalPromptPickerProps = {
   isOpen: boolean;
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
   onSelectPrompt: (content: string) => void;
 };
 
 export const TerminalPromptPicker = ({
   isOpen,
+  anchorRef,
   onClose,
   onSelectPrompt,
 }: TerminalPromptPickerProps) => {
   const [prompts, setPrompts] = useState<PromptLibraryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const [style, setStyle] = useState<React.CSSProperties>({});
+
+  useEffect(() => {
+    if (!isOpen || !anchorRef.current) return;
+
+    const rect = anchorRef.current.getBoundingClientRect();
+    setStyle({
+      position: "fixed",
+      top: rect.bottom + 2,
+      right: window.innerWidth - rect.right,
+    });
+  }, [isOpen, anchorRef]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -40,7 +54,12 @@ export const TerminalPromptPicker = ({
     if (!isOpen) return;
 
     const handleClickOutside = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target as Node) &&
+        anchorRef.current &&
+        !anchorRef.current.contains(e.target as Node)
+      ) {
         onClose();
       }
     };
@@ -49,7 +68,7 @@ export const TerminalPromptPicker = ({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, anchorRef]);
 
   const handleSelectPrompt = useCallback(
     async (name: string) => {
@@ -72,7 +91,7 @@ export const TerminalPromptPicker = ({
   const builtinPrompts = prompts.filter((p) => p.source === "builtin");
 
   return (
-    <div className="prompt-picker-popover" ref={popoverRef}>
+    <div className="prompt-picker-popover" ref={popoverRef} style={style}>
       <div className="prompt-picker-header">Insert Prompt</div>
       {isLoading ? (
         <div className="prompt-picker-loading">Loading...</div>

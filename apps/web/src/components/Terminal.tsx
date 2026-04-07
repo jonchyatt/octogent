@@ -81,6 +81,7 @@ export const Terminal = ({
   const [agentState, setAgentRuntimeState] = useState<AgentRuntimeState>("idle");
   const [isPromptBannerDismissed, setIsPromptBannerDismissed] = useState(false);
   const [isPromptPickerOpen, setIsPromptPickerOpen] = useState(false);
+  const promptPickerBtnRef = useRef<HTMLButtonElement | null>(null);
   const rawTitle = terminalLabel && terminalLabel.length > 0 ? terminalLabel : terminalId;
   const terminalTitle = rawTitle.length > 24 ? `${rawTitle.slice(0, 24)}...` : rawTitle;
 
@@ -446,6 +447,7 @@ export const Terminal = ({
           {!hidePromptPicker && (
             <div className="terminal-prompt-picker-anchor">
               <button
+                ref={promptPickerBtnRef}
                 type="button"
                 className="terminal-prompt-picker-btn"
                 title="Insert prompt"
@@ -459,6 +461,7 @@ export const Terminal = ({
               </button>
               <TerminalPromptPicker
                 isOpen={isPromptPickerOpen}
+                anchorRef={promptPickerBtnRef}
                 onClose={() => {
                   setIsPromptPickerOpen(false);
                 }}

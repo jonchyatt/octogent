@@ -403,10 +403,7 @@
 }
 
 .prompt-picker-popover {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 100;
+  z-index: 1000;
   min-width: 200px;
   max-width: 320px;
   max-height: 300px;
