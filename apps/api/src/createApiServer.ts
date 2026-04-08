@@ -48,8 +48,11 @@ export const createApiServer = ({
     }
   }
 
-  // After bootstrap, always read from the project state dir.
-  const resolvedPromptsDir = resolvedCorePromptsDir;
+  // Read builtin prompts from the live source directory when available so new
+  // prompt files and prompt edits take effect without restarting the API.
+  // Keep the mirrored state copy as a fallback for packaged/runtime setups
+  // where the source prompts directory is unavailable.
+  const resolvedPromptsDir = fsExistsSync(sourceDir) ? sourceDir : resolvedCorePromptsDir;
   const readGithubRepoSummaryWithDefault =
     readGithubRepoSummary ??
     (() =>

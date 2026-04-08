@@ -209,6 +209,40 @@ export const createSessionRuntime = ({
     }
   };
 
+  const stripBrokenLeadingAnsi = (text: string): string => {
+    let nextText = text;
+
+    while (nextText.length > 0) {
+      if (nextText.startsWith("\u001b")) {
+        return nextText;
+      }
+
+      const oscMatch = nextText.match(/^\][^\u0007\u001b]*(?:\u0007|\u001b\\)/);
+      if (oscMatch) {
+        nextText = nextText.slice(oscMatch[0].length);
+        continue;
+      }
+
+      const csiTailMatch = nextText.match(/^\[[0-9:;<=>?]*[ -/]*[@-~]/);
+      if (csiTailMatch) {
+        nextText = nextText.slice(csiTailMatch[0].length);
+        continue;
+      }
+
+      const orphanedCsiTailMatch = nextText.match(
+        /^(?=[0-9:;<=>?]*[;:<=>?])[0-9:;<=>?]*[ -/]*[@-~]/,
+      );
+      if (orphanedCsiTailMatch) {
+        nextText = nextText.slice(orphanedCsiTailMatch[0].length);
+        continue;
+      }
+
+      break;
+    }
+
+    return nextText;
+  };
+
   const sendHistory = (websocket: WebSocket, session: TerminalSession) => {
     if (session.scrollbackChunks.length === 0) {
       return;
@@ -216,7 +250,7 @@ export const createSessionRuntime = ({
 
     sendMessage(websocket, {
       type: "history",
-      data: session.scrollbackChunks.join(""),
+      data: stripBrokenLeadingAnsi(session.scrollbackChunks.join("")),
     });
   };
 

@@ -51,6 +51,7 @@ type CanvasPrimaryViewProps = {
   canvasOpenTerminalIds?: string[];
   canvasOpenTentacleIds?: string[];
   canvasTerminalsPanelWidth?: number | null;
+  recentlyCreatedTerminal?: TerminalView[number] | null;
   onCanvasOpenTerminalIdsChange?: (ids: string[]) => void;
   onCanvasOpenTentacleIdsChange?: (ids: string[]) => void;
   onCanvasTerminalsPanelWidthChange?: (width: number | null) => void;
@@ -60,6 +61,7 @@ type CanvasPrimaryViewProps = {
   onCreateTentacle?: () => void;
   onSpawnSwarm?: (tentacleId: string, workspaceMode: TerminalWorkspaceMode) => Promise<void>;
   onOctobossAction?: (action: string) => Promise<string | undefined> | void;
+  onTentacleAction?: (tentacleId: string, action: string) => Promise<string | undefined> | void;
   onNavigateToConversation?: (sessionId: string) => void;
   onDeleteActiveSession?: (
     terminalId: string,
@@ -78,6 +80,9 @@ type CanvasPrimaryViewProps = {
 const CLICK_THRESHOLD = 5;
 const GRAPH_MIN_WIDTH = 300;
 const TERMINAL_MIN_WIDTH = 370;
+const ACTIVE_SESSION_RADIUS = 12;
+const buildActiveSessionNodeId = (terminalId: string) => `a:${terminalId}`;
+const buildTentacleNodeId = (tentacleId: string) => `t:${tentacleId}`;
 
 const buildCanvasEdgePath = (
   source: GraphNode,
@@ -172,6 +177,7 @@ export const CanvasPrimaryView = ({
   canvasOpenTerminalIds,
   canvasOpenTentacleIds,
   canvasTerminalsPanelWidth: persistedTerminalsPanelWidth,
+  recentlyCreatedTerminal,
   onCanvasOpenTerminalIdsChange,
   onCanvasOpenTentacleIdsChange,
   onCanvasTerminalsPanelWidthChange,
@@ -181,6 +187,7 @@ export const CanvasPrimaryView = ({
   onCreateTentacle,
   onSpawnSwarm,
   onOctobossAction,
+  onTentacleAction,
   onNavigateToConversation,
   onDeleteActiveSession,
   pendingDeleteTerminal,
@@ -202,6 +209,7 @@ export const CanvasPrimaryView = ({
   const [hideIdleTerminals, setHideIdleTerminals] = useState(false);
   const hasHydratedTerminals = useRef(false);
   const hasHydratedTentacles = useRef(false);
+  const lastHandledCreatedTerminalIdRef = useRef<string | null>(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const nodeClickedRef = useRef(false);
   const dividerDragRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -243,6 +251,48 @@ export const CanvasPrimaryView = ({
     }
     return map;
   }, [simulatedNodes]);
+
+  const resolveActiveSessionNode = useCallback(
+    (terminalId: string): GraphNode | null => {
+      const nodeId = buildActiveSessionNodeId(terminalId);
+      const existingNode = nodesById.get(nodeId);
+      if (existingNode?.type === "active-session") {
+        return existingNode;
+      }
+
+      const terminal = columns.find((entry) => entry.terminalId === terminalId);
+      if (!terminal) {
+        return null;
+      }
+
+      const parentNodeId = terminal.parentTerminalId
+        ? buildActiveSessionNodeId(terminal.parentTerminalId)
+        : buildTentacleNodeId(terminal.tentacleId);
+      const anchorNode =
+        nodesById.get(parentNodeId) ?? nodesById.get(buildTentacleNodeId(terminal.tentacleId));
+
+      return {
+        id: nodeId,
+        type: "active-session",
+        x: anchorNode?.x ?? 0,
+        y: anchorNode?.y ?? 0,
+        vx: 0,
+        vy: 0,
+        pinned: false,
+        radius: ACTIVE_SESSION_RADIUS,
+        tentacleId: terminal.tentacleId,
+        label: terminal.tentacleName || terminal.label || terminal.terminalId,
+        color: anchorNode?.color ?? "#c0c0c0",
+        sessionId: terminal.terminalId,
+        agentState: terminal.state,
+        hasUserPrompt: terminal.hasUserPrompt ?? false,
+        ...(terminal.workspaceMode ? { workspaceMode: terminal.workspaceMode } : {}),
+        ...(terminal.parentTerminalId ? { parentTerminalId: terminal.parentTerminalId } : {}),
+        ...(terminal.agentRuntimeState ? { agentRuntimeState: terminal.agentRuntimeState } : {}),
+      };
+    },
+    [columns, nodesById],
+  );
 
   // Hydrate open terminals after a settling delay so all async data (columns,
   // graph nodes, simulation) has time to land before we attempt the lookup.
@@ -612,11 +662,24 @@ export const CanvasPrimaryView = ({
     [onOctobossAction],
   );
 
+  const handleTentacleAction = useCallback(
+    (tentacleId: string, action: string) => {
+      setContextMenu(null);
+      const result = onTentacleAction?.(tentacleId, action);
+      if (result && typeof result.then === "function") {
+        void result.then((agentId) => {
+          if (agentId) setPendingOpenAgentId(agentId);
+        });
+      }
+    },
+    [onTentacleAction],
+  );
+
   // Auto-open terminal for newly created agent once it appears in the graph
   useEffect(() => {
     if (!pendingOpenAgentId) return;
-    const nodeId = `a:${pendingOpenAgentId}`;
-    const node = nodesById.get(nodeId);
+    const nodeId = buildActiveSessionNodeId(pendingOpenAgentId);
+    const node = resolveActiveSessionNode(pendingOpenAgentId);
     if (!node) return;
     setPendingOpenAgentId(null);
     setSelectedNodeId(nodeId);
@@ -625,7 +688,38 @@ export const CanvasPrimaryView = ({
       next.set(nodeId, { ...node });
       return next;
     });
-  }, [pendingOpenAgentId, nodesById]);
+  }, [pendingOpenAgentId, resolveActiveSessionNode]);
+
+  useEffect(() => {
+    if (!isUiStateHydrated || !recentlyCreatedTerminal) {
+      return;
+    }
+    if (lastHandledCreatedTerminalIdRef.current === recentlyCreatedTerminal.terminalId) {
+      return;
+    }
+    if (!recentlyCreatedTerminal.parentTerminalId) {
+      lastHandledCreatedTerminalIdRef.current = recentlyCreatedTerminal.terminalId;
+      return;
+    }
+    if (!openTerminals.has(buildActiveSessionNodeId(recentlyCreatedTerminal.parentTerminalId))) {
+      lastHandledCreatedTerminalIdRef.current = recentlyCreatedTerminal.terminalId;
+      return;
+    }
+
+    const nodeId = buildActiveSessionNodeId(recentlyCreatedTerminal.terminalId);
+    const node = resolveActiveSessionNode(recentlyCreatedTerminal.terminalId);
+    if (!node) {
+      return;
+    }
+
+    lastHandledCreatedTerminalIdRef.current = recentlyCreatedTerminal.terminalId;
+    setSelectedNodeId(nodeId);
+    setOpenTerminals((prev) => {
+      const next = new Map(prev);
+      next.set(nodeId, { ...node });
+      return next;
+    });
+  }, [isUiStateHydrated, openTerminals, recentlyCreatedTerminal, resolveActiveSessionNode]);
 
   useEffect(() => {
     if (!selectedNodeId) {
@@ -737,6 +831,10 @@ export const CanvasPrimaryView = ({
   }
 
   const hasPanels = isHydratingTerminals || openTerminals.size > 0 || openTentacles.size > 0;
+  const terminalLayoutVersion = useMemo(() => {
+    const openIds = Array.from(openTerminals.keys()).join("|");
+    return `${openIds}::${terminalsPanelWidth ?? "auto"}`;
+  }, [openTerminals, terminalsPanelWidth]);
 
   return (
     <section ref={containerRef} className="canvas-view" aria-label="Canvas graph view">
@@ -976,6 +1074,7 @@ export const CanvasPrimaryView = ({
                 key={nodeId}
                 node={node}
                 terminals={columns}
+                layoutVersion={terminalLayoutVersion}
                 isFocused={selectedNodeId === nodeId}
                 panelRef={setPanelRef(nodeId)}
                 onClose={() => handleCloseTerminal(nodeId)}
@@ -1107,6 +1206,26 @@ export const CanvasPrimaryView = ({
                 >
                   <span className="canvas-context-menu-icon"><GitBranch size={14} /></span>
                   New Worktree Terminal
+                </button>
+                <button
+                  type="button"
+                  className="canvas-context-menu-item"
+                  onClick={() =>
+                    handleTentacleAction(contextMenu.tentacleId, "tentacle-reorganize-todos")
+                  }
+                >
+                  <span className="canvas-context-menu-icon"><ListTodo size={14} /></span>
+                  Update To-Do List
+                </button>
+                <button
+                  type="button"
+                  className="canvas-context-menu-item"
+                  onClick={() =>
+                    handleTentacleAction(contextMenu.tentacleId, "tentacle-update-tentacle")
+                  }
+                >
+                  <span className="canvas-context-menu-icon"><Hexagon size={14} /></span>
+                  Update Tentacle
                 </button>
                 <button
                   type="button"

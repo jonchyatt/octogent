@@ -12,7 +12,7 @@ import {
   toggleTodoItem,
 } from "../deck/readDeckTentacles";
 import { resolvePrompt } from "../prompts";
-import { RuntimeInputError } from "../terminalRuntime";
+import { MAX_CHILDREN_PER_PARENT, RuntimeInputError } from "../terminalRuntime";
 import { parseTerminalAgentProvider, parseTerminalWorkspaceMode } from "./terminalParsers";
 import type { ApiRouteHandler } from "./routeHelpers";
 import {
@@ -609,6 +609,7 @@ export const handleDeckTentacleSwarmRoute: ApiRouteHandler = async (
         tentacleName,
         tentacleId,
         workerCount: String(workers.length),
+        maxChildrenPerParent: String(MAX_CHILDREN_PER_PARENT),
         workerListing,
         workerWorkspaceSection: buildWorkerWorkspaceSection(),
         workerSpawnCommands,

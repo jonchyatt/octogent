@@ -50,7 +50,7 @@ export type {
 export { isTerminalAgentProvider, isTerminalCompletionSoundId } from "./terminalRuntime/types";
 export { RuntimeInputError } from "./terminalRuntime/types";
 
-const MAX_CHILDREN_PER_PARENT = 9;
+export const MAX_CHILDREN_PER_PARENT = 9;
 
 export const createTerminalRuntime = ({
   workspaceCwd,

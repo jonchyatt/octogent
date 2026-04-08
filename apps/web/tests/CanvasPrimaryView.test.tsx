@@ -1,9 +1,19 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CanvasPrimaryView } from "../src/components/CanvasPrimaryView";
 
 const nodes = [
+  {
+    id: "t:tentacle-a",
+    type: "tentacle" as const,
+    tentacleId: "tentacle-a",
+    label: "tentacle-a",
+    color: "#ff6b2b",
+    x: 80,
+    y: 80,
+    radius: 28,
+  },
   {
     id: "a:terminal-1",
     type: "active-session" as const,
@@ -73,7 +83,18 @@ vi.mock("../src/components/canvas/SessionNode", () => ({
 }));
 
 vi.mock("../src/components/canvas/OctopusNode", () => ({
-  OctopusNode: () => null,
+  OctopusNode: ({
+    node,
+    onClick,
+  }: {
+    node: (typeof nodes)[number];
+    onClick: (nodeId: string) => void;
+  }) => (
+    <g data-node-id={node.id} onClick={() => onClick(node.id)}>
+      <circle cx={node.x} cy={node.y} r={node.radius} />
+      <title>{node.label}</title>
+    </g>
+  ),
 }));
 
 vi.mock("../src/components/canvas/CanvasTerminalColumn", () => ({
@@ -114,18 +135,129 @@ describe("CanvasPrimaryView", () => {
   });
 
   afterEach(() => {
+    cleanup();
+    nodes.splice(2);
     vi.restoreAllMocks();
   });
 
   it("reveals and focuses a newly opened terminal panel when a session node is clicked", async () => {
     render(<CanvasPrimaryView columns={[]} isUiStateHydrated />);
 
-    fireEvent.click(screen.getByRole("button", { name: "terminal-1" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "terminal-1" })[0]!);
 
     await waitFor(() => {
       expect(screen.getByTestId("panel-a:terminal-1")).toBeInTheDocument();
       expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
       expect(HTMLElement.prototype.focus).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("auto-opens a newly created child terminal when its parent panel is already open", async () => {
+    const { rerender } = render(
+      <CanvasPrimaryView
+        columns={[
+          {
+            terminalId: "terminal-1",
+            label: "terminal-1",
+            state: "live",
+            tentacleId: "tentacle-a",
+            parentTerminalId: undefined,
+            createdAt: "2026-02-24T10:00:00.000Z",
+          },
+        ]}
+        isUiStateHydrated
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "terminal-1" })[0]!);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("panel-a:terminal-1")).toBeInTheDocument();
+    });
+
+    nodes.push({
+      id: "a:terminal-2",
+      type: "active-session" as const,
+      sessionId: "terminal-2",
+      tentacleId: "tentacle-a",
+      label: "terminal-2",
+      color: "#ff6b2b",
+      x: 160,
+      y: 160,
+      radius: 20,
+      agentState: "live" as const,
+      agentRuntimeState: "idle" as const,
+      hasUserPrompt: true,
+      workspaceMode: "shared" as const,
+      parentTerminalId: "terminal-1",
+    });
+
+    rerender(
+      <CanvasPrimaryView
+        columns={[
+          {
+            terminalId: "terminal-1",
+            label: "terminal-1",
+            state: "live",
+            tentacleId: "tentacle-a",
+            parentTerminalId: undefined,
+            createdAt: "2026-02-24T10:00:00.000Z",
+          },
+          {
+            terminalId: "terminal-2",
+            label: "terminal-2",
+            state: "live",
+            tentacleId: "tentacle-a",
+            tentacleName: "tentacle-a",
+            parentTerminalId: "terminal-1",
+            workspaceMode: "shared",
+            createdAt: "2026-02-24T10:05:00.000Z",
+            hasUserPrompt: true,
+          },
+        ]}
+        isUiStateHydrated
+        recentlyCreatedTerminal={{
+          terminalId: "terminal-2",
+          label: "terminal-2",
+          state: "live",
+          tentacleId: "tentacle-a",
+          tentacleName: "tentacle-a",
+          parentTerminalId: "terminal-1",
+          workspaceMode: "shared",
+          createdAt: "2026-02-24T10:05:00.000Z",
+          hasUserPrompt: true,
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("panel-a:terminal-2")).toBeInTheDocument();
+    });
+  });
+
+  it("shows tentacle maintenance actions in the context menu and passes the tentacle ID", async () => {
+    const onTentacleAction = vi.fn().mockResolvedValue(undefined);
+
+    const { container } = render(
+      <CanvasPrimaryView
+        columns={[]}
+        isUiStateHydrated
+        onTentacleAction={onTentacleAction}
+      />,
+    );
+
+    const tentacleNode = container.querySelector('[data-node-id="t:tentacle-a"]');
+    expect(tentacleNode).not.toBeNull();
+
+    fireEvent.contextMenu(tentacleNode as Element, { clientX: 160, clientY: 120 });
+
+    expect(await screen.findByRole("button", { name: "Update To-Do List" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Update Tentacle" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update To-Do List" }));
+
+    await waitFor(() => {
+      expect(onTentacleAction).toHaveBeenCalledWith("tentacle-a", "tentacle-reorganize-todos");
     });
   });
 });

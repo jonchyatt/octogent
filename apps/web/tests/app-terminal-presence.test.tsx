@@ -95,7 +95,6 @@ describe("App terminal presence and runtime state", () => {
 
     expect(await screen.findByLabelText("terminal-2")).toBeInTheDocument();
   });
-
   it("keeps sidebar badge synced with the terminal idle/processing state", async () => {
     vi.stubGlobal("WebSocket", MockWebSocket as unknown as typeof WebSocket);
 

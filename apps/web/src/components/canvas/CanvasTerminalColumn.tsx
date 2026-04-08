@@ -9,6 +9,7 @@ import { Terminal } from "../Terminal";
 type CanvasTerminalColumnProps = {
   node: GraphNode;
   terminals: TerminalView;
+  layoutVersion?: string | number;
   isFocused?: boolean;
   onClose: () => void;
   onFocus?: () => void;
@@ -20,6 +21,7 @@ type CanvasTerminalColumnProps = {
 export const CanvasTerminalColumn = ({
   node,
   terminals,
+  layoutVersion,
   isFocused,
   onClose,
   onFocus,
@@ -76,6 +78,7 @@ export const CanvasTerminalColumn = ({
         <Terminal
           terminalId={node.sessionId}
           terminalLabel={node.label}
+          layoutVersion={layoutVersion}
           onAgentRuntimeStateChange={setAgentState}
           {...(onTerminalRenamed ? { onTerminalRenamed } : {})}
           {...(onTerminalActivity ? { onTerminalActivity } : {})}

@@ -11,6 +11,7 @@ import "xterm/css/xterm.css";
 type TerminalProps = {
   terminalId: string;
   terminalLabel?: string;
+  layoutVersion?: string | number;
   isSelected?: boolean;
   initialPrompt?: string;
   hidePromptPicker?: boolean;
@@ -67,6 +68,7 @@ const PromptInjectIcon = () => (
 export const Terminal = ({
   terminalId,
   terminalLabel,
+  layoutVersion,
   isSelected,
   initialPrompt,
   hidePromptPicker,
@@ -84,6 +86,16 @@ export const Terminal = ({
   const promptPickerBtnRef = useRef<HTMLButtonElement | null>(null);
   const viewportScrollTopRef = useRef<number | null>(null);
   const viewportWasNearBottomRef = useRef(true);
+  const terminalRef = useRef<{
+    write: (value: string) => void;
+    scrollLines: (lineCount: number) => void;
+    clear: () => void;
+    reset: () => void;
+    cols: number;
+    rows: number;
+  } | null>(null);
+  const fitAddonRef = useRef<{ fit: () => void } | null>(null);
+  const requestResizeSyncRef = useRef<() => void>(() => {});
   const rawTitle = terminalLabel && terminalLabel.length > 0 ? terminalLabel : terminalId;
   const terminalTitle = rawTitle.length > 24 ? `${rawTitle.slice(0, 24)}...` : rawTitle;
 
@@ -106,11 +118,13 @@ export const Terminal = ({
     let reconnectTimer: number | null = null;
     let socket: WebSocket | null = null;
     let requestResizeSync = () => {};
+    requestResizeSyncRef.current = () => {};
     let cleanupTerminal = () => {};
     let activeTerminal: {
       write: (value: string) => void;
       scrollLines: (lineCount: number) => void;
       clear: () => void;
+      reset: () => void;
     } | null = null;
     let pendingHistoryData: string | null = null;
     const pendingOutputChunks: string[] = [];
@@ -167,7 +181,7 @@ export const Terminal = ({
                 viewportWasNearBottomRef.current =
                   viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 8;
               }
-              activeTerminal.clear();
+              activeTerminal.reset();
               activeTerminal.write(payload.data);
               activeTerminal.write(SHOW_CURSOR_ESCAPE);
               if (viewport) {
@@ -273,7 +287,6 @@ export const Terminal = ({
             .trim() || "#101722";
 
         const terminal = new Terminal({
-          convertEol: true,
           cursorBlink: true,
           cursorInactiveStyle: "bar",
           cursorStyle: "bar",
@@ -304,7 +317,7 @@ export const Terminal = ({
         activeTerminal = terminal;
 
         if (pendingHistoryData !== null) {
-          terminal.clear();
+          terminal.reset();
           terminal.write(pendingHistoryData);
           pendingHistoryData = null;
         }
@@ -374,6 +387,7 @@ export const Terminal = ({
           }, 60);
         };
         requestResizeSync = scheduleResizeSync;
+        requestResizeSyncRef.current = scheduleResizeSync;
 
         const onDataDisposable = terminal.onData((data) => {
           terminal.write(SHOW_CURSOR_ESCAPE);
@@ -400,6 +414,8 @@ export const Terminal = ({
 
         scheduleResizeSync();
         terminal.write(SHOW_CURSOR_ESCAPE);
+        terminalRef.current = terminal;
+        fitAddonRef.current = fitAddon;
         cleanupTerminal = () => {
           wheelListenerTarget.removeEventListener("pointerdown", onPointerDown, true);
           viewportWheelTarget.removeEventListener("wheel", onWheel);
@@ -409,6 +425,9 @@ export const Terminal = ({
           observer?.disconnect();
           onDataDisposable.dispose();
           terminal.dispose();
+          terminalRef.current = null;
+          fitAddonRef.current = null;
+          requestResizeSyncRef.current = () => {};
         };
       } catch {
         setConnectionState("fallback");
@@ -421,10 +440,32 @@ export const Terminal = ({
         window.clearTimeout(reconnectTimer);
       }
       requestResizeSync = () => {};
+      requestResizeSyncRef.current = () => {};
       cleanupTerminal();
       socket?.close();
     };
   }, [terminalId]);
+
+  useEffect(() => {
+    if (layoutVersion === undefined) {
+      return;
+    }
+
+    const activeTerminal = terminalRef.current;
+    const fitAddon = fitAddonRef.current;
+    if (!activeTerminal || !fitAddon) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      fitAddon.fit();
+      requestResizeSyncRef.current();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [layoutVersion]);
 
   return (
     <div

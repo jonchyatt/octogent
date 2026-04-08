@@ -29,6 +29,9 @@ import { buildTerminalEventsSocketUrl, buildTerminalSnapshotsUrl } from "./runti
 
 export const App = () => {
   const [terminals, setTerminals] = useState<TerminalView>([]);
+  const [recentlyCreatedTerminal, setRecentlyCreatedTerminal] = useState<TerminalView[number] | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [terminalStates, setTerminalStates] = useState<Record<string, AgentRuntimeState>>({});
@@ -199,6 +202,9 @@ export const App = () => {
         if (payload.type === "terminal-created" || payload.type === "terminal-updated") {
           if (!payload.snapshot) {
             return;
+          }
+          if (payload.type === "terminal-created") {
+            setRecentlyCreatedTerminal(payload.snapshot as TerminalView[number]);
           }
           setTerminals((current) =>
             sortTerminalSnapshots([
@@ -447,6 +453,7 @@ export const App = () => {
             canvasPrimaryViewProps={{
               columns: terminals,
               isUiStateHydrated,
+              recentlyCreatedTerminal,
               canvasOpenTerminalIds,
               canvasOpenTentacleIds,
               canvasTerminalsPanelWidth,
@@ -488,6 +495,24 @@ export const App = () => {
                     workspaceMode: "shared",
                     tentacleId: OCTOBOSS_ID,
                     promptTemplate: action,
+                  }),
+                });
+                if (!response.ok) return undefined;
+                const snapshot = (await response.json()) as { terminalId?: string };
+                await refreshColumns();
+                return typeof snapshot.terminalId === "string" ? snapshot.terminalId : undefined;
+              },
+              onTentacleAction: async (tentacleId, action) => {
+                const response = await fetch("/api/terminals", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    workspaceMode: "shared",
+                    tentacleId,
+                    promptTemplate: action,
+                    promptVariables: {
+                      tentacleId,
+                    },
                   }),
                 });
                 if (!response.ok) return undefined;

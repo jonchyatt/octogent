@@ -288,6 +288,61 @@ describe("createSessionRuntime", () => {
     runtime.close();
   });
 
+  it("strips a broken leading ANSI fragment from replayed history after truncation", () => {
+    const tentacleId = "tentacle-1";
+    const terminals = new Map<string, PersistedTerminal>([
+      [
+        tentacleId,
+        {
+          terminalId: tentacleId,
+          tentacleId,
+          tentacleName: tentacleId,
+          createdAt: new Date().toISOString(),
+          workspaceMode: "shared",
+        },
+      ],
+    ]);
+    const sessions = new Map<string, TerminalSession>();
+    const websocketServer = new FakeWebSocketServer();
+    const pty = new FakePty();
+    const transcriptDirectoryPath = createTemporaryDirectory();
+    spawnMock.mockReturnValue(pty);
+
+    const runtime = createSessionRuntime({
+      websocketServer: websocketServer as unknown as import("ws").WebSocketServer,
+      terminals,
+      sessions,
+      getTentacleWorkspaceCwd: () => process.cwd(),
+      isDebugPtyLogsEnabled: false,
+      ptyLogDir: process.cwd(),
+      transcriptDirectoryPath,
+      sessionIdleGraceMs: 60_000,
+      scrollbackMaxBytes: 18,
+    });
+
+    const firstSocket = new FakeWebSocket();
+    websocketServer.nextSocket = firstSocket;
+    expect(
+      runtime.handleUpgrade(createUpgradeRequest(tentacleId), {} as Duplex, Buffer.alloc(0)),
+    ).toBe(true);
+    pty.emitData("\u001b[48;2;55;55;55mHELLO\r\n");
+    firstSocket.close();
+
+    const secondSocket = new FakeWebSocket();
+    websocketServer.nextSocket = secondSocket;
+    expect(
+      runtime.handleUpgrade(createUpgradeRequest(tentacleId), {} as Duplex, Buffer.alloc(0)),
+    ).toBe(true);
+
+    const secondMessages = parseSentMessages(secondSocket);
+    expect(secondMessages.find((message) => message.type === "history")).toEqual({
+      type: "history",
+      data: "HELLO\r\n",
+    });
+
+    runtime.close();
+  });
+
   it("ignores duplicate resize payloads for the same terminal size", () => {
     const tentacleId = "tentacle-1";
     const terminals = new Map<string, PersistedTerminal>([

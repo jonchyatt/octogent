@@ -2181,6 +2181,37 @@ describe("createApiServer", () => {
     });
   });
 
+  it("reads builtin prompts from the live promptsDir after server start", async () => {
+    const workspaceCwd = mkdtempSync(join(tmpdir(), "octogent-api-test-"));
+    const projectStateDir = mkdtempSync(join(tmpdir(), "octogent-state-test-"));
+    const promptsDir = mkdtempSync(join(tmpdir(), "octogent-prompts-test-"));
+    temporaryDirectories.push(workspaceCwd, projectStateDir, promptsDir);
+
+    writeFileSync(join(promptsDir, "tentacle-update-tentacle.md"), "version one\n", "utf8");
+
+    const baseUrl = await startServer({
+      workspaceCwd,
+      projectStateDir,
+      promptsDir,
+    });
+
+    writeFileSync(join(promptsDir, "tentacle-update-tentacle.md"), "version two\n", "utf8");
+
+    const response = await fetch(`${baseUrl}/api/prompts/tentacle-update-tentacle`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      name: "tentacle-update-tentacle",
+      source: "builtin",
+      content: "version two",
+    });
+  });
+
   it("returns 400 when creating worktree tentacle outside a git repository", async () => {
     const workspaceCwd = mkdtempSync(join(tmpdir(), "octogent-api-test-"));
     temporaryDirectories.push(workspaceCwd);
