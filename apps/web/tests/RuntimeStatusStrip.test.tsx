@@ -52,4 +52,21 @@ describe("RuntimeStatusStrip", () => {
     expect(within(usage).getAllByText("NA")).toHaveLength(2);
     expect(within(usage).queryByText("···")).toBeNull();
   });
+
+  it("marks the refresh button as rotating while Claude usage is refreshing", () => {
+    render(
+      <RuntimeStatusStrip
+        sparklinePoints=""
+        usageData={null}
+        claudeUsage={null}
+        isRefreshingClaudeUsage
+        onRefreshClaudeUsage={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Refresh Claude usage" })).toHaveAttribute(
+      "data-refreshing",
+      "true",
+    );
+  });
 });

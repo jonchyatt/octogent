@@ -274,7 +274,8 @@ export const App = () => {
   }, [refreshColumns, sortTerminalSnapshots]);
 
   const { codexUsageSnapshot, refreshCodexUsage } = useCodexUsagePolling();
-  const { claudeUsageSnapshot, refreshClaudeUsage } = useClaudeUsagePolling();
+  const { claudeUsageSnapshot, isRefreshingClaudeUsage, refreshClaudeUsage } =
+    useClaudeUsagePolling();
   const backendLivenessStatus = useBackendLivenessPolling();
   const { githubRepoSummary, isRefreshingGitHubSummary, refreshGitHubRepoSummary } =
     useGithubSummaryPolling();
@@ -399,6 +400,7 @@ export const App = () => {
           sparklinePoints={sparklinePoints}
           usageData={heatmapData}
           claudeUsage={claudeUsageSnapshot}
+          isRefreshingClaudeUsage={isRefreshingClaudeUsage}
           onRefreshClaudeUsage={refreshClaudeUsage}
         />
       )}

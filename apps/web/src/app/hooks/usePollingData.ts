@@ -14,20 +14,28 @@ export const usePollingData = <T>(options: UsePollingDataOptions<T>) => {
   const [isLoading, setIsLoading] = useState(false);
   const isInFlightRef = useRef(false);
   const isDisposedRef = useRef(false);
+  const hasQueuedRefreshRef = useRef(false);
 
   const normalizeRef = useRef(options.normalize);
   normalizeRef.current = options.normalize;
   const fallbackRef = useRef(options.fallback);
   fallbackRef.current = options.fallback;
 
-  const sync = useCallback(async () => {
-    if (isDisposedRef.current || isInFlightRef.current) return;
+  const sync = useCallback(async (force = false) => {
+    if (isDisposedRef.current) return;
+    if (isInFlightRef.current) {
+      if (force) {
+        hasQueuedRefreshRef.current = true;
+      }
+      return;
+    }
     isInFlightRef.current = true;
     setIsLoading(true);
     try {
       const response = await fetch(fetchUrl, {
         method: "GET",
         headers: { Accept: "application/json" },
+        cache: "no-store",
       });
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const parsed = normalizeRef.current(await response.json());
@@ -39,6 +47,10 @@ export const usePollingData = <T>(options: UsePollingDataOptions<T>) => {
     } finally {
       isInFlightRef.current = false;
       if (!isDisposedRef.current) setIsLoading(false);
+      if (hasQueuedRefreshRef.current) {
+        hasQueuedRefreshRef.current = false;
+        void sync();
+      }
     }
   }, [fetchUrl]);
 
@@ -54,7 +66,7 @@ export const usePollingData = <T>(options: UsePollingDataOptions<T>) => {
   }, [enabled, intervalMs, sync]);
 
   const refresh = useCallback(() => {
-    void sync();
+    void sync(true);
   }, [sync]);
 
   return { data, isLoading, refresh };

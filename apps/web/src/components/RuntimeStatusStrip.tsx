@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { GITHUB_SPARKLINE_HEIGHT, GITHUB_SPARKLINE_WIDTH } from "../app/constants";
 import type { UsageChartData } from "../app/hooks/useUsageHeatmapPolling";
@@ -9,6 +9,7 @@ type RuntimeStatusStripProps = {
   sparklinePoints: string;
   usageData: UsageChartData | null;
   claudeUsage: ClaudeUsageSnapshot | null;
+  isRefreshingClaudeUsage?: boolean;
   onRefreshClaudeUsage?: () => void;
 };
 
@@ -141,10 +142,47 @@ export const RuntimeStatusStrip = ({
   sparklinePoints,
   usageData,
   claudeUsage,
+  isRefreshingClaudeUsage = false,
   onRefreshClaudeUsage,
 }: RuntimeStatusStripProps) => {
   const usageBars = useMemo(() => (usageData ? buildUsageBars(usageData) : []), [usageData]);
   const claudeUsageState = usageState(claudeUsage);
+  const [showRefreshSpin, setShowRefreshSpin] = useState(false);
+  const refreshStartedAtRef = useRef<number | null>(null);
+  const refreshHideTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (refreshHideTimerRef.current !== null) {
+        window.clearTimeout(refreshHideTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isRefreshingClaudeUsage) {
+      if (refreshHideTimerRef.current !== null) {
+        window.clearTimeout(refreshHideTimerRef.current);
+        refreshHideTimerRef.current = null;
+      }
+      refreshStartedAtRef.current = Date.now();
+      setShowRefreshSpin(true);
+      return;
+    }
+
+    if (refreshStartedAtRef.current === null) {
+      setShowRefreshSpin(false);
+      return;
+    }
+
+    const elapsedMs = Date.now() - refreshStartedAtRef.current;
+    const remainingMs = Math.max(0, 450 - elapsedMs);
+    refreshHideTimerRef.current = window.setTimeout(() => {
+      setShowRefreshSpin(false);
+      refreshStartedAtRef.current = null;
+      refreshHideTimerRef.current = null;
+    }, remainingMs);
+  }, [isRefreshingClaudeUsage]);
 
   return (
     <section className="console-status-strip" aria-label="Runtime status strip">
@@ -203,6 +241,7 @@ export const RuntimeStatusStrip = ({
             onClick={onRefreshClaudeUsage}
             aria-label="Refresh Claude usage"
             title="Refresh Claude usage"
+            data-refreshing={showRefreshSpin ? "true" : "false"}
           >
             ↻
           </button>

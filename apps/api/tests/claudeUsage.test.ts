@@ -130,6 +130,18 @@ describe("parseCliUsageOutput", () => {
     expect(result.primaryUsedPercent).toBe(35);
     expect(result.secondaryUsedPercent).toBe(60);
   });
+
+  it("does not reuse the session percentage for week when labels are tightly packed", () => {
+    const output = [
+      "Status Config Usage Stats",
+      "Current session 1% used Current week (all models) 52% used Current week (Sonnet only) 33% used",
+    ].join("\n");
+
+    const result = parseCliUsageOutput(output);
+    expect(result.primaryUsedPercent).toBe(1);
+    expect(result.secondaryUsedPercent).toBe(52);
+    expect(result.sonnetUsedPercent).toBe(33);
+  });
 });
 
 describe("readClaudeUsageSnapshot", () => {

@@ -251,6 +251,10 @@
   border-color: #6f7782;
 }
 
+.console-status-claude-usage-refresh[data-refreshing="true"] {
+  animation: console-status-refresh-spin 0.9s linear infinite;
+}
+
 .console-status-claude-usage-title {
   color: #6f7782;
   font-size: 0.72rem;
@@ -329,6 +333,16 @@
   letter-spacing: 0.06em;
   text-transform: lowercase;
   white-space: nowrap;
+}
+
+@keyframes console-status-refresh-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .console-status-usage-row-value {

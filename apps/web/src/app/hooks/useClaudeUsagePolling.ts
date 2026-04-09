@@ -25,12 +25,16 @@ export const useClaudeUsagePolling = () => {
     return lastOkRef.current ?? snapshot;
   };
 
-  const { data, refresh } = usePollingData<ClaudeUsageSnapshot>({
+  const { data, isLoading, refresh } = usePollingData<ClaudeUsageSnapshot>({
     fetchUrl: buildClaudeUsageUrl(),
     intervalMs: CODEX_USAGE_SCAN_INTERVAL_MS,
     normalize,
     fallback,
   });
 
-  return { claudeUsageSnapshot: data, refreshClaudeUsage: refresh };
+  return {
+    claudeUsageSnapshot: data,
+    isRefreshingClaudeUsage: isLoading,
+    refreshClaudeUsage: refresh,
+  };
 };

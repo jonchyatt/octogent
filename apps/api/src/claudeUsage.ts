@@ -262,6 +262,11 @@ const PERCENT_RE = /(\d{1,3}(?:\.\d+)?)\s*%/u;
 
 const USED_KEYWORDS = ["used", "spent", "consumed"];
 const REMAINING_KEYWORDS = ["left", "remaining", "available"];
+const CLI_USAGE_LABEL_GROUPS = [
+  ["current session"],
+  ["current week (all models)", "current week (opus)"],
+  ["current week (sonnet only)", "current week (sonnet)"],
+] as const;
 
 type ParsedCliUsage = {
   primaryUsedPercent: number | null;
@@ -276,14 +281,17 @@ const percentFromLine = (line: string): number | null => {
   const raw = Number.parseFloat(match[1]!);
   const clamped = Math.max(0, Math.min(100, raw));
   const lower = line.toLowerCase();
+  const contextStart = Math.max(0, match.index - 16);
+  const contextEnd = Math.min(lower.length, match.index + match[0].length + 24);
+  const context = lower.slice(contextStart, contextEnd);
 
   // "2% used" → store as 2 (already represents usage)
-  if (USED_KEYWORDS.some((kw) => lower.includes(kw))) {
+  if (USED_KEYWORDS.some((kw) => context.includes(kw))) {
     return Math.round(clamped * 10) / 10;
   }
 
   // "98% remaining" → convert to used: 100 - 98 = 2
-  if (REMAINING_KEYWORDS.some((kw) => lower.includes(kw))) {
+  if (REMAINING_KEYWORDS.some((kw) => context.includes(kw))) {
     return Math.round((100 - clamped) * 10) / 10;
   }
 
@@ -291,37 +299,55 @@ const percentFromLine = (line: string): number | null => {
   return Math.round(clamped * 10) / 10;
 };
 
-const extractLabeledPercent = (lines: string[], labelSubstrings: string[]): number | null => {
-  for (let i = 0; i < lines.length; i++) {
-    const normalized = lines[i]!.toLowerCase();
-    const collapsed = normalized.replace(/\s+/gu, "");
-    const matches = labelSubstrings.some(
-      (label) => normalized.includes(label) || collapsed.includes(label.replace(/\s+/gu, "")),
-    );
-    if (!matches) continue;
+const normalizeCliText = (text: string): string => text.toLowerCase().replace(/\s+/gu, " ");
 
-    // Check this line and the next few lines for a percentage
-    for (let j = i; j < Math.min(i + 3, lines.length); j++) {
-      const pct = percentFromLine(lines[j]!);
-      if (pct !== null) return pct;
+const findLabelMatch = (
+  normalizedText: string,
+  labelSubstrings: readonly string[],
+): { index: number; label: string } | null => {
+  let bestMatch: { index: number; label: string } | null = null;
+
+  for (const label of labelSubstrings) {
+    const index = normalizedText.indexOf(label);
+    if (index === -1) continue;
+    if (bestMatch === null || index < bestMatch.index) {
+      bestMatch = { index, label };
     }
   }
-  return null;
+
+  return bestMatch;
+};
+
+const extractLabeledPercent = (
+  cleanOutput: string,
+  labelSubstrings: readonly string[],
+): number | null => {
+  const normalizedText = normalizeCliText(cleanOutput);
+  const match = findLabelMatch(normalizedText, labelSubstrings);
+  if (!match) {
+    return null;
+  }
+
+  const start = match.index + match.label.length;
+  let end = normalizedText.length;
+
+  for (const labels of CLI_USAGE_LABEL_GROUPS) {
+    const nextMatch = findLabelMatch(normalizedText.slice(start), labels);
+    if (!nextMatch) continue;
+    end = Math.min(end, start + nextMatch.index);
+  }
+
+  return percentFromLine(normalizedText.slice(start, end));
 };
 
 export const parseCliUsageOutput = (rawOutput: string): ParsedCliUsage => {
   const clean = stripAnsiCodes(rawOutput);
-  const lines = clean
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-
-  const primaryUsedPercent = extractLabeledPercent(lines, ["current session"]);
-  const secondaryUsedPercent = extractLabeledPercent(lines, [
+  const primaryUsedPercent = extractLabeledPercent(clean, ["current session"]);
+  const secondaryUsedPercent = extractLabeledPercent(clean, [
     "current week (all models)",
     "current week (opus)",
   ]);
-  const sonnetUsedPercent = extractLabeledPercent(lines, [
+  const sonnetUsedPercent = extractLabeledPercent(clean, [
     "current week (sonnet only)",
     "current week (sonnet)",
   ]);
