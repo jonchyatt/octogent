@@ -21,7 +21,8 @@ NEVER declare the swarm complete while any worker is still BLOCKED or hasn't rep
 
 ## First Step: Spawn The Workers
 
-Before spawning, keep the child-terminal cap in mind: you cannot create more than {{maxChildrenPerParent}} children under your coordinator terminal. If the requested worker count exceeds that limit, stop and report the constraint instead of blindly trying spawn commands that will fail.
+Before spawning, keep the child-terminal cap in mind: you cannot create more than {{maxChildrenPerParent}} children under your coordinator terminal.
+The worker list below is the in-scope set for this swarm. If the tentacle backlog had more todo items than the child-terminal cap, those overflow items were intentionally excluded from this swarm. Treat the listed workers as the highest-priority items and proceed without asking the user whether to batch, reprioritize, or raise the limit.
 
 Run each command below exactly once so every worker terminal is created under you:
 

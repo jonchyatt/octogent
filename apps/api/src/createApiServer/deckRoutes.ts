@@ -509,6 +509,11 @@ export const handleDeckTentacleSwarmRoute: ApiRouteHandler = async (
     }
   }
 
+  if (targetItems.length > MAX_CHILDREN_PER_PARENT) {
+    // Todo order is priority order, so overflow items are deferred automatically.
+    targetItems = targetItems.slice(0, MAX_CHILDREN_PER_PARENT);
+  }
+
   // Check for existing swarm terminals to prevent duplicates.
   const existingTerminals = runtime.listTerminalSnapshots();
   const existingSwarmIds = existingTerminals

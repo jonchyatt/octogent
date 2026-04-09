@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createApiServer } from "../src/createApiServer";
 import type { GitHubRepoSummarySnapshot } from "../src/githubRepoSummary";
+import { MAX_CHILDREN_PER_PARENT } from "../src/terminalRuntime";
 import type { GitClient } from "../src/terminalRuntime";
 
 class FakeGitClient implements GitClient {
@@ -2333,6 +2334,57 @@ describe("createApiServer", () => {
         workspaceMode: "shared",
       }),
     ]);
+  });
+
+  it("limits swarm prompts to the top-priority items that fit under the child cap", async () => {
+    const workspaceCwd = mkdtempSync(join(tmpdir(), "octogent-api-test-"));
+    temporaryDirectories.push(workspaceCwd);
+    mkdirSync(join(workspaceCwd, ".octogent", "tentacles", "docs-knowledge"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(workspaceCwd, ".octogent", "tentacles", "docs-knowledge", "CONTEXT.md"),
+      "# Docs & Knowledge\n",
+      "utf8",
+    );
+    const todoItems = Array.from({ length: MAX_CHILDREN_PER_PARENT + 4 }, (_, index) =>
+      `- [ ] item ${index}`,
+    ).join("\n");
+    writeFileSync(
+      join(workspaceCwd, ".octogent", "tentacles", "docs-knowledge", "todo.md"),
+      `# Todo\n\n${todoItems}\n`,
+      "utf8",
+    );
+
+    const baseUrl = await startServer({ workspaceCwd });
+
+    const swarmResponse = await fetch(`${baseUrl}/api/deck/tentacles/docs-knowledge/swarm`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+
+    expect(swarmResponse.status).toBe(201);
+    await expect(swarmResponse.json()).resolves.toEqual({
+      tentacleId: "docs-knowledge",
+      parentTerminalId: "docs-knowledge-swarm-parent",
+      workers: Array.from({ length: MAX_CHILDREN_PER_PARENT }, (_, index) => ({
+        terminalId: `docs-knowledge-swarm-${index}`,
+        todoIndex: index,
+        todoText: `item ${index}`,
+      })),
+    });
+
+    const promptTemplate = readFileSync(
+      join(process.cwd(), "..", "..", "prompts", "swarm-parent.md"),
+      "utf8",
+    );
+    expect(promptTemplate).toContain(
+      "Treat the listed workers as the highest-priority items and proceed without asking the user whether to batch, reprioritize, or raise the limit.",
+    );
   });
 
   it("deletes a tentacle and removes it from snapshots", async () => {
