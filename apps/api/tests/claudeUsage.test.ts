@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   invalidateUsageCache,
@@ -33,6 +37,15 @@ const cliUsageOutput = [
   "Current week (Sonnet only)",
   "  0% used",
 ].join("\n");
+
+const temporaryDirectories: string[] = [];
+
+afterEach(() => {
+  for (const directory of temporaryDirectories) {
+    rmSync(directory, { recursive: true, force: true });
+  }
+  temporaryDirectories.length = 0;
+});
 
 describe("stripAnsiCodes", () => {
   it("strips CSI sequences", () => {
@@ -471,5 +484,88 @@ describe("readClaudeUsageSnapshot", () => {
 
     expect(snapshot.status).toBe("error");
     expect(snapshot.message).toMatch(/unable to read/i);
+  });
+
+  it("serves a persisted snapshot immediately and refreshes in background", async () => {
+    const projectStateDir = mkdtempSync(join(tmpdir(), "octogent-claude-usage-"));
+    temporaryDirectories.push(projectStateDir);
+
+    await readClaudeUsageSnapshot({
+      now: () => new Date("2026-03-03T12:00:00.000Z"),
+      projectStateDir,
+      spawnCliUsage: noCliPty,
+      readCredentialsJson: async () => validCredentials(),
+      fetchImpl: async () =>
+        new Response(usageResponseBody, {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    });
+
+    resetCliSession();
+
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(
+      async () =>
+        await new Promise<Response>((resolve) => {
+          setTimeout(() => {
+            resolve(
+              new Response(usageResponseBody, {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              }),
+            );
+          }, 50);
+        }),
+    );
+
+    const startedAt = Date.now();
+    const snapshot = await readClaudeUsageSnapshot({
+      now: () => new Date("2026-03-03T12:05:00.000Z"),
+      projectStateDir,
+      backgroundRefreshOnly: true,
+      spawnCliUsage: noCliPty,
+      readCredentialsJson: async () => validCredentials(),
+      fetchImpl: fetchMock,
+    });
+
+    expect(snapshot.status).toBe("ok");
+    expect(snapshot.source).toBe("oauth-api");
+    expect(snapshot.primaryUsedPercent).toBe(14);
+    expect(Date.now() - startedAt).toBeLessThan(40);
+
+    await new Promise((resolve) => setTimeout(resolve, 90));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns immediately on a cold cache miss when background refresh mode is enabled", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(
+      async () =>
+        await new Promise<Response>((resolve) => {
+          setTimeout(() => {
+            resolve(
+              new Response(usageResponseBody, {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              }),
+            );
+          }, 50);
+        }),
+    );
+
+    const startedAt = Date.now();
+    const snapshot = await readClaudeUsageSnapshot({
+      now: () => new Date("2026-03-03T12:00:00.000Z"),
+      backgroundRefreshOnly: true,
+      spawnCliUsage: noCliPty,
+      readCredentialsJson: async () => validCredentials(),
+      fetchImpl: fetchMock,
+    });
+
+    expect(snapshot.status).toBe("unavailable");
+    expect(snapshot.message).toMatch(/refresh in progress/i);
+    expect(Date.now() - startedAt).toBeLessThan(40);
+
+    await new Promise((resolve) => setTimeout(resolve, 90));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

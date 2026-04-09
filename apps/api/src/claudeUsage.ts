@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -11,9 +11,12 @@ const CLAUDE_KEYCHAIN_SERVICE = "Claude Code-credentials";
 const CLAUDE_OAUTH_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const CLAUDE_OAUTH_USAGE_BETA_HEADER = "oauth-2025-04-20";
 
-const CLI_PTY_TIMEOUT_MS = 10_000;
-const CLI_PTY_SETTLE_MS = 2_000;
-const CLI_PTY_ENTER_INTERVAL_MS = 800;
+const CLI_PTY_TIMEOUT_MS = 25_000;
+const CLI_PTY_SETTLE_MS = 3_500;
+const CLI_PTY_ENTER_INTERVAL_MS = 600;
+const CLI_PTY_POST_USAGE_GRACE_MS = 2_500;
+const CLI_PTY_READY_DELAY_MS = 900;
+const CLI_PTY_USAGE_RETRY_MS = 3_000;
 const CLI_PTY_COLS = 160;
 const CLI_PTY_ROWS = 50;
 
@@ -41,6 +44,8 @@ type ClaudeUsageDependencies = {
   readCredentialsJson?: () => Promise<unknown>;
   fetchImpl?: typeof fetch;
   spawnCliUsage?: () => Promise<string | null>;
+  projectStateDir?: string;
+  backgroundRefreshOnly?: boolean;
 };
 
 const unavailableSnapshot = (
@@ -251,6 +256,8 @@ const STOP_NEEDLES = [
   "failed to load usage data",
 ];
 
+const USAGE_COMMAND_NEEDLES = ["/usage", "current week", "current session"];
+
 const PERCENT_RE = /(\d{1,3}(?:\.\d+)?)\s*%/u;
 
 const USED_KEYWORDS = ["used", "spent", "consumed"];
@@ -350,9 +357,96 @@ const scrubbedEnv = (): Record<string, string> => {
 
 let cachedSnapshot: { snapshot: ClaudeUsageSnapshot; fetchedAt: number } | null = null;
 const CACHE_TTL_MS = 300_000;
+let refreshInFlight: Promise<ClaudeUsageSnapshot> | null = null;
+const CLAUDE_USAGE_SNAPSHOT_FILENAME = "claude-usage-snapshot.json";
 
 const getCachedOkSnapshot = (): ClaudeUsageSnapshot | null =>
   cachedSnapshot?.snapshot.status === "ok" ? cachedSnapshot.snapshot : null;
+
+const resolveSnapshotPath = (projectStateDir: string | undefined): string | null =>
+  projectStateDir ? join(projectStateDir, "state", CLAUDE_USAGE_SNAPSHOT_FILENAME) : null;
+
+const normalizePersistedSnapshot = (value: unknown): ClaudeUsageSnapshot | null => {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const status = asTrimmedString(record.status);
+  const source = asTrimmedString(record.source);
+  const fetchedAt = asTrimmedString(record.fetchedAt);
+  if (
+    status !== "ok" ||
+    (source !== "cli-pty" && source !== "oauth-api") ||
+    fetchedAt === null
+  ) {
+    return null;
+  }
+
+  return {
+    status,
+    source,
+    fetchedAt,
+    message: asTrimmedString(record.message),
+    planType: asTrimmedString(record.planType),
+    primaryUsedPercent: asNumber(record.primaryUsedPercent),
+    primaryResetAt: asTrimmedString(record.primaryResetAt),
+    secondaryUsedPercent: asNumber(record.secondaryUsedPercent),
+    secondaryResetAt: asTrimmedString(record.secondaryResetAt),
+    sonnetUsedPercent: asNumber(record.sonnetUsedPercent),
+    sonnetResetAt: asTrimmedString(record.sonnetResetAt),
+    extraUsageCostUsed: asNumber(record.extraUsageCostUsed),
+    extraUsageCostLimit: asNumber(record.extraUsageCostLimit),
+  };
+};
+
+const readPersistedOkSnapshot = async (
+  projectStateDir: string | undefined,
+): Promise<ClaudeUsageSnapshot | null> => {
+  const snapshotPath = resolveSnapshotPath(projectStateDir);
+  if (!snapshotPath) {
+    return null;
+  }
+
+  try {
+    const raw = await readFile(snapshotPath, "utf8");
+    return normalizePersistedSnapshot(JSON.parse(raw) as unknown);
+  } catch {
+    return null;
+  }
+};
+
+const persistOkSnapshot = async (
+  snapshot: ClaudeUsageSnapshot,
+  projectStateDir: string | undefined,
+): Promise<void> => {
+  if (snapshot.status !== "ok") {
+    return;
+  }
+
+  const snapshotPath = resolveSnapshotPath(projectStateDir);
+  if (!snapshotPath) {
+    return;
+  }
+
+  try {
+    await mkdir(join(projectStateDir!, "state"), { recursive: true });
+    await writeFile(snapshotPath, JSON.stringify(snapshot), "utf8");
+  } catch (error) {
+    console.log(
+      `[claude-usage] unable to persist snapshot: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+};
+
+const cacheOkSnapshot = async (
+  snapshot: ClaudeUsageSnapshot,
+  projectStateDir: string | undefined,
+): Promise<ClaudeUsageSnapshot> => {
+  cachedSnapshot = { snapshot, fetchedAt: Date.now() };
+  await persistOkSnapshot(snapshot, projectStateDir);
+  return snapshot;
+};
 
 // Patterns that indicate the CLI welcome screen has fully rendered.
 // After ANSI stripping, cursor-movement codes collapse spaces, so we
@@ -385,6 +479,9 @@ const spawnCliAndCapture = (binary: string): Promise<string | null> =>
         let phase: "waiting" | "capturing" = "waiting";
         let settleTimer: ReturnType<typeof setTimeout> | null = null;
         let enterTimer: ReturnType<typeof setInterval> | null = null;
+        let usageRetryTimer: ReturnType<typeof setTimeout> | null = null;
+        let usageSentAt = 0;
+        let usageSendCount = 0;
 
         const term = pty.spawn(binary, ["--allowed-tools", ""], {
           name: "xterm-256color",
@@ -399,6 +496,7 @@ const spawnCliAndCapture = (binary: string): Promise<string | null> =>
           if (deadlineTimer) clearTimeout(deadlineTimer);
           if (settleTimer) clearTimeout(settleTimer);
           if (enterTimer) clearInterval(enterTimer);
+          if (usageRetryTimer) clearTimeout(usageRetryTimer);
           try {
             term.kill();
           } catch {
@@ -412,10 +510,14 @@ const spawnCliAndCapture = (binary: string): Promise<string | null> =>
         }, CLI_PTY_TIMEOUT_MS);
 
         const sendUsageCommand = () => {
-          if (phase !== "waiting") return;
-          phase = "capturing";
-          // Clear the buffer so we only capture /usage output
+          if (phase === "waiting") {
+            phase = "capturing";
+          }
+
+          // Capture only the latest /usage render, not the startup shell.
           usageBuffer = "";
+          usageSentAt = Date.now();
+          usageSendCount += 1;
           console.log("[claude-usage] CLI ready, sending /usage");
           try {
             term.write("/usage\r");
@@ -431,6 +533,18 @@ const spawnCliAndCapture = (binary: string): Promise<string | null> =>
               /* ignore */
             }
           }, CLI_PTY_ENTER_INTERVAL_MS);
+
+          if (usageRetryTimer) clearTimeout(usageRetryTimer);
+          usageRetryTimer = setTimeout(() => {
+            const usageCollapsed = stripAnsiCodes(usageBuffer).toLowerCase().replace(/\s+/gu, "");
+            const sawStopNeedle = STOP_NEEDLES.some((needle) =>
+              usageCollapsed.includes(needle.replace(/\s+/gu, "")),
+            );
+            if (!done && usageSendCount < 2 && !sawStopNeedle) {
+              console.log("[claude-usage] CLI usage view did not render yet, retrying /usage");
+              sendUsageCommand();
+            }
+          }, CLI_PTY_USAGE_RETRY_MS);
         };
 
         term.onData((data: string) => {
@@ -456,15 +570,27 @@ const spawnCliAndCapture = (binary: string): Promise<string | null> =>
           // Phase 1: wait for welcome screen to render, then send /usage
           if (phase === "waiting") {
             if (isClaudeCliReady(normalized, collapsed)) {
-              sendUsageCommand();
+              phase = "capturing";
+              usageBuffer = "";
+              setTimeout(() => {
+                if (!done && phase === "capturing" && usageSendCount === 0) {
+                  sendUsageCommand();
+                }
+              }, CLI_PTY_READY_DELAY_MS);
             }
             return;
           }
 
           // Phase 2: capturing /usage output — look for stop needles
           const usageCollapsed = stripAnsiCodes(usageBuffer).toLowerCase().replace(/\s+/gu, "");
+          const sawUsageCommand = USAGE_COMMAND_NEEDLES.some((needle) =>
+            usageCollapsed.includes(needle.replace(/\s+/gu, "")),
+          );
+          const usageGraceElapsed = Date.now() - usageSentAt >= CLI_PTY_POST_USAGE_GRACE_MS;
           if (
             !settleTimer &&
+            usageGraceElapsed &&
+            sawUsageCommand &&
             STOP_NEEDLES.some((n) => usageCollapsed.includes(n.replace(/\s+/gu, "")))
           ) {
             settleTimer = setTimeout(() => finish(usageBuffer), CLI_PTY_SETTLE_MS);
@@ -487,11 +613,13 @@ const spawnDefaultCliUsage = async (): Promise<string | null> => {
 /** Exported for testing — resets the snapshot cache. */
 export const resetCliSession = (): void => {
   cachedSnapshot = null;
+  refreshInFlight = null;
 };
 
 /** Clears the cached usage snapshot so the next read triggers a fresh fetch. */
 export const invalidateUsageCache = (): void => {
   cachedSnapshot = null;
+  refreshInFlight = null;
 };
 
 const readOauthUsageSnapshot = async (
@@ -592,7 +720,10 @@ export const readClaudeOauthUsageSnapshot = async (
   const now = dependencies.now?.() ?? new Date();
   const readCredentialsJson = dependencies.readCredentialsJson ?? readDefaultCredentialsJson;
   const fetchImpl = dependencies.fetchImpl ?? fetch;
-  return await readOauthUsageSnapshot(now, readCredentialsJson, fetchImpl);
+  const snapshot = await readOauthUsageSnapshot(now, readCredentialsJson, fetchImpl);
+  return snapshot.status === "ok"
+    ? await cacheOkSnapshot(snapshot, dependencies.projectStateDir)
+    : snapshot;
 };
 
 export const readClaudeCliUsageSnapshot = async (
@@ -610,7 +741,7 @@ export const readClaudeCliUsageSnapshot = async (
         console.log(
           `[claude-usage] CLI PTY parsed: session=${parsed.primaryUsedPercent}% week=${parsed.secondaryUsedPercent}% sonnet=${parsed.sonnetUsedPercent}%`,
         );
-        return buildCliSnapshot(parsed, now);
+        return await cacheOkSnapshot(buildCliSnapshot(parsed, now), dependencies.projectStateDir);
       }
       console.log(
         `[claude-usage] CLI PTY output had no parseable usage data. First 500 chars:\n${cleaned.slice(0, 500)}`,
@@ -627,15 +758,10 @@ export const readClaudeCliUsageSnapshot = async (
   return unavailableSnapshot(now, "Claude CLI usage unavailable.", "error");
 };
 
-export const readClaudeUsageSnapshot = async (
+const refreshClaudeUsageSnapshot = async (
   dependencies: ClaudeUsageDependencies = {},
 ): Promise<ClaudeUsageSnapshot> => {
   const now = dependencies.now?.() ?? new Date();
-
-  // Return cached snapshot if fresh enough (prevents rate-limit storms)
-  if (cachedSnapshot && Date.now() - cachedSnapshot.fetchedAt < CACHE_TTL_MS) {
-    return { ...cachedSnapshot.snapshot, fetchedAt: now.toISOString() };
-  }
 
   // Prefer the CLI PTY path when it works, since it reflects Claude Code
   // usage directly and avoids OAuth API rate-limit failures.
@@ -650,9 +776,7 @@ export const readClaudeUsageSnapshot = async (
         console.log(
           `[claude-usage] CLI PTY parsed: session=${parsed.primaryUsedPercent}% week=${parsed.secondaryUsedPercent}% sonnet=${parsed.sonnetUsedPercent}%`,
         );
-        const snapshot = buildCliSnapshot(parsed, now);
-        cachedSnapshot = { snapshot, fetchedAt: Date.now() };
-        return snapshot;
+        return await cacheOkSnapshot(buildCliSnapshot(parsed, now), dependencies.projectStateDir);
       }
       console.log(
         `[claude-usage] CLI PTY output had no parseable usage data. First 500 chars:\n${cleaned.slice(0, 500)}`,
@@ -672,15 +796,10 @@ export const readClaudeUsageSnapshot = async (
   const oauthSnapshot = await readOauthUsageSnapshot(now, readCredentialsJson, fetchImpl);
 
   if (oauthSnapshot.status === "ok") {
-    cachedSnapshot = { snapshot: oauthSnapshot, fetchedAt: Date.now() };
-    return oauthSnapshot;
+    return await cacheOkSnapshot(oauthSnapshot, dependencies.projectStateDir);
   }
 
   const cachedOkSnapshot = getCachedOkSnapshot();
-
-  // If OAuth reached the API but got a non-ok response (rate-limited, server error),
-  // serve the last successful snapshot if available. Only fall back to CLI PTY
-  // when OAuth credentials are missing/unreadable and there is no good cache.
   const oauthReachedApi =
     oauthSnapshot.source === "none" &&
     oauthSnapshot.message != null &&
@@ -703,10 +822,77 @@ export const readClaudeUsageSnapshot = async (
     return { ...cachedOkSnapshot, fetchedAt: now.toISOString() };
   }
 
-  // Both sources failed — return cached or error
-  const finalCachedOkSnapshot = getCachedOkSnapshot();
-  if (finalCachedOkSnapshot) {
-    return { ...finalCachedOkSnapshot, fetchedAt: now.toISOString() };
-  }
   return oauthSnapshot;
+};
+
+const startBackgroundRefresh = (dependencies: ClaudeUsageDependencies = {}): void => {
+  if (refreshInFlight) {
+    return;
+  }
+
+  refreshInFlight = refreshClaudeUsageSnapshot(dependencies)
+    .catch((error) => {
+      console.log(
+        `[claude-usage] background refresh error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return unavailableSnapshot(
+        dependencies.now?.() ?? new Date(),
+        "Unable to refresh Claude usage in background.",
+        "error",
+      );
+    })
+    .finally(() => {
+      refreshInFlight = null;
+    });
+};
+
+export const readClaudeUsageSnapshot = async (
+  dependencies: ClaudeUsageDependencies = {},
+): Promise<ClaudeUsageSnapshot> => {
+  const now = dependencies.now?.() ?? new Date();
+  const backgroundRefreshOnly = dependencies.backgroundRefreshOnly ?? false;
+
+  // Return cached snapshot if fresh enough (prevents rate-limit storms)
+  if (cachedSnapshot && Date.now() - cachedSnapshot.fetchedAt < CACHE_TTL_MS) {
+    return { ...cachedSnapshot.snapshot, fetchedAt: now.toISOString() };
+  }
+
+  if (!cachedSnapshot) {
+    const persistedSnapshot = await readPersistedOkSnapshot(dependencies.projectStateDir);
+    if (persistedSnapshot) {
+      cachedSnapshot = { snapshot: persistedSnapshot, fetchedAt: 0 };
+    }
+  }
+
+  const cachedOkSnapshot = getCachedOkSnapshot();
+  if (cachedOkSnapshot) {
+    startBackgroundRefresh(dependencies);
+    return { ...cachedOkSnapshot, fetchedAt: now.toISOString() };
+  }
+
+  if (backgroundRefreshOnly) {
+    startBackgroundRefresh(dependencies);
+    return unavailableSnapshot(now, "Claude usage refresh in progress.");
+  }
+
+  if (refreshInFlight) {
+    const snapshot = await refreshInFlight;
+    return snapshot.status === "ok"
+      ? { ...snapshot, fetchedAt: now.toISOString() }
+      : snapshot;
+  }
+
+  refreshInFlight = refreshClaudeUsageSnapshot(dependencies)
+    .catch((error) => {
+      console.log(
+        `[claude-usage] refresh error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return unavailableSnapshot(now, "Unable to refresh Claude usage.", "error");
+    })
+    .finally(() => {
+      refreshInFlight = null;
+    });
+
+  const snapshot = await refreshInFlight;
+  return snapshot.status === "ok" ? { ...snapshot, fetchedAt: now.toISOString() } : snapshot;
 };

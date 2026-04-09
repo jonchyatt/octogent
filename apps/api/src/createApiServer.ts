@@ -24,9 +24,9 @@ export const createApiServer = ({
   promptsDir,
   webDistDir,
   gitClient,
-  readClaudeUsageSnapshot = readClaudeUsageSnapshotDefault,
-  readClaudeOauthUsageSnapshot = readClaudeOauthUsageSnapshotDefault,
-  readClaudeCliUsageSnapshot = readClaudeCliUsageSnapshotDefault,
+  readClaudeUsageSnapshot,
+  readClaudeOauthUsageSnapshot,
+  readClaudeCliUsageSnapshot,
   readCodexUsageSnapshot = readCodexUsageSnapshotDefault,
   readGithubRepoSummary,
   scanUsageHeatmap,
@@ -57,6 +57,25 @@ export const createApiServer = ({
   // Keep the mirrored state copy as a fallback for packaged/runtime setups
   // where the source prompts directory is unavailable.
   const resolvedPromptsDir = fsExistsSync(sourceDir) ? sourceDir : resolvedCorePromptsDir;
+  const readClaudeUsageSnapshotWithDefault =
+    readClaudeUsageSnapshot ??
+    (() =>
+      readClaudeUsageSnapshotDefault({
+        projectStateDir: resolvedStateDir,
+        backgroundRefreshOnly: true,
+      }));
+  const readClaudeOauthUsageSnapshotWithDefault =
+    readClaudeOauthUsageSnapshot ??
+    (() =>
+      readClaudeOauthUsageSnapshotDefault({
+        projectStateDir: resolvedStateDir,
+      }));
+  const readClaudeCliUsageSnapshotWithDefault =
+    readClaudeCliUsageSnapshot ??
+    (() =>
+      readClaudeCliUsageSnapshotDefault({
+        projectStateDir: resolvedStateDir,
+      }));
   const readGithubRepoSummaryWithDefault =
     readGithubRepoSummary ??
     (() =>
@@ -91,9 +110,9 @@ export const createApiServer = ({
     promptsDir: resolvedPromptsDir,
     userPromptsDir: resolvedUserPromptsDir,
     webDistDir,
-    readClaudeUsageSnapshot,
-    readClaudeOauthUsageSnapshot,
-    readClaudeCliUsageSnapshot,
+    readClaudeUsageSnapshot: readClaudeUsageSnapshotWithDefault,
+    readClaudeOauthUsageSnapshot: readClaudeOauthUsageSnapshotWithDefault,
+    readClaudeCliUsageSnapshot: readClaudeCliUsageSnapshotWithDefault,
     readCodexUsageSnapshot,
     readGithubRepoSummary: readGithubRepoSummaryWithDefault,
     scanUsageHeatmap: scanUsageHeatmapWithDefault,
