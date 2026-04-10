@@ -17,6 +17,12 @@ Current runtime requirements:
 - `codex` installed for Codex-backed terminals
 - `git` for worktree terminals
 - `gh` for GitHub pull request features
+- `curl` for the current Claude hook callback flow
+
+On startup, Octogent now runs a prerequisite preflight:
+
+- startup fails if neither `claude` nor `codex` is installed
+- startup warns when optional integrations such as `git`, `gh`, or `curl` are unavailable
 
 ## Start
 

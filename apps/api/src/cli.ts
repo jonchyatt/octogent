@@ -16,6 +16,10 @@ import {
   readRuntimeMetadata,
   writeRuntimeMetadata,
 } from "./runtimeMetadata";
+import {
+  collectStartupPrerequisiteReport,
+  formatStartupPrerequisiteReport,
+} from "./startupPrerequisites";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -38,12 +42,12 @@ const resolvePackageRoot = () => {
     }
   }
 
-  return candidates[0];
+  return candidates[0] ?? process.cwd();
 };
 
 const PACKAGE_ROOT = resolvePackageRoot();
 
-const resolveRuntimeAssetPath = (...relativePathCandidates: string[][]) => {
+const resolveRuntimeAssetPath = (...relativePathCandidates: [string[], ...string[][]]) => {
   for (const relativePath of relativePathCandidates) {
     const candidate = join(PACKAGE_ROOT, ...relativePath);
     if (existsSync(candidate)) {
@@ -192,6 +196,22 @@ const maybeOpenBrowser = (url: string) => {
 };
 
 const startServer = async () => {
+  const startupPrerequisiteReport = collectStartupPrerequisiteReport();
+  const startupPrerequisiteLines = formatStartupPrerequisiteReport(startupPrerequisiteReport);
+  if (startupPrerequisiteLines.length > 0) {
+    for (const line of startupPrerequisiteLines) {
+      if (startupPrerequisiteReport.errors.length > 0) {
+        console.error(line);
+      } else {
+        console.warn(line);
+      }
+    }
+    if (startupPrerequisiteReport.errors.length > 0) {
+      process.exit(1);
+    }
+    console.warn("");
+  }
+
   const workspaceCwd = process.cwd();
   const { created, projectConfig, projectStateDir } = initializeProject(workspaceCwd);
   const promptsDir = resolveRuntimeAssetPath(["dist", "prompts"], ["prompts"]);
