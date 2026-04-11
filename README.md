@@ -1,87 +1,124 @@
 # Octogent
 
-Octogent is a web-first local control surface for coordinating multiple coding agents in parallel.
+It's really not fun to have ten Claude Code sessions open at once, constantly switching between them and trying to remember what each one was supposed to do. Things get blurry fast when one agent is doing documentation, another is touching the database, another is changing the API, and another is somewhere in the frontend. **Octogent** tries to fix that by giving each job its own scoped context, notes, and task list, while also making it possible for Claude Code to spawn other Claude Code agents, assign them work, and communicate with them.
 
-## Install
+## The Vision
 
-Octogent is being prepared for a normal public CLI flow:
+This repo is a personal exploration of what an AI coding environment might look like when terminal coding agents are treated as parts of a bigger orchestration layer, not the final interface by themselves. The point is not to hide **Claude Code** behind abstractions. The point is to make *multi-agent work less chaotic for the developer* on a real codebase.
 
-```bash
-npm install -g octogent
-```
 
-Current runtime requirements:
+## What Octogent Does for You
 
-- Node.js 22+
-- `claude` installed for Claude-backed terminals
-- `codex` installed for Codex-backed terminals
-- `git` for worktree terminals
-- `gh` for GitHub pull request features
-- `curl` for the current Claude hook callback flow
+- **Creates tentacles as context layers** so agents can work with scoped markdown files instead of broad, messy chat context
+- **Uses `todo.md` as an execution surface** so tasks stay visible, trackable, and ready for delegation
+- **Runs multiple Claude Code terminals** so one developer can coordinate several coding sessions at once
+- **Spawns child agents from todo items** so parallel work has a concrete source of truth
+- **Supports inter-agent messaging** so workers and coordinators can report completion, blockers, and handoff notes
+- **Keeps agent-facing context in files** so the system is more durable than a single prompt thread
+- **Provides a local API and UI** for terminal lifecycle, persistence, websocket transport, and orchestration
 
-On startup, Octogent now runs a prerequisite preflight:
+A **tentacle** is a folder under `.octogent/tentacles/<tentacle-id>/` that holds agent-readable markdown such as `CONTEXT.md`, `todo.md`, and any extra notes needed for that slice of the codebase.
 
-- startup fails if neither `claude` nor `codex` is installed
-- startup warns when optional integrations such as `git`, `gh`, or `curl` are unavailable
+The octopus metaphor is literal: *one octopus, many tentacles, different work happening at the same time*.
 
-## Start
+## Tentacles
 
-From any project directory:
+A **tentacle** is a scoped job container. It gives one slice of work its own files, notes, and `todo.md` so the agent is not forced to reconstruct the entire codebase context from chat history.
 
-```bash
-octogent
-```
+What it does:
 
-On first run, Octogent now:
+- keeps context local to one area such as documentation, database work, API changes, or frontend work
+- gives agents durable files they can read and update
+- provides a natural source for delegation through todo items
 
-- creates a local `.octogent/` scaffold automatically
-- writes a stable per-project ID to `.octogent/project.json`
-- stores global runtime state in `~/.octogent/projects/<project-id>/`
-- chooses an available local API port starting at `8787`
-- persists the actual bound API address for follow-up CLI commands
-- opens the web UI automatically unless `OCTOGENT_NO_OPEN=1` is set
+For the full model, see [Tentacles](docs/concepts/tentacles.md) and [Working With Todos](docs/guides/working-with-todos.md).
 
-Useful commands:
+## Context, Notes, and Task Lists
 
-```bash
-octogent init [project-name]
-octogent projects
-octogent tentacle create <name>
-octogent tentacle list
-octogent terminal create --name "Planner"
-octogent channel send <terminal-id> "message"
-```
+In Octogent, a tentacle is not only a task bucket. It is also where the job keeps its local context. That can include notes about one part of the codebase, implementation details, handoff files, and a `todo.md` that tracks what still needs to happen. A Claude Code agent can read and update those files as the work moves forward.
 
-## Persistence
+That means you can:
 
-Octogent now separates project-local and global data intentionally:
+- keep documentation, database, API, or frontend work separated into different job contexts
+- store the notes that help an agent understand that part of the codebase
+- spawn one agent for one specific item
+- break a larger job into multiple items
+- launch a swarm so several agents work through the list in parallel
+- use the files inside the tentacle as the shared source of truth for what is done and what is left
 
-- `.octogent/` holds local project metadata, tentacle docs, and worktrees
-- `~/.octogent/projects/<project-id>/state/` holds runtime state, transcripts, monitor/cache data, and active runtime metadata
-- `~/.octogent/projects.json` maps stable project IDs to local paths
+For the full model, see [Tentacles](docs/concepts/tentacles.md) and [Working With Todos](docs/guides/working-with-todos.md).
 
-This avoids collisions between unrelated repositories that share the same display name.
+## Claude Code Managing Claude Code
 
-## Claude Integration
+One of the main ideas here is that **Claude Code** should not only be treated as a single terminal session waiting for a human prompt. In Octogent, one Claude Code agent can coordinate other Claude Code agents, assign them specific jobs, and exchange short messages with them while the human stays at the orchestration layer.
 
-Claude Code hook installation is now scoped to Claude-backed terminals only.
+This is different from Claude Code's subagent spawning, since it allows you to directly see and control what each worker agent is doing.
 
-When Octogent installs Claude hooks, it:
+That means Octogent is not just a dashboard for multiple terminals. It is also a way to structure parent-worker behavior around scoped tasks and shared context files.
 
-- writes to `.claude/settings.json` only in the relevant workspace
-- merges Octogent hook entries into existing settings instead of overwriting the file
-- keeps the integration local to the workspace or worktree being used by that terminal
+For the current model, see [Orchestrating Child Agents](docs/guides/orchestrating-child-agents.md) and [Inter-Agent Messaging](docs/guides/inter-agent-messaging.md).
 
-## Contributors
+## Quick start
 
-For monorepo development:
+<details>
+<summary><strong>Local development</strong></summary>
 
 ```bash
 pnpm install
 pnpm dev
-pnpm build
-pnpm test
-pnpm lint
 ```
 
-`pnpm dev` still runs the API and web app in workspace mode for contributors.
+This starts the API and web app for local development.
+
+</details>
+
+<details open>
+<summary><strong>CLI usage</strong></summary>
+
+```bash
+npm install -g octogent
+octogent
+```
+
+</details>
+
+On first run, **Octogent** creates the local `.octogent/` scaffold automatically, assigns a stable project ID, picks an available local API port starting at `8787`, and opens the UI unless `OCTOGENT_NO_OPEN=1` is set.
+
+## Requirements
+
+- Node.js `22+`
+- `claude` installed for the supported agent workflow
+- `git` for worktree terminals
+- `gh` for GitHub pull request features
+- `curl` for the current Claude hook callback flow
+
+Startup fails if neither `claude` nor another supported provider binary is installed. The current docs only cover **Claude Code**.
+
+## What persists
+
+- `.octogent/` keeps project-local scaffold and worktrees
+- `~/.octogent/projects/<project-id>/state/` keeps runtime state, transcripts, monitor cache, and metadata
+- `.octogent/tentacles/<tentacle-id>/` keeps the context files and todos that agents read
+
+PTY sessions survive browser reloads during the idle grace period, but they do **not** survive an API restart.
+
+## Docs
+
+- [Docs Home](docs/index.md)
+- [Installation](docs/getting-started/installation.md)
+- [Quickstart](docs/getting-started/quickstart.md)
+- [Mental Model](docs/concepts/mental-model.md)
+- [Tentacles](docs/concepts/tentacles.md)
+- [Runtime and API](docs/concepts/runtime-and-api.md)
+- [Working With Todos](docs/guides/working-with-todos.md)
+- [Orchestrating Child Agents](docs/guides/orchestrating-child-agents.md)
+- [Inter-Agent Messaging](docs/guides/inter-agent-messaging.md)
+- [CLI Reference](docs/reference/cli.md)
+- [Filesystem Layout](docs/reference/filesystem-layout.md)
+- [API Reference](docs/reference/api.md)
+- [Experimental Features](docs/reference/experimental-features.md)
+- [Troubleshooting](docs/reference/troubleshooting.md)
+- [Contributing](CONTRIBUTING.md)
+
+## Contributor setup
+Contributions are welcome 🤗. For contributor workflow and expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
