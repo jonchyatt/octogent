@@ -1,7 +1,15 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { spawnMock } = vi.hoisted(() => ({
+  spawnMock: vi.fn(),
+}));
+
+vi.mock("node-pty", () => ({
+  spawn: spawnMock,
+}));
 
 import { createApiServer } from "../src/createApiServer";
 import type { GitClient } from "../src/terminalRuntime";
