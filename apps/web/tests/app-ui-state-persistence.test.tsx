@@ -18,24 +18,7 @@ describe("App UI state persistence", () => {
       const method = init?.method ?? "GET";
 
       if (url.endsWith("/api/terminal-snapshots") && method === "GET") {
-        return jsonResponse([
-          {
-            terminalId: "terminal-1",
-            label: "core-planner",
-            state: "live",
-            tentacleId: "tentacle-a",
-            tentacleName: "tentacle-a",
-            createdAt: "2026-02-24T10:00:00.000Z",
-          },
-        ]);
-      }
-
-      if (url.endsWith("/api/codex/usage") && method === "GET") {
-        return jsonResponse({
-          status: "unavailable",
-          fetchedAt: "2026-02-24T10:00:00.000Z",
-          source: "none",
-        });
+        return jsonResponse([]);
       }
 
       if (url.endsWith("/api/claude/usage") && method === "GET") {
@@ -46,23 +29,38 @@ describe("App UI state persistence", () => {
         });
       }
 
+      if (url.endsWith("/api/codex/usage") && method === "GET") {
+        return jsonResponse({
+          status: "unavailable",
+          fetchedAt: "2026-02-24T10:00:00.000Z",
+          source: "none",
+        });
+      }
+
+      if (url.endsWith("/api/github/summary") && method === "GET") {
+        return jsonResponse({
+          status: "unavailable",
+          source: "none",
+          fetchedAt: "2026-02-24T10:00:00.000Z",
+          commitsPerDay: [],
+        });
+      }
+
+      if (url.includes("/api/analytics/usage-heatmap") && method === "GET") {
+        return jsonResponse({
+          days: [],
+          projects: [],
+          models: [],
+        });
+      }
+
       if (url.endsWith("/api/ui-state") && method === "GET") {
         return jsonResponse({
-          isAgentsSidebarVisible: true,
-          sidebarWidth: 380,
-          isActiveAgentsSectionExpanded: true,
+          activePrimaryNav: 8,
           isRuntimeStatusStripVisible: false,
           isMonitorVisible: false,
           isBottomTelemetryVisible: false,
-          isCodexUsageVisible: true,
-          isClaudeUsageVisible: true,
-          isCodexUsageSectionExpanded: false,
-          isClaudeUsageSectionExpanded: false,
           terminalCompletionSound: "retro-beep",
-          minimizedTerminalIds: ["terminal-1"],
-          terminalWidths: {
-            "terminal-1": 450,
-          },
         });
       }
 
@@ -85,45 +83,34 @@ describe("App UI state persistence", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "[9] Board" }));
-    const sidebar = await screen.findByLabelText("Active Agents sidebar");
-    await waitFor(() => {
-      expect(sidebar).toHaveStyle({ width: "380px" });
-    });
-    expect(
-      within(sidebar).getByRole("button", {
-        name: "Expand Codex token usage section",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(sidebar).getByRole("button", {
-        name: "Expand Claude token usage section",
-      }),
-    ).toBeInTheDocument();
-    expect(await screen.findByText("All terminals minimized")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Settings primary view")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Runtime status strip")).toBeNull();
+    expect(screen.queryByLabelText("Telemetry ticker tape")).toBeNull();
+    expect(screen.getByRole("button", { name: /Retro beep/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("switch", { name: "Show runtime status strip" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(screen.getByRole("switch", { name: "Enable X Monitor" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "Maximize terminal terminal-1" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Show runtime status strip" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Enable X Monitor" }));
+    fireEvent.click(screen.getByRole("button", { name: /Double beep/i }));
 
     await waitFor(() => {
-      expect(uiStatePatchBodies.some((body) => Array.isArray(body.minimizedTerminalIds))).toBe(
+      expect(uiStatePatchBodies.some((body) => body.isRuntimeStatusStripVisible === true)).toBe(
         true,
       );
-    });
-    expect(uiStatePatchBodies.at(-1)?.minimizedTerminalIds).toEqual([]);
-    expect(uiStatePatchBodies.at(-1)?.isClaudeUsageSectionExpanded).toBe(false);
-    expect(uiStatePatchBodies.at(-1)?.isRuntimeStatusStripVisible).toBe(false);
-    expect(uiStatePatchBodies.at(-1)?.isMonitorVisible).toBe(false);
-    expect(uiStatePatchBodies.at(-1)?.isBottomTelemetryVisible).toBe(false);
-    expect(uiStatePatchBodies.at(-1)?.isCodexUsageVisible).toBe(true);
-    expect(uiStatePatchBodies.at(-1)?.isClaudeUsageVisible).toBe(true);
-
-    fireEvent.click(screen.getByRole("button", { name: "[6] Settings" }));
-    fireEvent.click(screen.getByRole("radio", { name: /Double beep/i }));
-
-    await waitFor(() => {
-      expect(
-        uiStatePatchBodies.some((body) => body.terminalCompletionSound === "double-beep"),
-      ).toBe(true);
+      expect(uiStatePatchBodies.some((body) => body.isMonitorVisible === true)).toBe(true);
+      expect(uiStatePatchBodies.some((body) => body.terminalCompletionSound === "double-beep")).toBe(
+        true,
+      );
     });
   });
 });

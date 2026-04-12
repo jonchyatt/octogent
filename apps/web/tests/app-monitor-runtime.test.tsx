@@ -34,12 +34,28 @@ describe("App Monitor runtime", () => {
         });
       }
 
+      if (url.endsWith("/api/claude/usage") && method === "GET") {
+        return jsonResponse({
+          status: "unavailable",
+          source: "none",
+          fetchedAt: "2026-02-28T12:00:00.000Z",
+        });
+      }
+
       if (url.endsWith("/api/github/summary") && method === "GET") {
         return jsonResponse({
           status: "unavailable",
           source: "none",
           fetchedAt: "2026-02-28T12:00:00.000Z",
           commitsPerDay: [],
+        });
+      }
+
+      if (url.includes("/api/analytics/usage-heatmap") && method === "GET") {
+        return jsonResponse({
+          days: [],
+          projects: [],
+          models: [],
         });
       }
 
@@ -214,7 +230,7 @@ describe("App Monitor runtime", () => {
     expect(
       within(monitorView).queryByRole("textbox", { name: "Monitor query terms" }),
     ).not.toBeInTheDocument();
-    fireEvent.click(within(monitorView).getByRole("radio", { name: "3D" }));
+    fireEvent.click(within(monitorView).getByRole("button", { name: "3D" }));
     fireEvent.change(within(monitorView).getByLabelText("Add monitor query term"), {
       target: {
         value: "Agent Ops",
@@ -287,12 +303,28 @@ describe("App Monitor runtime", () => {
         });
       }
 
+      if (url.endsWith("/api/claude/usage") && method === "GET") {
+        return jsonResponse({
+          status: "unavailable",
+          source: "none",
+          fetchedAt: "2026-02-28T12:00:00.000Z",
+        });
+      }
+
       if (url.endsWith("/api/github/summary") && method === "GET") {
         return jsonResponse({
           status: "unavailable",
           source: "none",
           fetchedAt: "2026-02-28T12:00:00.000Z",
           commitsPerDay: [],
+        });
+      }
+
+      if (url.includes("/api/analytics/usage-heatmap") && method === "GET") {
+        return jsonResponse({
+          days: [],
+          projects: [],
+          models: [],
         });
       }
 
@@ -431,12 +463,28 @@ describe("App Monitor runtime", () => {
         });
       }
 
+      if (url.endsWith("/api/claude/usage") && method === "GET") {
+        return jsonResponse({
+          status: "unavailable",
+          source: "none",
+          fetchedAt: "2026-02-28T12:00:00.000Z",
+        });
+      }
+
       if (url.endsWith("/api/github/summary") && method === "GET") {
         return jsonResponse({
           status: "unavailable",
           source: "none",
           fetchedAt: "2026-02-28T12:00:00.000Z",
           commitsPerDay: [],
+        });
+      }
+
+      if (url.includes("/api/analytics/usage-heatmap") && method === "GET") {
+        return jsonResponse({
+          days: [],
+          projects: [],
+          models: [],
         });
       }
 
@@ -541,12 +589,28 @@ describe("App Monitor runtime", () => {
         });
       }
 
+      if (url.endsWith("/api/claude/usage") && method === "GET") {
+        return jsonResponse({
+          status: "unavailable",
+          source: "none",
+          fetchedAt: "2026-02-28T12:00:00.000Z",
+        });
+      }
+
       if (url.endsWith("/api/github/summary") && method === "GET") {
         return jsonResponse({
           status: "unavailable",
           source: "none",
           fetchedAt: "2026-02-28T12:00:00.000Z",
           commitsPerDay: [],
+        });
+      }
+
+      if (url.includes("/api/analytics/usage-heatmap") && method === "GET") {
+        return jsonResponse({
+          days: [],
+          projects: [],
+          models: [],
         });
       }
 

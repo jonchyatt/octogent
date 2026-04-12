@@ -225,8 +225,8 @@ export const GitHubPrimaryView = ({
                     </linearGradient>
                   </defs>
 
-                  {yTicks.map((tick) => (
-                    <g key={tick.count}>
+                  {yTicks.map((tick, index) => (
+                    <g key={`${tick.count}-${index}`}>
                       <line
                         x1={0}
                         y1={tick.y}

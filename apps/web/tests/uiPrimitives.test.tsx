@@ -22,6 +22,10 @@ describe("UI primitives", () => {
   it("renders status badges with semantic tone classes", () => {
     render(<StatusBadge tone="processing" />);
 
-    expect(screen.getByText("PROCESSING")).toHaveClass("status-badge", "pill", "processing");
+    expect(screen.getByText("PROCESSING").closest(".status-badge")).toHaveClass(
+      "status-badge",
+      "pill",
+      "processing",
+    );
   });
 });

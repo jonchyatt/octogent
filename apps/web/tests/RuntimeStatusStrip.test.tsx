@@ -8,7 +8,7 @@ describe("RuntimeStatusStrip", () => {
     render(<RuntimeStatusStrip sparklinePoints="" usageData={null} claudeUsage={null} />);
 
     const usage = screen.getByLabelText("Claude usage limits");
-    expect(within(usage).getByText("···")).toBeInTheDocument();
+    expect(within(usage).getAllByText("···")).toHaveLength(2);
   });
 
   it("uses a 5h label for oauth-backed usage", () => {

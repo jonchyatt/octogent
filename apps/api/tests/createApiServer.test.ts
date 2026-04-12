@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createApiServer } from "../src/createApiServer";
 import type { GitHubRepoSummarySnapshot } from "../src/githubRepoSummary";
@@ -778,6 +778,7 @@ describe("createApiServer", () => {
   });
 
   it("sanitizes unexpected internal errors from API responses", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const baseUrl = await startServer();
 
     const response = await fetch(`${baseUrl}/api/terminals/%E0%A4%A`, {
@@ -791,6 +792,7 @@ describe("createApiServer", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Internal server error",
     });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
   });
 
   it("returns codex usage snapshot for GET /api/codex/usage", async () => {

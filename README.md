@@ -1,6 +1,6 @@
 <div align="center">
 
-<img width="1500" height="500" alt="Octogent header" src="./static/images/octopus-header.png" />
+<img width="1500" height="500" alt="Octogent header" src="./static/images/octogent-header.png" />
 <br/>
 <br/>
 

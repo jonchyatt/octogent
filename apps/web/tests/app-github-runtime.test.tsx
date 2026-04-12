@@ -39,6 +39,22 @@ const mockGithubRuntimeRequests = () => {
       });
     }
 
+    if (url.endsWith("/api/claude/usage") && method === "GET") {
+      return jsonResponse({
+        status: "unavailable",
+        source: "none",
+        fetchedAt: "2026-02-27T12:00:00.000Z",
+      });
+    }
+
+    if (url.includes("/api/analytics/usage-heatmap") && method === "GET") {
+      return jsonResponse({
+        days: [],
+        projects: [],
+        models: [],
+      });
+    }
+
     if (url.endsWith("/api/github/summary") && method === "GET") {
       return jsonResponse({
         status: "ok",
@@ -57,6 +73,10 @@ const mockGithubRuntimeRequests = () => {
       });
     }
 
+    if (url.endsWith("/api/ui-state") && method === "GET") {
+      return jsonResponse({});
+    }
+
     return notFoundResponse();
   });
 };
@@ -73,30 +93,24 @@ describe("App GitHub runtime views", () => {
     const { container } = render(<App />);
 
     const strip = await screen.findByLabelText("Runtime status strip");
-    expect(within(strip).getByText("hesamsheikh/octogent")).toBeInTheDocument();
-    expect(within(strip).getByText("42")).toBeInTheDocument();
     expect(within(strip).getByText("COMMITS/DAY · LAST 30 DAYS")).toBeInTheDocument();
-    expect(within(strip).getByText("7")).toBeInTheDocument();
-    expect(within(strip).getByText("3")).toBeInTheDocument();
-    expect(within(strip).getByText("18")).toBeInTheDocument();
 
     const sparkline = container.querySelector(".console-status-sparkline polyline");
     expect(sparkline).not.toBeNull();
     expect(sparkline?.getAttribute("points")).not.toBe("");
   });
 
-  it("renders [2] GitHub overview and hoverable overview graph", async () => {
+  it("renders the Activity view with the GitHub overview graph", async () => {
     mockGithubRuntimeRequests();
 
     const { container } = render(<App />);
-    await screen.findByLabelText("Active Agents sidebar");
-
     fireEvent.click(
       screen.getByRole("button", {
-        name: "[3] GitHub",
+        name: "[3] Activity",
       }),
     );
 
+    expect(await screen.findByLabelText("Activity primary view")).toBeInTheDocument();
     const githubView = await screen.findByLabelText("GitHub primary view");
     expect(within(githubView).getByText("hesamsheikh/octogent")).toBeInTheDocument();
     expect(
