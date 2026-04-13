@@ -1,4 +1,5 @@
 import { readDeckTentacles } from "../deck/readDeckTentacles";
+import { join } from "node:path";
 import { resolvePrompt } from "../prompts";
 import {
   RuntimeInputError,
@@ -19,6 +20,27 @@ import {
   parseTerminalNameOrigin,
   parseTerminalWorkspaceMode,
 } from "./terminalParsers";
+
+const buildTentacleInitialPrompt = (
+  promptsDir: string,
+  workspaceCwd: string,
+  projectStateDir: string,
+  tentacleId: string,
+): Promise<string | undefined> => {
+  const tentacle = readDeckTentacles(workspaceCwd, projectStateDir).find(
+    (entry) => entry.tentacleId === tentacleId,
+  );
+  if (!tentacle) {
+    return Promise.resolve(undefined);
+  }
+
+  const tentacleFolderPath = join(".octogent", "tentacles", tentacleId);
+  return resolvePrompt(promptsDir, "tentacle-context-init", {
+    tentacleName: tentacle.displayName,
+    tentacleId,
+    tentacleContextPath: tentacleFolderPath,
+  });
+};
 
 export const handleTerminalSnapshotsRoute: ApiRouteHandler = async (
   { request, response, requestUrl, corsOrigin },
@@ -90,6 +112,7 @@ export const handleTerminalsCollectionRoute: ApiRouteHandler = async (
       agentProvider?: TerminalAgentProvider;
       nameOrigin?: TerminalNameOrigin;
       initialPrompt?: string;
+      initialInputDraft?: string;
       autoRenamePromptContext?: string;
       parentTerminalId?: string;
     } = {
@@ -203,6 +226,18 @@ export const handleTerminalsCollectionRoute: ApiRouteHandler = async (
       bodyPayload.initialPrompt.trim().length > 0
     ) {
       createTerminalInput.initialPrompt = bodyPayload.initialPrompt.trim();
+    }
+
+    if (!createTerminalInput.initialPrompt && createTerminalInput.tentacleId) {
+      const defaultTentaclePrompt = await buildTentacleInitialPrompt(
+        promptsDir,
+        workspaceCwd,
+        projectStateDir,
+        createTerminalInput.tentacleId,
+      );
+      if (defaultTentaclePrompt) {
+        createTerminalInput.initialInputDraft = defaultTentaclePrompt;
+      }
     }
 
     const snapshot = runtime.createTerminal(createTerminalInput);

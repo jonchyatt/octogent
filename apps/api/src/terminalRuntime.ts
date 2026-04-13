@@ -251,6 +251,7 @@ export const createTerminalRuntime = ({
     workspaceMode = "shared",
     agentProvider,
     initialPrompt,
+    initialInputDraft,
     baseRef,
     parentTerminalId,
     nameOrigin,
@@ -263,6 +264,7 @@ export const createTerminalRuntime = ({
     workspaceMode?: TentacleWorkspaceMode;
     agentProvider?: TerminalAgentProvider;
     initialPrompt?: string;
+    initialInputDraft?: string;
     baseRef?: string;
     parentTerminalId?: string;
     nameOrigin?: TerminalNameOrigin;
@@ -305,6 +307,7 @@ export const createTerminalRuntime = ({
       workspaceMode,
       agentProvider: agentProvider ?? DEFAULT_AGENT_PROVIDER,
       ...(initialPrompt ? { initialPrompt } : {}),
+      ...(initialInputDraft ? { initialInputDraft } : {}),
       ...(initialPrompt ? { lastActiveAt: new Date().toISOString() } : {}),
       ...(parentTerminalId ? { parentTerminalId } : {}),
     };
@@ -472,7 +475,7 @@ export const createTerminalRuntime = ({
 
       terminal.tentacleName = tentacleName;
       terminal.nameOrigin = "user";
-      terminal.autoRenamePromptContext = undefined;
+      delete terminal.autoRenamePromptContext;
       persistRegistry();
       broadcastTerminalEvent({
         type: "terminal-updated",

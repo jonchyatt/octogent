@@ -507,6 +507,61 @@ describe("createSessionRuntime", () => {
     runtime.close();
   });
 
+  it("pastes an initial input draft without submitting it", () => {
+    vi.useFakeTimers();
+
+    const tentacleId = "tentacle-1";
+    const terminals = new Map<string, PersistedTerminal>([
+      [
+        tentacleId,
+        {
+          terminalId: tentacleId,
+          tentacleId,
+          tentacleName: tentacleId,
+          createdAt: new Date().toISOString(),
+          workspaceMode: "shared",
+          initialInputDraft: "You are working on docs.",
+        },
+      ],
+    ]);
+    const sessions = new Map<string, TerminalSession>();
+    const websocketServer = new FakeWebSocketServer();
+    const pty = new FakePty();
+    const transcriptDirectoryPath = createTemporaryDirectory();
+    spawnMock.mockReturnValue(pty);
+
+    const runtime = createSessionRuntime({
+      websocketServer: websocketServer as unknown as import("ws").WebSocketServer,
+      terminals,
+      sessions,
+      getTentacleWorkspaceCwd: () => process.cwd(),
+      isDebugPtyLogsEnabled: false,
+      ptyLogDir: process.cwd(),
+      transcriptDirectoryPath,
+      sessionIdleGraceMs: 1_000,
+      scrollbackMaxBytes: 1_024,
+    });
+
+    const socket = new FakeWebSocket();
+    websocketServer.nextSocket = socket;
+    expect(
+      runtime.handleUpgrade(createUpgradeRequest(tentacleId), {} as Duplex, Buffer.alloc(0)),
+    ).toBe(true);
+
+    expect(pty.write).toHaveBeenNthCalledWith(1, "claude\r");
+
+    vi.advanceTimersByTime(4_000);
+    expect(pty.write).toHaveBeenNthCalledWith(
+      2,
+      "\u001b[200~You are working on docs.\u001b[201~",
+    );
+
+    vi.advanceTimersByTime(150);
+    expect(pty.write).toHaveBeenCalledTimes(2);
+
+    runtime.close();
+  });
+
   it("reports runtime state changes through the state-change callback", () => {
     const tentacleId = "tentacle-1";
     const terminals = new Map<string, PersistedTerminal>([

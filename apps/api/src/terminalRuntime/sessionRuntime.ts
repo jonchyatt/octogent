@@ -348,6 +348,18 @@ export const createSessionRuntime = ({
         }, INITIAL_PROMPT_SUBMIT_DELAY_MS);
       }, INITIAL_PROMPT_DELAY_MS);
     }
+
+    if (session.initialInputDraft && !session.isInitialInputDraftSent && !session.initialPrompt) {
+      setTimeout(() => {
+        if (session.isInitialInputDraftSent) {
+          return;
+        }
+        session.isInitialInputDraftSent = true;
+        appendDebugLog(session, `initial-input-draft session=${sessionId}`);
+        const draft = session.initialInputDraft ?? "";
+        session.pty.write(`${BRACKETED_PASTE_START}${draft}${BRACKETED_PASTE_END}`);
+      }, INITIAL_PROMPT_DELAY_MS);
+    }
   };
 
   const ensureSession = (sessionId: string, tentacleId: string) => {
@@ -460,6 +472,9 @@ export const createSessionRuntime = ({
     // Propagate initial prompt from the terminal definition, if set.
     if (terminalRecord?.initialPrompt) {
       session.initialPrompt = terminalRecord.initialPrompt;
+    }
+    if (terminalRecord?.initialInputDraft) {
+      session.initialInputDraft = terminalRecord.initialInputDraft;
     }
 
     sessions.set(sessionId, session);

@@ -1739,6 +1739,72 @@ describe("createApiServer", () => {
     );
   });
 
+  it("injects a default tentacle context prompt for tentacle terminals", async () => {
+    const workspaceCwd = mkdtempSync(join(tmpdir(), "octogent-api-test-"));
+    temporaryDirectories.push(workspaceCwd);
+    const tentacleDir = join(workspaceCwd, ".octogent", "tentacles", "docs");
+    const relativeTentacleDir = ".octogent/tentacles/docs";
+    const promptsDir = join(process.cwd(), "..", "..", "prompts");
+    mkdirSync(tentacleDir, { recursive: true });
+    writeFileSync(join(tentacleDir, "CONTEXT.md"), "# Docs\n\nDocumentation team.\n", "utf8");
+    writeFileSync(join(tentacleDir, "todo.md"), "# Todo\n", "utf8");
+    const baseUrl = await startServer({
+      workspaceCwd,
+      promptsDir,
+    });
+
+    const createResponse = await fetch(`${baseUrl}/api/terminals`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ tentacleId: "docs", workspaceMode: "shared" }),
+    });
+    expect(createResponse.status).toBe(201);
+    await expect(createResponse.json()).resolves.toEqual(
+      expect.objectContaining({
+        terminalId: "terminal-1",
+        tentacleId: "docs",
+      }),
+    );
+
+    const registryDocument = await waitForRegistryDocument<{
+      terminals: Array<{
+        terminalId: string;
+        initialInputDraft?: string;
+      }>;
+    }>(workspaceCwd, (document) =>
+      document.terminals.some(
+        (terminal) =>
+          terminal.terminalId === "terminal-1" &&
+          terminal.initialInputDraft ===
+            `You are working on the Docs section. For tool-list items, context, and docs, check ${relativeTentacleDir}.`,
+      ),
+    );
+    expect(registryDocument.terminals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          terminalId: "terminal-1",
+          initialInputDraft: `You are working on the Docs section. For tool-list items, context, and docs, check ${relativeTentacleDir}.`,
+        }),
+      ]),
+    );
+
+    const snapshotsResponse = await fetch(`${baseUrl}/api/terminal-snapshots`, {
+      headers: { Accept: "application/json" },
+    });
+    expect(snapshotsResponse.status).toBe(200);
+    await expect(snapshotsResponse.json()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          terminalId: "terminal-1",
+          hasUserPrompt: false,
+        }),
+      ]),
+    );
+  });
+
   it("creates isolated worktree terminals with dedicated cwd", async () => {
     const workspaceCwd = mkdtempSync(join(tmpdir(), "octogent-api-test-"));
     temporaryDirectories.push(workspaceCwd);

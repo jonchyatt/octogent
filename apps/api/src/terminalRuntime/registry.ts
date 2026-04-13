@@ -260,6 +260,9 @@ const parseV3Terminals = (
       terminal.parentTerminalId = entry.parentTerminalId;
     if (isTerminalAgentProvider(entry.agentProvider)) terminal.agentProvider = entry.agentProvider;
     if (typeof entry.initialPrompt === "string") terminal.initialPrompt = entry.initialPrompt;
+    if (typeof entry.initialInputDraft === "string") {
+      terminal.initialInputDraft = entry.initialInputDraft;
+    }
     if (typeof entry.autoRenamePromptContext === "string") {
       terminal.autoRenamePromptContext = entry.autoRenamePromptContext;
     }

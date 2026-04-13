@@ -70,6 +70,8 @@ export type TerminalSession = {
   hasTranscriptEnded?: boolean;
   initialPrompt?: string;
   isInitialPromptSent?: boolean;
+  initialInputDraft?: string;
+  isInitialInputDraftSent?: boolean;
   keepAliveWithoutClients?: boolean;
   hasSeenProcessing?: boolean;
   lastToolName?: string;
@@ -99,6 +101,7 @@ export type PersistedTerminal = {
   workspaceMode: TentacleWorkspaceMode;
   agentProvider?: TerminalAgentProvider;
   initialPrompt?: string;
+  initialInputDraft?: string;
   lastActiveAt?: string;
   parentTerminalId?: string;
 };
