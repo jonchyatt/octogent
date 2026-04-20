@@ -847,4 +847,71 @@ describe("createSessionRuntime", () => {
 
     runtime.close();
   });
+
+  it("reports session lifecycle start and exit through callbacks", () => {
+    const tentacleId = "tentacle-1";
+    const terminals = new Map<string, PersistedTerminal>([
+      [
+        tentacleId,
+        {
+          terminalId: tentacleId,
+          tentacleId,
+          tentacleName: tentacleId,
+          createdAt: new Date().toISOString(),
+          workspaceMode: "shared",
+        },
+      ],
+    ]);
+    const sessions = new Map<string, TerminalSession>();
+    const websocketServer = new FakeWebSocketServer();
+    const pty = new FakePty();
+    Object.defineProperty(pty, "pid", { value: 3210 });
+    const transcriptDirectoryPath = createTemporaryDirectory();
+    const onSessionStart = vi.fn();
+    const onSessionEnd = vi.fn();
+    spawnMock.mockReturnValue(pty);
+
+    const runtime = createSessionRuntime({
+      websocketServer: websocketServer as unknown as import("ws").WebSocketServer,
+      terminals,
+      sessions,
+      getTentacleWorkspaceCwd: () => process.cwd(),
+      isDebugPtyLogsEnabled: false,
+      ptyLogDir: process.cwd(),
+      transcriptDirectoryPath,
+      sessionIdleGraceMs: 60_000,
+      scrollbackMaxBytes: 1024,
+      onSessionStart,
+      onSessionEnd,
+    });
+
+    const socket = new FakeWebSocket();
+    websocketServer.nextSocket = socket;
+    expect(
+      runtime.handleUpgrade(createUpgradeRequest(tentacleId), {} as Duplex, Buffer.alloc(0)),
+    ).toBe(true);
+
+    expect(onSessionStart).toHaveBeenCalledWith(
+      tentacleId,
+      expect.objectContaining({
+        processId: 3210,
+        startedAt: expect.any(String),
+      }),
+    );
+
+    pty.emit("exit", { exitCode: 7, signal: 0 });
+
+    expect(onSessionEnd).toHaveBeenCalledWith(
+      tentacleId,
+      expect.objectContaining({
+        reason: "pty_exit",
+        exitCode: 7,
+        signal: 0,
+        endedAt: expect.any(String),
+      }),
+    );
+    expect(sessions.has(tentacleId)).toBe(false);
+
+    runtime.close();
+  });
 });

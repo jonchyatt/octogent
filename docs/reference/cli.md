@@ -58,6 +58,31 @@ Options:
 - `--prompt-template`: prompt template name
 - `--prompt-variables`: JSON object of prompt template variables
 
+## List terminals
+
+```bash
+octogent terminal list
+```
+
+Shows each terminal ID, lifecycle state, recorded process ID when available, lifecycle reason, and display name.
+
+## Stop or kill a terminal
+
+```bash
+octogent terminal stop <terminal-id>
+octogent terminal kill <terminal-id>
+```
+
+`stop` closes an active session or sends `SIGTERM` to the recorded process for a stale terminal. `kill` uses `SIGKILL`.
+
+## Prune inactive terminal records
+
+```bash
+octogent terminal prune
+```
+
+Removes terminal records whose lifecycle state is `stale`, `stopped`, or `exited`. It does not remove active sessions.
+
 ## Send a message
 
 ```bash

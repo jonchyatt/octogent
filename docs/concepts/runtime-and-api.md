@@ -44,6 +44,7 @@ flowchart TD
 - runtime state lives under `~/.octogent/projects/<project-id>/state/`
 - transcript events persist independently from PTY scrollback
 - PTY sessions do not survive API restarts
+- terminal records persisted as `running` are reconciled to `stale` on startup when no live Octogent session owns them
 
 ## Main API groups
 

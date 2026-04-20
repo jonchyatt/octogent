@@ -6,9 +6,14 @@ Octogent exposes a local HTTP and WebSocket API.
 
 - `GET /api/terminal-snapshots` - returns the current terminal list and snapshot state for the UI
 - `POST /api/terminals` - creates a new terminal session
+- `POST /api/terminals/prune` - removes terminal records with `stale`, `stopped`, or `exited` lifecycle state
 - `PATCH /api/terminals/:terminalId` - updates terminal metadata such as the display name
 - `DELETE /api/terminals/:terminalId` - removes a terminal and closes its active session
+- `POST /api/terminals/:terminalId/stop` - stops an active session or recorded stale process
+- `POST /api/terminals/:terminalId/kill` - kills an active session or recorded stale process
 - `WS /api/terminals/:terminalId/ws` - streams live terminal IO over WebSocket
+
+Terminal snapshots include `lifecycleState` when known. Supported lifecycle states are `registered`, `running`, `stopped`, `exited`, and `stale`. Stale terminals are records that were persisted as running but could not be reattached to a live Octogent PTY session after startup.
 
 ## Git and worktrees
 

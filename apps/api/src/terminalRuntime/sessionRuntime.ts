@@ -17,13 +17,20 @@ import {
 import {
   type ConversationTranscriptEvent,
   type ConversationTranscriptEventPayload,
+  type SessionEndTranscriptEvent,
   ensureTranscriptDirectory,
   transcriptFilenameForSession,
 } from "./conversations";
 import { broadcastMessage, getTerminalId, sendMessage } from "./protocol";
 import { createShellEnvironment, ensureNodePtySpawnHelperExecutable } from "./ptyEnvironment";
 import { toErrorMessage } from "./systemClients";
-import type { DirectSessionListener, PersistedTerminal, TerminalSession } from "./types";
+import type {
+  DirectSessionListener,
+  PersistedTerminal,
+  TerminalSession,
+  TerminalSessionEndDetails,
+  TerminalSessionStartDetails,
+} from "./types";
 
 type CreateSessionRuntimeOptions = {
   websocketServer: WebSocketServer;
@@ -41,6 +48,8 @@ type CreateSessionRuntimeOptions = {
   scrollbackMaxBytes?: number;
   maxConcurrentSessions?: number;
   onStateChange?: (terminalId: string, state: AgentRuntimeState, toolName?: string) => void;
+  onSessionStart?: (terminalId: string, details: TerminalSessionStartDetails) => void;
+  onSessionEnd?: (terminalId: string, details: TerminalSessionEndDetails) => void;
 };
 
 const ANSI_BEL = String.fromCharCode(0x07);
@@ -62,6 +71,8 @@ export const createSessionRuntime = ({
   scrollbackMaxBytes = TERMINAL_SCROLLBACK_MAX_BYTES,
   maxConcurrentSessions = TERMINAL_MAX_CONCURRENT_SESSIONS,
   onStateChange,
+  onSessionStart,
+  onSessionEnd,
 }: CreateSessionRuntimeOptions) => {
   const DEFAULT_PTY_COLS = 120;
   const DEFAULT_PTY_ROWS = 35;
@@ -305,8 +316,8 @@ export const createSessionRuntime = ({
   const teardownSession = (
     sessionId: string,
     session: TerminalSession,
-    event: ConversationTranscriptEventPayload,
-    options: { killPty: boolean },
+    event: Omit<SessionEndTranscriptEvent, "eventId" | "sessionId" | "tentacleId">,
+    options: { killPty: boolean; killSignal?: string },
   ): void => {
     if (session.isClosed) {
       return;
@@ -316,10 +327,23 @@ export const createSessionRuntime = ({
     clearIdleCloseTimer(session);
     clearPromptTimers(session);
     closeTranscript(session, sessionId, event);
+    onSessionEnd?.(sessionId, {
+      reason:
+        event.reason === "pty_exit" ||
+        event.reason === "operator_stop" ||
+        event.reason === "operator_kill"
+          ? event.reason
+          : "session_close",
+      endedAt: typeof event.timestamp === "string" ? event.timestamp : new Date().toISOString(),
+      ...(typeof event.exitCode === "number" ? { exitCode: event.exitCode } : {}),
+      ...(typeof event.signal === "number" || typeof event.signal === "string"
+        ? { signal: event.signal }
+        : {}),
+    });
 
     if (session.statePollTimer) {
       clearInterval(session.statePollTimer);
-      delete session.statePollTimer;
+      session.statePollTimer = undefined;
     }
 
     for (const disposable of session.ptyDisposables ?? []) {
@@ -333,7 +357,7 @@ export const createSessionRuntime = ({
 
     if (options.killPty) {
       try {
-        session.pty.kill();
+        session.pty.kill(options.killSignal);
       } catch {
         // Ignore teardown errors; session will still be discarded.
       }
@@ -347,7 +371,7 @@ export const createSessionRuntime = ({
     session.clients.clear();
     session.directListeners.clear();
     session.debugLog?.end();
-    delete session.debugLog;
+    session.debugLog = undefined;
 
     if (sessions.get(sessionId) === session) {
       sessions.delete(sessionId);
@@ -369,6 +393,45 @@ export const createSessionRuntime = ({
         timestamp: new Date().toISOString(),
       },
       { killPty: true },
+    );
+    return true;
+  };
+
+  const stopSession = (sessionId: string): boolean => {
+    const session = sessions.get(sessionId);
+    if (!session) {
+      return false;
+    }
+
+    teardownSession(
+      sessionId,
+      session,
+      {
+        type: "session_end",
+        reason: "operator_stop",
+        timestamp: new Date().toISOString(),
+      },
+      { killPty: true },
+    );
+    return true;
+  };
+
+  const killSession = (sessionId: string, signal = "SIGKILL"): boolean => {
+    const session = sessions.get(sessionId);
+    if (!session) {
+      return false;
+    }
+
+    teardownSession(
+      sessionId,
+      session,
+      {
+        type: "session_end",
+        reason: "operator_kill",
+        signal,
+        timestamp: new Date().toISOString(),
+      },
+      { killPty: true, killSignal: signal },
     );
     return true;
   };
@@ -418,31 +481,46 @@ export const createSessionRuntime = ({
 
     // Schedule initial prompt injection after Claude Code has had time to boot.
     if (session.initialPrompt && !session.isInitialPromptSent) {
-      schedulePromptTimer(session, sessionId, () => {
-        if (session.isInitialPromptSent) {
-          return;
-        }
-        session.isInitialPromptSent = true;
-        appendDebugLog(session, `initial-prompt session=${sessionId}`);
-        const prompt = session.initialPrompt ?? "";
-        session.pty.write(`${BRACKETED_PASTE_START}${prompt}${BRACKETED_PASTE_END}`);
-        schedulePromptTimer(session, sessionId, () => {
-          appendDebugLog(session, `initial-prompt-submit session=${sessionId}`);
-          session.pty.write("\r");
-        }, INITIAL_PROMPT_SUBMIT_DELAY_MS);
-      }, INITIAL_PROMPT_DELAY_MS);
+      schedulePromptTimer(
+        session,
+        sessionId,
+        () => {
+          if (session.isInitialPromptSent) {
+            return;
+          }
+          session.isInitialPromptSent = true;
+          appendDebugLog(session, `initial-prompt session=${sessionId}`);
+          const prompt = session.initialPrompt ?? "";
+          session.pty.write(`${BRACKETED_PASTE_START}${prompt}${BRACKETED_PASTE_END}`);
+          schedulePromptTimer(
+            session,
+            sessionId,
+            () => {
+              appendDebugLog(session, `initial-prompt-submit session=${sessionId}`);
+              session.pty.write("\r");
+            },
+            INITIAL_PROMPT_SUBMIT_DELAY_MS,
+          );
+        },
+        INITIAL_PROMPT_DELAY_MS,
+      );
     }
 
     if (session.initialInputDraft && !session.isInitialInputDraftSent && !session.initialPrompt) {
-      schedulePromptTimer(session, sessionId, () => {
-        if (session.isInitialInputDraftSent) {
-          return;
-        }
-        session.isInitialInputDraftSent = true;
-        appendDebugLog(session, `initial-input-draft session=${sessionId}`);
-        const draft = session.initialInputDraft ?? "";
-        session.pty.write(`${BRACKETED_PASTE_START}${draft}${BRACKETED_PASTE_END}`);
-      }, INITIAL_PROMPT_DELAY_MS);
+      schedulePromptTimer(
+        session,
+        sessionId,
+        () => {
+          if (session.isInitialInputDraftSent) {
+            return;
+          }
+          session.isInitialInputDraftSent = true;
+          appendDebugLog(session, `initial-input-draft session=${sessionId}`);
+          const draft = session.initialInputDraft ?? "";
+          session.pty.write(`${BRACKETED_PASTE_START}${draft}${BRACKETED_PASTE_END}`);
+        },
+        INITIAL_PROMPT_DELAY_MS,
+      );
     }
   };
 
@@ -510,6 +588,12 @@ export const createSessionRuntime = ({
     session.transcriptLog = transcriptLog;
 
     appendDebugLog(session, `session-start session=${sessionId} tentacle=${tentacleId}`);
+    const processId =
+      typeof pty.pid === "number" && Number.isInteger(pty.pid) && pty.pid > 0 ? pty.pid : undefined;
+    onSessionStart?.(sessionId, {
+      startedAt: new Date().toISOString(),
+      ...(processId ? { processId } : {}),
+    });
     appendTranscriptEvent(session, sessionId, {
       type: "session_start",
       timestamp: new Date().toISOString(),
@@ -778,6 +862,8 @@ export const createSessionRuntime = ({
 
   return {
     closeSession,
+    stopSession,
+    killSession,
     handleUpgrade,
     connectDirect,
     startSession,
