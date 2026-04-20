@@ -181,4 +181,4 @@ PTY sessions survive browser reloads during the idle grace period, but they do *
 - [Contributing](CONTRIBUTING.md)
 
 ## Contributor setup
-Contributions are welcome 🤗. For contributor workflow and expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
+Octogent is not actively reviewing pull requests right now. If you still open one and any code was written with AI, disclose which coding agent and model were used. For contributor workflow and expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
