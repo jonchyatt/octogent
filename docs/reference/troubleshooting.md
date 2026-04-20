@@ -20,6 +20,8 @@ Use Node.js `22+`.
 
 Check that your shell environment is available and executable.
 
+If startup fails with `Terminal session limit reached`, Octogent already has the configured number of live PTY-backed sessions. Close unused terminals or restart the API to release stale sessions. The default cap is 32; set `OCTOGENT_MAX_TERMINAL_SESSIONS` to a positive integer before starting Octogent to adjust it.
+
 ## Worktree terminal creation fails
 
 Verify:

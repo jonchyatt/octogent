@@ -10,6 +10,7 @@ import { createChannelMessaging } from "./terminalRuntime/channelMessaging";
 import {
   DEFAULT_AGENT_PROVIDER,
   DEFAULT_TERMINAL_INACTIVITY_THRESHOLD_MS,
+  TERMINAL_MAX_CONCURRENT_SESSIONS,
   TERMINAL_ID_PREFIX,
 } from "./terminalRuntime/constants";
 import {
@@ -59,6 +60,7 @@ export const createTerminalRuntime = ({
   projectStateDir,
   gitClient = createDefaultGitClient(),
   getApiBaseUrl = () => process.env.OCTOGENT_API_ORIGIN ?? "http://127.0.0.1:8787",
+  maxConcurrentSessions,
 }: CreateTerminalRuntimeOptions) => {
   const stateDir = projectStateDir ?? join(workspaceCwd, ".octogent");
   const sessions = new Map<string, TerminalSession>();
@@ -73,6 +75,21 @@ export const createTerminalRuntime = ({
   const isDebugPtyLogsEnabled = process.env.OCTOGENT_DEBUG_PTY_LOGS === "1";
   const ptyLogDir = process.env.OCTOGENT_DEBUG_PTY_LOG_DIR ?? join(stateDir, "logs");
   const transcriptDirectoryPath = join(stateDir, "state", "transcripts");
+  const configuredMaxConcurrentSessions = (() => {
+    if (maxConcurrentSessions !== undefined) {
+      return maxConcurrentSessions;
+    }
+
+    const raw = process.env.OCTOGENT_MAX_TERMINAL_SESSIONS?.trim();
+    if (!raw) {
+      return TERMINAL_MAX_CONCURRENT_SESSIONS;
+    }
+
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed >= 1
+      ? Math.floor(parsed)
+      : TERMINAL_MAX_CONCURRENT_SESSIONS;
+  })();
   const persistRegistry = () => {
     uiState = pruneUiStateTerminalReferences(uiState, terminals);
     registryPersistence.schedulePersist({
@@ -123,6 +140,7 @@ export const createTerminalRuntime = ({
     isDebugPtyLogsEnabled,
     ptyLogDir,
     transcriptDirectoryPath,
+    maxConcurrentSessions: configuredMaxConcurrentSessions,
     onStateChange: broadcastTerminalStateChanged,
   });
 
@@ -145,6 +163,7 @@ export const createTerminalRuntime = ({
     getApiBaseUrl,
     persistRegistry,
     deliverChannelMessages: channelMessaging.deliverChannelMessages,
+    releaseSessionKeepAlive: sessionRuntime.releaseSessionKeepAlive,
     onStateChange: broadcastTerminalStateChanged,
   });
 
@@ -286,6 +305,15 @@ export const createTerminalRuntime = ({
       requestedTerminalId && !terminals.has(requestedTerminalId)
         ? requestedTerminalId
         : allocateTerminalId();
+
+    if (initialPrompt) {
+      const capacity = sessionRuntime.getSessionCapacity();
+      if (capacity.active >= capacity.max) {
+        throw new RuntimeInputError(
+          `Terminal session limit reached (${capacity.max}). Close an existing terminal session or increase OCTOGENT_MAX_TERMINAL_SESSIONS.`,
+        );
+      }
+    }
 
     // Allow explicit tentacleId so multiple terminals can share a tentacle context (e.g. swarm workers).
     const tentacleId = requestedTentacleId ?? terminalId;

@@ -160,7 +160,7 @@ Startup fails if neither `claude` nor another supported provider binary is insta
 - `~/.octogent/projects/<project-id>/state/` keeps runtime state, transcripts, monitor cache, and metadata
 - `.octogent/tentacles/<tentacle-id>/` keeps the context files and todos that agents read
 
-PTY sessions survive browser reloads during the idle grace period, but they do **not** survive an API restart.
+PTY sessions survive browser reloads during the idle grace period, but they do **not** survive an API restart. Octogent caps live PTY sessions at 32 by default to protect the host; set `OCTOGENT_MAX_TERMINAL_SESSIONS` to a positive integer to tune that limit for larger orchestration runs.
 
 ## Docs
 

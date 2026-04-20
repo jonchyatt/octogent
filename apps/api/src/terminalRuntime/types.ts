@@ -48,10 +48,15 @@ export type TerminalServerMessage =
 
 export type DirectSessionListener = (message: TerminalServerMessage) => void;
 
+export type Disposable = {
+  dispose: () => void;
+};
+
 export type TerminalSession = {
   terminalId: string;
   tentacleId: string;
   pty: IPty;
+  ptyDisposables?: Disposable[];
   clients: Set<WebSocket>;
   directListeners: Set<DirectSessionListener>;
   cols: number;
@@ -63,6 +68,7 @@ export type TerminalSession = {
   scrollbackBytes: number;
   statePollTimer?: ReturnType<typeof setInterval>;
   idleCloseTimer?: ReturnType<typeof setTimeout> | undefined;
+  promptTimers?: Set<ReturnType<typeof setTimeout>>;
   debugLog?: WriteStream;
   transcriptLog?: WriteStream | undefined;
   transcriptEventCount?: number;
@@ -73,6 +79,7 @@ export type TerminalSession = {
   initialInputDraft?: string;
   isInitialInputDraftSent?: boolean;
   keepAliveWithoutClients?: boolean;
+  isClosed?: boolean;
   hasSeenProcessing?: boolean;
   lastToolName?: string | undefined;
 };
@@ -154,4 +161,5 @@ export type CreateTerminalRuntimeOptions = {
   projectStateDir?: string | undefined;
   gitClient?: GitClient;
   getApiBaseUrl?: () => string;
+  maxConcurrentSessions?: number | undefined;
 };
