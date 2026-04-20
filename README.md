@@ -96,10 +96,13 @@ For the current model, see [Orchestrating Child Agents](docs/guides/orchestratin
 
 ## How It Works
 
-1. Create a tentacle for a scoped slice of work.
-2. Store context, notes, and `todo.md` inside that tentacle so the agent has durable, local guidance.
-3. Run one or more agent terminals against that tentacle, and delegate child work from the task list when needed.
-4. Use the local API and web UI to monitor sessions, messages, transcripts, and worktree state.
+Octogent separates three concerns that usually get mixed together in a pile of terminals:
+
+1. **Context** lives in `.octogent/tentacles/<tentacle-id>/`. `CONTEXT.md` explains the area, `todo.md` supplies executable work items, and extra markdown files hold notes or handoffs.
+2. **Execution** lives in terminal records and PTY sessions managed by the local API. A terminal can attach to an existing tentacle, and several terminals can share one tentacle during swarm work.
+3. **Isolation** is optional. Shared terminals run in the main workspace; worktree terminals run under `.octogent/worktrees/<worktree-id>/` on `octogent/<worktree-id>` branches.
+
+Deck reads the tentacle files directly, parses checkbox items from `todo.md`, and uses incomplete items to generate worker prompts. Claude hooks feed the API with agent state, transcript, and idle events so the UI can show more than raw terminal output.
 
 ## Quick start
 

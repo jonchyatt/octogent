@@ -89,6 +89,8 @@ Removes terminal records whose lifecycle state is `stale`, `stopped`, or `exited
 octogent channel send <terminal-id> "message"
 ```
 
+Use `--from <terminal-id>` when sending on behalf of a worker or parent terminal. If `--from` is omitted, the CLI falls back to `OCTOGENT_SESSION_ID` when the command is running inside an Octogent-managed terminal.
+
 ## List messages
 
 ```bash
