@@ -432,6 +432,7 @@ const terminalCreate = async () => {
   const promptTemplate = parseFlag("--prompt-template");
   const promptVariables = parseJsonFlag("--prompt-variables");
   const agentProvider = parseFlag("--agent-provider");
+  const runtimeMode = parseFlag("--runtime-mode");
   const persona = parseFlag("--persona");
   const apiBase = resolveRuntimeApiBase();
 
@@ -459,6 +460,7 @@ const terminalCreate = async () => {
   if (promptTemplate) body.promptTemplate = promptTemplate;
   if (promptVariables) body.promptVariables = promptVariables;
   if (agentProvider) body.agentProvider = agentProvider;
+  if (runtimeMode) body.runtimeMode = runtimeMode;
 
   try {
     const response = await fetch(`${apiBase}/api/terminals`, {
@@ -833,6 +835,11 @@ const main = async () => {
     --prompt-template                  Prompt template name
     --prompt-variables                 JSON object of prompt template variables
     --agent-provider                   claude-code (default) | codex
+    --runtime-mode                     interactive (default) | exec
+                                       exec mode spawns the agent as a direct
+                                       child_process with prompt as argv — no
+                                       TUI, single turn, atomic completion.
+                                       Use for swarm workers.
     --persona                          Name of persona file in ~/.octogent/personas/
                                        (project override: ./.octogent/personas/)
                                        Shipped: builder, reviewer, architect,

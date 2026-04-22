@@ -153,6 +153,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 60_000,
       scrollbackMaxBytes: 1024,
     });
@@ -215,6 +216,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 1000,
       scrollbackMaxBytes: 1024,
     });
@@ -265,6 +267,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 60_000,
       scrollbackMaxBytes: 1024,
     });
@@ -314,6 +317,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 60_000,
       scrollbackMaxBytes: 1024,
     });
@@ -361,6 +365,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 1_000,
       scrollbackMaxBytes: 1024,
     });
@@ -408,6 +413,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 60_000,
       scrollbackMaxBytes: 1024,
     });
@@ -460,6 +466,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 60_000,
       scrollbackMaxBytes: 1024,
       maxConcurrentSessions: 1,
@@ -503,6 +510,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 60_000,
       scrollbackMaxBytes: 8,
     });
@@ -558,6 +566,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 60_000,
       scrollbackMaxBytes: 18,
     });
@@ -613,6 +622,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 60_000,
       scrollbackMaxBytes: 1024,
     });
@@ -661,6 +671,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 60_000,
       scrollbackMaxBytes: 1024,
     });
@@ -726,6 +737,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 1000,
       scrollbackMaxBytes: 1024,
     });
@@ -780,6 +792,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 1_000,
       scrollbackMaxBytes: 1_024,
     });
@@ -830,6 +843,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 60_000,
       scrollbackMaxBytes: 1024,
       onStateChange,
@@ -879,6 +893,7 @@ describe("createSessionRuntime", () => {
       isDebugPtyLogsEnabled: false,
       ptyLogDir: process.cwd(),
       transcriptDirectoryPath,
+      execOutputDirectoryPath: transcriptDirectoryPath,
       sessionIdleGraceMs: 60_000,
       scrollbackMaxBytes: 1024,
       onSessionStart,

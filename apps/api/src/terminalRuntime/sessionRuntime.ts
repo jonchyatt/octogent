@@ -10,10 +10,13 @@ import { type AgentRuntimeState, AgentStateTracker } from "../agentStateDetectio
 import {
   DEFAULT_AGENT_PROVIDER,
   TERMINAL_BOOTSTRAP_COMMANDS,
+  TERMINAL_EXEC_TIMEOUT_MS,
   TERMINAL_MAX_CONCURRENT_SESSIONS,
   TERMINAL_SCROLLBACK_MAX_BYTES,
   TERMINAL_SESSION_IDLE_GRACE_MS,
+  buildExecCommand,
 } from "./constants";
+import { spawnExecChild } from "./execSessionAdapter";
 import {
   type ConversationTranscriptEvent,
   type ConversationTranscriptEventPayload,
@@ -27,6 +30,7 @@ import { toErrorMessage } from "./systemClients";
 import type {
   DirectSessionListener,
   PersistedTerminal,
+  TerminalProcessHandle,
   TerminalSession,
   TerminalSessionEndDetails,
   TerminalSessionStartDetails,
@@ -44,9 +48,14 @@ type CreateSessionRuntimeOptions = {
   isDebugPtyLogsEnabled: boolean;
   ptyLogDir: string;
   transcriptDirectoryPath: string;
+  // Where exec-mode workers write their durable artifacts:
+  //   <execOutputDirectoryPath>/<sessionId>.json — codex --output-last-message
+  //   <execOutputDirectoryPath>/<sessionId>.log  — streamed stdout/stderr
+  execOutputDirectoryPath: string;
   sessionIdleGraceMs?: number;
   scrollbackMaxBytes?: number;
   maxConcurrentSessions?: number;
+  execTimeoutMs?: number;
   onStateChange?: (terminalId: string, state: AgentRuntimeState, toolName?: string) => void;
   onSessionStart?: (terminalId: string, details: TerminalSessionStartDetails) => void;
   onSessionEnd?: (terminalId: string, details: TerminalSessionEndDetails) => void;
@@ -67,9 +76,11 @@ export const createSessionRuntime = ({
   isDebugPtyLogsEnabled,
   ptyLogDir,
   transcriptDirectoryPath,
+  execOutputDirectoryPath,
   sessionIdleGraceMs = TERMINAL_SESSION_IDLE_GRACE_MS,
   scrollbackMaxBytes = TERMINAL_SCROLLBACK_MAX_BYTES,
   maxConcurrentSessions = TERMINAL_MAX_CONCURRENT_SESSIONS,
+  execTimeoutMs,
   onStateChange,
   onSessionStart,
   onSessionEnd,
@@ -79,6 +90,10 @@ export const createSessionRuntime = ({
   const sessionLimit = Number.isFinite(maxConcurrentSessions)
     ? Math.max(1, Math.floor(maxConcurrentSessions))
     : TERMINAL_MAX_CONCURRENT_SESSIONS;
+  const execTimeoutCeilingMs =
+    typeof execTimeoutMs === "number" && Number.isFinite(execTimeoutMs) && execTimeoutMs > 0
+      ? Math.floor(execTimeoutMs)
+      : TERMINAL_EXEC_TIMEOUT_MS;
 
   const getShellLaunch = () => {
     if (process.platform === "win32") {
@@ -372,6 +387,12 @@ export const createSessionRuntime = ({
     session.directListeners.clear();
     session.debugLog?.end();
     session.debugLog = undefined;
+    session.execOutputLog?.end();
+    session.execOutputLog = undefined;
+    if (session.execTimeoutTimer) {
+      clearTimeout(session.execTimeoutTimer);
+      session.execTimeoutTimer = undefined;
+    }
 
     if (sessions.get(sessionId) === session) {
       sessions.delete(sessionId);
@@ -472,6 +493,15 @@ export const createSessionRuntime = ({
 
     session.isBootstrapCommandSent = true;
     const terminal = terminals.get(session.terminalId);
+
+    // Exec mode: the agent was spawned directly with its prompt as argv in
+    // ensureSession. No shell bootstrap, no typed-in prompt injection —
+    // the child is already running the one-shot turn.
+    if (terminal?.runtimeMode === "exec") {
+      appendDebugLog(session, `bootstrap-skip-exec session=${sessionId}`);
+      return;
+    }
+
     const provider = terminal?.agentProvider ?? DEFAULT_AGENT_PROVIDER;
 
     const bootstrapCommand =
@@ -543,27 +573,86 @@ export const createSessionRuntime = ({
       throw new Error(`Terminal working directory does not exist: ${tentacleCwd}`);
     }
 
-    ensureNodePtySpawnHelperExecutable();
-    const shellLaunch = getShellLaunch();
+    const isExecMode = terminalRecord?.runtimeMode === "exec";
 
-    let pty: IPty;
-    try {
-      pty = spawn(shellLaunch.command, shellLaunch.args, {
-        cols: DEFAULT_PTY_COLS,
-        rows: DEFAULT_PTY_ROWS,
-        cwd: tentacleCwd,
-        env: createShellEnvironment({ octogentSessionId: sessionId }),
-        name: "xterm-256color",
-      });
-    } catch (error) {
-      throw new Error(
-        `Unable to start terminal shell (${shellLaunch.command}): ${toErrorMessage(error)}`,
-      );
+    let pty: TerminalProcessHandle;
+    if (isExecMode) {
+      const provider = terminalRecord?.agentProvider ?? DEFAULT_AGENT_PROVIDER;
+      const prompt = terminalRecord?.initialPrompt ?? "";
+      if (!prompt) {
+        throw new Error(
+          `Exec-mode terminal ${sessionId} has no initialPrompt — exec workers require a prompt passed as argv.`,
+        );
+      }
+
+      mkdirSync(execOutputDirectoryPath, { recursive: true });
+      const outfile = join(execOutputDirectoryPath, `${sessionId}.json`);
+
+      let command: string;
+      let args: string[];
+      let stdin: string;
+      try {
+        ({ command, args, stdin } = buildExecCommand(provider, prompt, outfile));
+      } catch (error) {
+        throw new Error(`Unable to build exec command: ${toErrorMessage(error)}`);
+      }
+
+      try {
+        pty = spawnExecChild({
+          command,
+          args,
+          cwd: tentacleCwd,
+          env: createShellEnvironment({ octogentSessionId: sessionId }),
+          stdin,
+        });
+      } catch (error) {
+        throw new Error(`Unable to spawn exec worker (${command}): ${toErrorMessage(error)}`);
+      }
+    } else {
+      ensureNodePtySpawnHelperExecutable();
+      const shellLaunch = getShellLaunch();
+
+      try {
+        pty = spawn(shellLaunch.command, shellLaunch.args, {
+          cols: DEFAULT_PTY_COLS,
+          rows: DEFAULT_PTY_ROWS,
+          cwd: tentacleCwd,
+          env: createShellEnvironment({ octogentSessionId: sessionId }),
+          name: "xterm-256color",
+        }) as unknown as TerminalProcessHandle;
+      } catch (error) {
+        throw new Error(
+          `Unable to start terminal shell (${shellLaunch.command}): ${toErrorMessage(error)}`,
+        );
+      }
     }
 
     const stateTracker = new AgentStateTracker();
     const debugLog = createDebugLog(sessionId);
     const transcriptLog = createTranscriptLog(sessionId);
+
+    // Exec mode: persist streamed stdout/stderr to a dedicated log file so
+    // the full output record survives beyond scrollback. Interactive mode
+    // continues to rely on scrollback + debug PTY logs (no change).
+    //
+    // Also: exec workers should NOT keep the session alive waiting for a
+    // client reconnect — they're one-shot and must release the slot when
+    // they exit. Override keepAliveWithoutClients for exec.
+    let execOutputLog: WriteStream | undefined;
+    if (isExecMode) {
+      try {
+        execOutputLog = createWriteStream(join(execOutputDirectoryPath, `${sessionId}.log`), {
+          flags: "a",
+          encoding: "utf8",
+        });
+        execOutputLog.on("error", () => {
+          // Keep the session running even if the exec log write fails.
+        });
+      } catch {
+        // Best-effort — an exec-output log failure should not block spawn.
+      }
+    }
+
     const session: TerminalSession = {
       terminalId: sessionId,
       tentacleId,
@@ -580,12 +669,15 @@ export const createSessionRuntime = ({
       transcriptEventCount: 0,
       pendingInput: "",
       hasTranscriptEnded: false,
-      keepAliveWithoutClients: Boolean(terminalRecord?.initialPrompt),
+      keepAliveWithoutClients: isExecMode ? false : Boolean(terminalRecord?.initialPrompt),
     };
     if (debugLog) {
       session.debugLog = debugLog;
     }
     session.transcriptLog = transcriptLog;
+    if (execOutputLog) {
+      session.execOutputLog = execOutputLog;
+    }
 
     appendDebugLog(session, `session-start session=${sessionId} tentacle=${tentacleId}`);
     const processId =
@@ -609,6 +701,7 @@ export const createSessionRuntime = ({
 
       appendDebugLog(session, `pty-output session=${sessionId} chunk=${JSON.stringify(chunk)}`);
       appendScrollback(session, chunk);
+      session.execOutputLog?.write(chunk);
       const nextState = session.stateTracker.observeChunk(chunk, Date.now());
       broadcastMessage(session, {
         type: "output",
@@ -656,6 +749,27 @@ export const createSessionRuntime = ({
     }
 
     sessions.set(sessionId, session);
+
+    // Exec-mode safety timer: force-kill a worker that exceeds the configured
+    // ceiling. Prevents hung codex/claude processes from holding a session
+    // slot forever. Cleared in teardownSession when the worker exits cleanly.
+    if (isExecMode && execTimeoutCeilingMs > 0) {
+      session.execTimeoutTimer = setTimeout(() => {
+        if (session.isClosed || sessions.get(sessionId) !== session) {
+          return;
+        }
+        appendDebugLog(
+          session,
+          `exec-timeout session=${sessionId} timeoutMs=${execTimeoutCeilingMs}`,
+        );
+        broadcastMessage(session, {
+          type: "output",
+          data: `\r\n[exec worker exceeded ${execTimeoutCeilingMs}ms ceiling — killing]\r\n`,
+        });
+        killSession(sessionId, "SIGTERM");
+      }, execTimeoutCeilingMs);
+    }
+
     return session;
   };
 
@@ -711,6 +825,17 @@ export const createSessionRuntime = ({
               session,
               `ws-input session=${sessionId} data=${JSON.stringify(payload.data)}`,
             );
+            // Exec mode: no mid-turn input. Drop + notify the client so they
+            // don't watch the cursor sit there waiting for a prompt echo
+            // that will never come.
+            const terminal = terminals.get(session.terminalId);
+            if (terminal?.runtimeMode === "exec") {
+              sendMessage(websocket, {
+                type: "output",
+                data: "\r\n[exec mode: input ignored — this worker accepts only its initial prompt]\r\n",
+              });
+              return;
+            }
             session.pty.write(payload.data);
             if (/[\r\n]/.test(payload.data)) {
               emitStateIfChanged(
@@ -821,6 +946,17 @@ export const createSessionRuntime = ({
   const writeInput = (terminalId: string, data: string): boolean => {
     const session = sessions.get(terminalId);
     if (!session || session.isClosed) {
+      return false;
+    }
+
+    // Exec-mode workers receive their entire prompt via stdin at spawn. They
+    // don't accept mid-turn input — the prompt is already committed and any
+    // incoming bytes would be silently dropped by the adapter. Return false
+    // so callers know the write didn't land. New messages should queue in
+    // the channel store and deliver on the NEXT turn (P1b-1).
+    const terminal = terminals.get(session.terminalId);
+    if (terminal?.runtimeMode === "exec") {
+      appendDebugLog(session, `write-dropped-exec-mode session=${terminalId} bytes=${data.length}`);
       return false;
     }
 

@@ -2,7 +2,9 @@ import {
   type TentacleWorkspaceMode,
   type TerminalAgentProvider,
   type TerminalNameOrigin,
+  type TerminalRuntimeMode,
   isTerminalAgentProvider,
+  isTerminalRuntimeMode,
 } from "../terminalRuntime";
 
 const isTerminalNameOrigin = (value: unknown): value is TerminalNameOrigin =>
@@ -126,6 +128,42 @@ export const parseTerminalAgentProvider = (payload: unknown) => {
 
   return {
     agentProvider: rawAgentProvider,
+    error: null as string | null,
+  };
+};
+
+export const parseTerminalRuntimeMode = (payload: unknown) => {
+  if (payload === null || payload === undefined) {
+    return {
+      runtimeMode: undefined as TerminalRuntimeMode | undefined,
+      error: null as string | null,
+    };
+  }
+
+  if (typeof payload !== "object") {
+    return {
+      runtimeMode: undefined as TerminalRuntimeMode | undefined,
+      error: "Expected a JSON object body.",
+    };
+  }
+
+  const rawRuntimeMode = (payload as Record<string, unknown>).runtimeMode;
+  if (rawRuntimeMode === undefined) {
+    return {
+      runtimeMode: undefined as TerminalRuntimeMode | undefined,
+      error: null as string | null,
+    };
+  }
+
+  if (!isTerminalRuntimeMode(rawRuntimeMode)) {
+    return {
+      runtimeMode: undefined as TerminalRuntimeMode | undefined,
+      error: "Terminal runtime mode must be either 'interactive' or 'exec'.",
+    };
+  }
+
+  return {
+    runtimeMode: rawRuntimeMode,
     error: null as string | null,
   };
 };

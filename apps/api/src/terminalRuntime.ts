@@ -40,6 +40,7 @@ import {
   type TerminalAgentProvider,
   type TerminalLifecycleState,
   type TerminalNameOrigin,
+  type TerminalRuntimeMode,
   type TerminalSession,
   type TerminalSessionEndDetails,
   type TerminalSessionStartDetails,
@@ -51,9 +52,14 @@ export type {
   PersistedUiState,
   TerminalAgentProvider,
   TerminalNameOrigin,
+  TerminalRuntimeMode,
   TentacleWorkspaceMode,
 } from "./terminalRuntime/types";
-export { isTerminalAgentProvider, isTerminalCompletionSoundId } from "./terminalRuntime/types";
+export {
+  isTerminalAgentProvider,
+  isTerminalCompletionSoundId,
+  isTerminalRuntimeMode,
+} from "./terminalRuntime/types";
 export { RuntimeInputError } from "./terminalRuntime/types";
 
 export const MAX_CHILDREN_PER_PARENT = 9;
@@ -78,6 +84,7 @@ export const createTerminalRuntime = ({
   const isDebugPtyLogsEnabled = process.env.OCTOGENT_DEBUG_PTY_LOGS === "1";
   const ptyLogDir = process.env.OCTOGENT_DEBUG_PTY_LOG_DIR ?? join(stateDir, "logs");
   const transcriptDirectoryPath = join(stateDir, "state", "transcripts");
+  const execOutputDirectoryPath = join(stateDir, "state", "exec-output");
   const configuredMaxConcurrentSessions = (() => {
     if (maxConcurrentSessions !== undefined) {
       return maxConcurrentSessions;
@@ -249,6 +256,7 @@ export const createTerminalRuntime = ({
     isDebugPtyLogsEnabled,
     ptyLogDir,
     transcriptDirectoryPath,
+    execOutputDirectoryPath,
     maxConcurrentSessions: configuredMaxConcurrentSessions,
     onStateChange: broadcastTerminalStateChanged,
     onSessionStart: markTerminalRunning,
@@ -394,6 +402,7 @@ export const createTerminalRuntime = ({
     tentacleName,
     workspaceMode = "shared",
     agentProvider,
+    runtimeMode,
     initialPrompt,
     initialInputDraft,
     baseRef,
@@ -407,6 +416,7 @@ export const createTerminalRuntime = ({
     tentacleName?: string;
     workspaceMode?: TentacleWorkspaceMode;
     agentProvider?: TerminalAgentProvider;
+    runtimeMode?: TerminalRuntimeMode;
     initialPrompt?: string;
     initialInputDraft?: string;
     baseRef?: string;
@@ -459,6 +469,7 @@ export const createTerminalRuntime = ({
       createdAt: new Date().toISOString(),
       workspaceMode,
       agentProvider: agentProvider ?? DEFAULT_AGENT_PROVIDER,
+      ...(runtimeMode ? { runtimeMode } : {}),
       lifecycleState: "registered",
       lifecycleUpdatedAt: new Date().toISOString(),
       ...(initialPrompt ? { initialPrompt } : {}),

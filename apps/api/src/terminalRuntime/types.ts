@@ -8,9 +8,13 @@ import type {
   TentacleWorkspaceMode,
   TerminalAgentProvider,
   TerminalLifecycleState,
+  TerminalRuntimeMode,
 } from "@octogent/core";
-import { isTerminalAgentProvider, isTerminalCompletionSoundId } from "@octogent/core";
-import type { IPty } from "node-pty";
+import {
+  isTerminalAgentProvider,
+  isTerminalCompletionSoundId,
+  isTerminalRuntimeMode,
+} from "@octogent/core";
 import type { WebSocket } from "ws";
 
 import type { AgentRuntimeState, AgentStateTracker } from "../agentStateDetection";
@@ -53,10 +57,22 @@ export type Disposable = {
   dispose: () => void;
 };
 
+// Minimal process-handle contract. Satisfied by both node-pty's IPty (for
+// interactive mode) and the exec-mode child_process adapter. Keeps
+// sessionRuntime.ts identical across both paths — only the spawner differs.
+export type TerminalProcessHandle = {
+  readonly pid: number;
+  onData(listener: (data: string) => void): Disposable;
+  onExit(listener: (event: { exitCode: number; signal?: number }) => void): Disposable;
+  write(data: string): void;
+  kill(signal?: string): void;
+  resize(cols: number, rows: number): void;
+};
+
 export type TerminalSession = {
   terminalId: string;
   tentacleId: string;
-  pty: IPty;
+  pty: TerminalProcessHandle;
   ptyDisposables?: Disposable[];
   clients: Set<WebSocket>;
   directListeners: Set<DirectSessionListener>;
@@ -72,6 +88,13 @@ export type TerminalSession = {
   promptTimers?: Set<ReturnType<typeof setTimeout>>;
   debugLog?: WriteStream | undefined;
   transcriptLog?: WriteStream | undefined;
+  // Exec-mode only: durable append log of streamed stdout/stderr. Ended on
+  // teardown. Absent for interactive terminals (their output record lives
+  // in scrollback + debug PTY logs).
+  execOutputLog?: WriteStream | undefined;
+  // Exec-mode only: timeout timer that force-kills a hung worker. Cleared on
+  // clean exit.
+  execTimeoutTimer?: ReturnType<typeof setTimeout> | undefined;
   transcriptEventCount?: number;
   pendingInput?: string;
   hasTranscriptEnded?: boolean;
@@ -95,8 +118,10 @@ export {
   type TentacleWorkspaceMode,
   type TerminalAgentProvider,
   type TerminalLifecycleState,
+  type TerminalRuntimeMode,
   isTerminalAgentProvider,
   isTerminalCompletionSoundId,
+  isTerminalRuntimeMode,
 };
 
 export type TerminalSessionStartDetails = {
@@ -127,6 +152,7 @@ export type PersistedTerminal = {
   createdAt: string;
   workspaceMode: TentacleWorkspaceMode;
   agentProvider?: TerminalAgentProvider;
+  runtimeMode?: TerminalRuntimeMode;
   initialPrompt?: string;
   initialInputDraft?: string;
   lastActiveAt?: string;
