@@ -433,8 +433,14 @@ const terminalCreate = async () => {
   const promptVariables = parseJsonFlag("--prompt-variables");
   const agentProvider = parseFlag("--agent-provider");
   const runtimeMode = parseFlag("--runtime-mode");
+  const rootsRaw = parseFlag("--roots");
   const persona = parseFlag("--persona");
   const apiBase = resolveRuntimeApiBase();
+
+  // --roots "path1,path2,..."  →  ["path1", "path2", ...]   (trimmed, empty-filtered)
+  const roots = rootsRaw
+    ? rootsRaw.split(",").map((p) => p.trim()).filter((p) => p.length > 0)
+    : undefined;
 
   // Compose initialPrompt: persona framing (if any) + original prompt.
   // Persona-only is valid — sends just the framing as the bootstrap prompt.
@@ -461,6 +467,7 @@ const terminalCreate = async () => {
   if (promptVariables) body.promptVariables = promptVariables;
   if (agentProvider) body.agentProvider = agentProvider;
   if (runtimeMode) body.runtimeMode = runtimeMode;
+  if (roots && roots.length > 0) body.roots = roots;
 
   try {
     const response = await fetch(`${apiBase}/api/terminals`, {
@@ -840,6 +847,17 @@ const main = async () => {
                                        child_process with prompt as argv — no
                                        TUI, single turn, atomic completion.
                                        Use for swarm workers.
+    --roots path1,path2,...            Codex-only: additional sandbox roots
+                                       the worker is allowed to write to
+                                       beyond its primary workspace.
+                                       Presence switches Codex from
+                                       --dangerously-bypass-approvals-and-sandbox
+                                       to --sandbox workspace-write with one
+                                       --add-dir per root. Absent preserves
+                                       today's default (bypass, full fs
+                                       access). Absolute paths recommended.
+                                       Example: --roots /path/to/Visopscreen
+                                                --roots /path/to/sidecar,/another
     --persona                          Name of persona file in ~/.octogent/personas/
                                        (project override: ./.octogent/personas/)
                                        Shipped: builder, reviewer, architect,

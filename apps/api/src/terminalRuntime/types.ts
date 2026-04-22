@@ -8,11 +8,13 @@ import type {
   TentacleWorkspaceMode,
   TerminalAgentProvider,
   TerminalLifecycleState,
+  TerminalRoots,
   TerminalRuntimeMode,
 } from "@octogent/core";
 import {
   isTerminalAgentProvider,
   isTerminalCompletionSoundId,
+  isTerminalRoots,
   isTerminalRuntimeMode,
 } from "@octogent/core";
 import type { WebSocket } from "ws";
@@ -125,9 +127,11 @@ export {
   type TentacleWorkspaceMode,
   type TerminalAgentProvider,
   type TerminalLifecycleState,
+  type TerminalRoots,
   type TerminalRuntimeMode,
   isTerminalAgentProvider,
   isTerminalCompletionSoundId,
+  isTerminalRoots,
   isTerminalRuntimeMode,
 };
 
@@ -160,6 +164,11 @@ export type PersistedTerminal = {
   workspaceMode: TentacleWorkspaceMode;
   agentProvider?: TerminalAgentProvider;
   runtimeMode?: TerminalRuntimeMode;
+  // Codex-only: additional sandbox roots. Presence switches Codex exec from
+  // --dangerously-bypass-approvals-and-sandbox to --sandbox workspace-write
+  // with one --add-dir per root. Absent = bypass mode preserved (today's
+  // default). See packages/core/src/domain/agentRuntime.ts for rationale.
+  roots?: TerminalRoots;
   // Exec-mode only: how many exec turns this terminal has run. 0 = initial
   // spawn pending; 1 = first turn started/done; 2+ = resumed turns. Incremented
   // by the exec turn coordinator when it respawns the session to deliver

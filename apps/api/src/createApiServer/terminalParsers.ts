@@ -2,8 +2,10 @@ import {
   type TentacleWorkspaceMode,
   type TerminalAgentProvider,
   type TerminalNameOrigin,
+  type TerminalRoots,
   type TerminalRuntimeMode,
   isTerminalAgentProvider,
+  isTerminalRoots,
   isTerminalRuntimeMode,
 } from "../terminalRuntime";
 
@@ -164,6 +166,51 @@ export const parseTerminalRuntimeMode = (payload: unknown) => {
 
   return {
     runtimeMode: rawRuntimeMode,
+    error: null as string | null,
+  };
+};
+
+export const parseTerminalRoots = (payload: unknown) => {
+  if (payload === null || payload === undefined) {
+    return {
+      roots: undefined as TerminalRoots | undefined,
+      error: null as string | null,
+    };
+  }
+
+  if (typeof payload !== "object") {
+    return {
+      roots: undefined as TerminalRoots | undefined,
+      error: "Expected a JSON object body.",
+    };
+  }
+
+  const rawRoots = (payload as Record<string, unknown>).roots;
+  if (rawRoots === undefined) {
+    return {
+      roots: undefined as TerminalRoots | undefined,
+      error: null as string | null,
+    };
+  }
+
+  // Empty array == no roots; callers get a cleaner type by seeing undefined.
+  if (Array.isArray(rawRoots) && rawRoots.length === 0) {
+    return {
+      roots: undefined as TerminalRoots | undefined,
+      error: null as string | null,
+    };
+  }
+
+  if (!isTerminalRoots(rawRoots)) {
+    return {
+      roots: undefined as TerminalRoots | undefined,
+      error:
+        "Terminal roots must be a non-empty array of non-empty filesystem path strings (absolute paths recommended).",
+    };
+  }
+
+  return {
+    roots: rawRoots,
     error: null as string | null,
   };
 };

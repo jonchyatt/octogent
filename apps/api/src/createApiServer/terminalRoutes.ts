@@ -6,6 +6,7 @@ import {
   type TentacleWorkspaceMode,
   type TerminalAgentProvider,
   type TerminalNameOrigin,
+  type TerminalRoots,
   type TerminalRuntimeMode,
 } from "../terminalRuntime";
 import type { ApiRouteHandler } from "./routeHelpers";
@@ -19,6 +20,7 @@ import {
   parseTerminalAgentProvider,
   parseTerminalName,
   parseTerminalNameOrigin,
+  parseTerminalRoots,
   parseTerminalRuntimeMode,
   parseTerminalWorkspaceMode,
 } from "./terminalParsers";
@@ -104,6 +106,12 @@ export const handleTerminalsCollectionRoute: ApiRouteHandler = async (
     return true;
   }
 
+  const rootsResult = parseTerminalRoots(bodyReadResult.payload);
+  if (rootsResult.error) {
+    writeJson(response, 400, { error: rootsResult.error }, corsOrigin);
+    return true;
+  }
+
   const nameOriginResult = parseTerminalNameOrigin(bodyReadResult.payload);
   if (nameOriginResult.error) {
     writeJson(response, 400, { error: nameOriginResult.error }, corsOrigin);
@@ -119,6 +127,7 @@ export const handleTerminalsCollectionRoute: ApiRouteHandler = async (
       workspaceMode: TentacleWorkspaceMode;
       agentProvider?: TerminalAgentProvider;
       runtimeMode?: TerminalRuntimeMode;
+      roots?: TerminalRoots;
       nameOrigin?: TerminalNameOrigin;
       initialPrompt?: string;
       initialInputDraft?: string;
@@ -135,6 +144,9 @@ export const handleTerminalsCollectionRoute: ApiRouteHandler = async (
     }
     if (runtimeModeResult.runtimeMode !== undefined) {
       createTerminalInput.runtimeMode = runtimeModeResult.runtimeMode;
+    }
+    if (rootsResult.roots !== undefined) {
+      createTerminalInput.roots = rootsResult.roots;
     }
     if (nameOriginResult.nameOrigin !== undefined) {
       createTerminalInput.nameOrigin = nameOriginResult.nameOrigin;

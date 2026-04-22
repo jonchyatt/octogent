@@ -661,10 +661,11 @@ export const createSessionRuntime = ({
       let command: string;
       let args: string[];
       let stdin: string;
+      const roots = terminalRecord?.roots;
       try {
         ({ command, args, stdin } = isResumeTurn
-          ? buildResumeCommand(provider, prompt, outfile, terminalRecord?.codexSessionId)
-          : buildExecCommand(provider, prompt, outfile));
+          ? buildResumeCommand(provider, prompt, outfile, terminalRecord?.codexSessionId, roots)
+          : buildExecCommand(provider, prompt, outfile, roots));
       } catch (error) {
         throw new Error(`Unable to build exec command: ${toErrorMessage(error)}`);
       }

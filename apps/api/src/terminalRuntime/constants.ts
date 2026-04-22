@@ -32,6 +32,17 @@ export const TERMINAL_BOOTSTRAP_COMMANDS: Record<string, string> = {
 //
 //   OCTOGENT_CODEX_EXEC_CMD overrides the Codex prefix
 //   OCTOGENT_CLAUDE_EXEC_CMD overrides the Claude prefix
+//
+// When the caller supplies `roots: readonly string[]` to buildExecCommand,
+// the Codex prefix's `--dangerously-bypass-approvals-and-sandbox` is
+// replaced with `--sandbox workspace-write` and one `--add-dir <path>` is
+// emitted per root. Without roots, bypass mode is preserved (today's
+// default — full fs access, no sandbox).
+//
+// This split is deliberate: bypass is safe for single-repo tentacles and
+// matches how Jon runs Codex locally. Introducing roots is an explicit opt-
+// in to the sandboxed posture, safer AND necessary for cross-repo work
+// (Phase 0.01.3 — jarvis tentacle writing to Visopscreen, sidecar, etc).
 const DEFAULT_CODEX_EXEC_CMD = "codex exec --dangerously-bypass-approvals-and-sandbox";
 const DEFAULT_CLAUDE_EXEC_CMD = "claude -p";
 
@@ -59,6 +70,7 @@ export const buildExecCommand = (
   provider: string,
   prompt: string,
   outfile: string,
+  roots?: readonly string[],
 ): { command: string; args: string[]; stdin: string } => {
   const prefix =
     TERMINAL_EXEC_COMMANDS[provider] ??
@@ -71,21 +83,44 @@ export const buildExecCommand = (
   const [command, ...baseArgs] = parts as [string, ...string[]];
 
   if (provider === "codex") {
+    const withRoots = applyCodexRoots(baseArgs, roots);
     return {
       command,
-      args: [...baseArgs, "--output-last-message", outfile, "-"],
+      args: [...withRoots, "--output-last-message", outfile, "-"],
       stdin: prompt,
     };
   }
 
   // Claude exec: no prompt positional when stdin is piped. Output-side-channel
   // is a TBD — `claude -p` emits to stdout; for now we rely on transcript
-  // capture.
+  // capture. `roots` is a Codex-only primitive; Claude has no equivalent
+  // sandbox flag today, so it's accepted (for API symmetry) and ignored here.
   return {
     command,
     args: baseArgs,
     stdin: prompt,
   };
+};
+
+/**
+ * Swap Codex exec args to honor `roots` when provided:
+ *  - Strip `--dangerously-bypass-approvals-and-sandbox` (if present).
+ *  - Prepend `--sandbox workspace-write`.
+ *  - Append one `--add-dir <path>` per root.
+ * When `roots` is undefined or empty, args pass through unchanged (bypass
+ * mode preserved — today's default).
+ *
+ * Exported for testability + reuse by buildResumeCommand.
+ */
+export const applyCodexRoots = (
+  baseArgs: readonly string[],
+  roots: readonly string[] | undefined,
+): string[] => {
+  if (!roots || roots.length === 0) return [...baseArgs];
+  const stripped = baseArgs.filter((a) => a !== "--dangerously-bypass-approvals-and-sandbox");
+  const rootFlags: string[] = [];
+  for (const r of roots) rootFlags.push("--add-dir", r);
+  return ["--sandbox", "workspace-write", ...stripped, ...rootFlags];
 };
 
 // Build the argv for resuming a prior exec session with a new prompt.
@@ -114,17 +149,24 @@ export const buildResumeCommand = (
   prompt: string,
   outfile: string,
   sessionId?: string,
+  roots?: readonly string[],
 ): { command: string; args: string[]; stdin: string } => {
   if (provider === "codex") {
-    const sandboxFlag = "--dangerously-bypass-approvals-and-sandbox";
     const resumeTarget = sessionId && sessionId.length > 0 ? sessionId : "--last";
+    // Roots-honoring version of the canonical resume invocation. We NEVER parse
+    // OCTOGENT_CODEX_EXEC_CMD here (see comment above) — the resume invocation
+    // is hard-coded. Roots, when provided, follow the same applyCodexRoots
+    // transform as buildExecCommand.
+    const hardcodedArgs = roots && roots.length > 0
+      ? applyCodexRoots([], roots)
+      : ["--dangerously-bypass-approvals-and-sandbox"];
     return {
       command: "codex",
       args: [
         "exec",
         "resume",
         resumeTarget,
-        sandboxFlag,
+        ...hardcodedArgs,
         "--output-last-message",
         outfile,
         "-",
@@ -134,8 +176,9 @@ export const buildResumeCommand = (
   }
 
   // Claude fallback (unreachable from coordinator post-MED-2 but safe if
-  // called directly). No resume primitive; fresh exec loses context.
-  return buildExecCommand(provider, prompt, outfile);
+  // called directly). No resume primitive; fresh exec loses context. Roots
+  // ignored for Claude (no equivalent sandbox flag).
+  return buildExecCommand(provider, prompt, outfile, roots);
 };
 
 // Hard ceiling on exec-mode worker runtime. Protects against hung workers

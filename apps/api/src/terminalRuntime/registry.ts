@@ -16,6 +16,7 @@ import type {
 import {
   isTerminalAgentProvider,
   isTerminalCompletionSoundId,
+  isTerminalRoots,
   isTerminalRuntimeMode,
 } from "./types";
 
@@ -273,6 +274,7 @@ const parseV3Terminals = (
       terminal.parentTerminalId = entry.parentTerminalId;
     if (isTerminalAgentProvider(entry.agentProvider)) terminal.agentProvider = entry.agentProvider;
     if (isTerminalRuntimeMode(entry.runtimeMode)) terminal.runtimeMode = entry.runtimeMode;
+    if (isTerminalRoots(entry.roots)) terminal.roots = entry.roots;
     if (
       typeof entry.turnNumber === "number" &&
       Number.isInteger(entry.turnNumber) &&

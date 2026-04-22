@@ -44,6 +44,7 @@ import {
   type TerminalAgentProvider,
   type TerminalLifecycleState,
   type TerminalNameOrigin,
+  type TerminalRoots,
   type TerminalRuntimeMode,
   type TerminalSession,
   type TerminalSessionEndDetails,
@@ -56,12 +57,14 @@ export type {
   PersistedUiState,
   TerminalAgentProvider,
   TerminalNameOrigin,
+  TerminalRoots,
   TerminalRuntimeMode,
   TentacleWorkspaceMode,
 } from "./terminalRuntime/types";
 export {
   isTerminalAgentProvider,
   isTerminalCompletionSoundId,
+  isTerminalRoots,
   isTerminalRuntimeMode,
 } from "./terminalRuntime/types";
 export { RuntimeInputError } from "./terminalRuntime/types";
@@ -469,6 +472,7 @@ export const createTerminalRuntime = ({
     workspaceMode = "shared",
     agentProvider,
     runtimeMode,
+    roots,
     initialPrompt,
     initialInputDraft,
     baseRef,
@@ -483,6 +487,7 @@ export const createTerminalRuntime = ({
     workspaceMode?: TentacleWorkspaceMode;
     agentProvider?: TerminalAgentProvider;
     runtimeMode?: TerminalRuntimeMode;
+    roots?: TerminalRoots;
     initialPrompt?: string;
     initialInputDraft?: string;
     baseRef?: string;
@@ -548,6 +553,7 @@ export const createTerminalRuntime = ({
       workspaceMode,
       agentProvider: agentProvider ?? DEFAULT_AGENT_PROVIDER,
       ...(runtimeMode ? { runtimeMode } : {}),
+      ...(roots && roots.length > 0 ? { roots } : {}),
       lifecycleState: "registered",
       lifecycleUpdatedAt: new Date().toISOString(),
       ...(initialPrompt ? { initialPrompt } : {}),
