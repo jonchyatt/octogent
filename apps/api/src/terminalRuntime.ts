@@ -12,6 +12,7 @@ import {
   DEFAULT_TERMINAL_INACTIVITY_THRESHOLD_MS,
   TERMINAL_ID_PREFIX,
   TERMINAL_MAX_CONCURRENT_SESSIONS,
+  computeEffectiveRoots,
 } from "./terminalRuntime/constants";
 import {
   conversationExportMarkdown,
@@ -542,6 +543,13 @@ export const createTerminalRuntime = ({
     const worktreeId =
       requestedWorktreeId ?? (workspaceMode === "worktree" ? terminalId : undefined);
 
+    // Phase 0.01.3.2: when the caller opts into sandbox mode via --roots,
+    // auto-prepend the tentacle's project root (workspaceCwd) so Codex can
+    // read/write the main repo beyond its worktree. When --roots is absent,
+    // `computeEffectiveRoots` returns undefined and bypass mode is preserved
+    // (no silent policy-tightening — feedback_additive_not_destructive.md).
+    const effectiveRoots = computeEffectiveRoots(workspaceCwd, roots);
+
     const terminal: PersistedTerminal = {
       terminalId,
       tentacleId,
@@ -553,7 +561,7 @@ export const createTerminalRuntime = ({
       workspaceMode,
       agentProvider: agentProvider ?? DEFAULT_AGENT_PROVIDER,
       ...(runtimeMode ? { runtimeMode } : {}),
-      ...(roots && roots.length > 0 ? { roots } : {}),
+      ...(effectiveRoots ? { roots: effectiveRoots } : {}),
       lifecycleState: "registered",
       lifecycleUpdatedAt: new Date().toISOString(),
       ...(initialPrompt ? { initialPrompt } : {}),

@@ -123,6 +123,45 @@ export const applyCodexRoots = (
   return ["--sandbox", "workspace-write", ...stripped, ...rootFlags];
 };
 
+/**
+ * Phase 0.01.3.2 — compute the effective `roots` list for a new terminal.
+ *
+ * Policy:
+ *  - If `userRoots` is undefined or empty → return `undefined`. The terminal
+ *    gets no `roots` field, preserving today's bypass-mode default. This is
+ *    deliberate: silent policy-tightening is destructive (feedback
+ *    `feedback_additive_not_destructive.md`), so bypass stays the default
+ *    until the caller explicitly opts into sandbox mode via `--roots`.
+ *  - If `userRoots` is non-empty → the tentacle's project root is prepended
+ *    as the baseline writable area (so Codex can touch the main repo from
+ *    its worktree). User-supplied paths are APPENDED after the project
+ *    root. Duplicates are removed while preserving first-seen order.
+ *
+ * Why project root is auto-included: a tentacle with sandbox engaged but
+ * without its own project root in the roots list can't do useful work —
+ * git operations, package installs, anything touching the repo beyond the
+ * worktree-dir workdir would fail. Making project root an invariant
+ * baseline lets `--roots` do what callers actually want ("I need to write
+ * to THIS other repo too") without them having to remember to re-list
+ * their own.
+ */
+export const computeEffectiveRoots = (
+  projectRoot: string,
+  userRoots: readonly string[] | undefined,
+): readonly string[] | undefined => {
+  if (!userRoots || userRoots.length === 0) return undefined;
+  const seen = new Set<string>();
+  const effective: string[] = [];
+  const push = (p: string) => {
+    if (p.length === 0 || seen.has(p)) return;
+    seen.add(p);
+    effective.push(p);
+  };
+  push(projectRoot);
+  for (const r of userRoots) push(r);
+  return effective;
+};
+
 // Build the argv for resuming a prior exec session with a new prompt.
 // Parallel to buildExecCommand but uses `codex exec resume <sessionId>`
 // when a session UUID is available (safe under shared-cwd), or `--last`

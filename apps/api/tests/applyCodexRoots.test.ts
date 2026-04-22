@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { applyCodexRoots, buildExecCommand, buildResumeCommand } from "../src/terminalRuntime/constants";
+import {
+  applyCodexRoots,
+  buildExecCommand,
+  buildResumeCommand,
+  computeEffectiveRoots,
+} from "../src/terminalRuntime/constants";
 
 describe("applyCodexRoots", () => {
   it("passes through unchanged when roots is undefined", () => {
@@ -109,5 +114,56 @@ describe("buildResumeCommand", () => {
   it("defaults resume target to --last when sessionId absent", () => {
     const { args } = buildResumeCommand("codex", "go", "/tmp/out.json");
     expect(args).toContain("--last");
+  });
+});
+
+describe("computeEffectiveRoots (Phase 0.01.3.2 auto-prepend project root)", () => {
+  const PROJECT_ROOT = "/c/Users/jonch/Projects/jarvis";
+
+  it("returns undefined when userRoots is undefined → bypass mode preserved", () => {
+    expect(computeEffectiveRoots(PROJECT_ROOT, undefined)).toBeUndefined();
+  });
+
+  it("returns undefined when userRoots is empty → bypass mode preserved", () => {
+    expect(computeEffectiveRoots(PROJECT_ROOT, [])).toBeUndefined();
+  });
+
+  it("prepends project root when userRoots is non-empty", () => {
+    expect(
+      computeEffectiveRoots(PROJECT_ROOT, ["/c/Users/jonch/Projects/Visopscreen"]),
+    ).toEqual([
+      PROJECT_ROOT,
+      "/c/Users/jonch/Projects/Visopscreen",
+    ]);
+  });
+
+  it("preserves user-supplied order after the prepended project root", () => {
+    expect(
+      computeEffectiveRoots(PROJECT_ROOT, ["/a", "/b", "/c"]),
+    ).toEqual([PROJECT_ROOT, "/a", "/b", "/c"]);
+  });
+
+  it("dedupes: if user re-supplies project root, it appears only once (first-seen order)", () => {
+    expect(
+      computeEffectiveRoots(PROJECT_ROOT, [PROJECT_ROOT, "/c/other"]),
+    ).toEqual([PROJECT_ROOT, "/c/other"]);
+  });
+
+  it("dedupes: user-supplied duplicates collapse, preserving first occurrence", () => {
+    expect(
+      computeEffectiveRoots(PROJECT_ROOT, ["/a", "/b", "/a", "/c", "/b"]),
+    ).toEqual([PROJECT_ROOT, "/a", "/b", "/c"]);
+  });
+
+  it("skips empty-string entries defensively (shouldn't be reachable via isTerminalRoots but harmless)", () => {
+    expect(
+      computeEffectiveRoots(PROJECT_ROOT, ["", "/a", ""]),
+    ).toEqual([PROJECT_ROOT, "/a"]);
+  });
+
+  it("handles an empty projectRoot gracefully (no prepend if projectRoot itself is empty)", () => {
+    // Edge case: if somehow workspaceCwd is "", we still honor user roots
+    // without polluting the list with an empty string.
+    expect(computeEffectiveRoots("", ["/a"])).toEqual(["/a"]);
   });
 });
