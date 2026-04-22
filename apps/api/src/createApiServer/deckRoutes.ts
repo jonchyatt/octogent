@@ -13,6 +13,8 @@ import {
   toggleTodoItem,
   updateDeckTentacleSuggestedSkills,
 } from "../deck/readDeckTentacles";
+import { detectCycle, parseTodoNeeds } from "@octogent/core";
+
 import { resolvePrompt } from "../prompts";
 import { MAX_CHILDREN_PER_PARENT, RuntimeInputError } from "../terminalRuntime";
 import type { ApiRouteHandler } from "./routeHelpers";
@@ -615,11 +617,53 @@ export const handleDeckTentacleSwarmRoute: ApiRouteHandler = async (
   const needsParent = targetItems.length > 1;
   const parentTerminalId = needsParent ? `${tentacleId}-swarm-parent` : null;
   const tentacleContextPath = join(workspaceCwd, ".octogent/tentacles", tentacleId);
-  const workers = targetItems.map((item) => ({
-    terminalId: `${tentacleId}-swarm-${item.index}`,
-    todoIndex: item.index,
-    todoText: item.text,
+  // Parse (needs: a, b, c) annotations out of each todo item so the swarm
+  // coordinator can sequence dependent workers. `needs:` ids are matched
+  // case-insensitively against either the worker index (e.g. "2") or the
+  // terminal-id tail (e.g. "swarm-2"). Cycles are rejected before dispatch.
+  const parsedItems = targetItems.map((item) => {
+    const parsed = parseTodoNeeds(item.text);
+    return {
+      terminalId: `${tentacleId}-swarm-${item.index}`,
+      todoIndex: item.index,
+      todoText: parsed.cleanText,
+      rawNeeds: parsed.needs,
+    };
+  });
+
+  // Resolve needs references: accept either a bare index ("2") or a tail
+  // like "swarm-2" or a full terminal-id. Unknown refs get surfaced in the
+  // workerListing as a warning so the coordinator can ask the operator.
+  const indexToTerminalId = new Map<string, string>();
+  for (const w of parsedItems) {
+    indexToTerminalId.set(String(w.todoIndex), w.terminalId);
+    indexToTerminalId.set(`swarm-${w.todoIndex}`, w.terminalId);
+    indexToTerminalId.set(w.terminalId, w.terminalId);
+  }
+  const workers = parsedItems.map((w) => ({
+    terminalId: w.terminalId,
+    todoIndex: w.todoIndex,
+    todoText: w.todoText,
+    needs: w.rawNeeds
+      .map((ref) => indexToTerminalId.get(ref.toLowerCase()) ?? null)
+      .filter((id): id is string => id !== null),
+    unresolvedNeeds: w.rawNeeds.filter((ref) => !indexToTerminalId.has(ref.toLowerCase())),
   }));
+
+  // Cycle check before we hand a broken plan to the coordinator.
+  const cycle = detectCycle(workers.map((w) => ({ id: w.terminalId, needs: w.needs })));
+  if (cycle) {
+    writeJson(
+      response,
+      400,
+      {
+        error: "Swarm todo graph has a dependency cycle.",
+        cycle,
+      },
+      corsOrigin,
+    );
+    return true;
+  }
 
   const buildWorkerContextIntro = (): string =>
     workerWorkspaceMode === "worktree"
@@ -775,8 +819,40 @@ export const handleDeckTentacleSwarmRoute: ApiRouteHandler = async (
 
     if (needsParent && parentTerminalId) {
       const workerListing = workers
-        .map((w) => `- \`${w.terminalId}\` — item #${w.todoIndex}: ${w.todoText}`)
+        .map((w) => {
+          const depAnnot = w.needs.length > 0
+            ? ` **(needs: ${w.needs.map((id) => `\`${id}\``).join(", ")})**`
+            : "";
+          const unresolvedAnnot = w.unresolvedNeeds.length > 0
+            ? ` ⚠️ unresolved needs: ${w.unresolvedNeeds.join(", ")}`
+            : "";
+          return `- \`${w.terminalId}\`${depAnnot}${unresolvedAnnot} — item #${w.todoIndex}: ${w.todoText}`;
+        })
         .join("\n");
+
+      // Build a dedicated dependency section for the parent prompt so the
+      // coordinator can sequence spawns. Empty string = no dependencies in play.
+      const workerDependencies = workers.some((w) => w.needs.length > 0)
+        ? [
+            "### Dependency graph",
+            "",
+            "Some workers depend on others. DO NOT spawn or unblock a dependent worker until every prerequisite has reported DONE via channel message.",
+            "",
+            ...workers
+              .filter((w) => w.needs.length > 0)
+              .map(
+                (w) =>
+                  `- \`${w.terminalId}\` waits for: ${w.needs.map((id) => `\`${id}\``).join(", ")}`,
+              ),
+            "",
+            "Recommended sequence:",
+            "",
+            "1. Spawn all workers with **no dependencies** first, in parallel.",
+            "2. Monitor channel for DONE messages.",
+            "3. As each prerequisite completes, spawn its dependents (still honoring any additional dependencies they have).",
+            "4. If a prerequisite reports BLOCKED or never completes, do NOT spawn its dependents — escalate to the human.",
+          ].join("\n")
+        : "";
 
       const workerSpawnCommands = targetItems
         .map((item) => {
@@ -841,6 +917,7 @@ export const handleDeckTentacleSwarmRoute: ApiRouteHandler = async (
         workerCount: String(workers.length),
         maxChildrenPerParent: String(MAX_CHILDREN_PER_PARENT),
         workerListing,
+        workerDependencies,
         workerWorkspaceSection: buildWorkerWorkspaceSection(),
         workerSpawnCommands,
         completionStrategySection: buildCompletionStrategySection(parentBaseBranch),
@@ -868,6 +945,15 @@ export const handleDeckTentacleSwarmRoute: ApiRouteHandler = async (
     throw error;
   }
 
-  writeJson(response, 201, { tentacleId, parentTerminalId, workers }, corsOrigin);
+  // Public response shape: core fields plus `needs` only when non-empty so
+  // existing consumers (swarms with no dependencies) see the same shape they
+  // did pre-10.8.3.
+  const workerResponse = workers.map((w) => {
+    const base = { terminalId: w.terminalId, todoIndex: w.todoIndex, todoText: w.todoText };
+    if (w.needs.length > 0) (base as any).needs = w.needs;
+    if (w.unresolvedNeeds.length > 0) (base as any).unresolvedNeeds = w.unresolvedNeeds;
+    return base;
+  });
+  writeJson(response, 201, { tentacleId, parentTerminalId, workers: workerResponse }, corsOrigin);
   return true;
 };

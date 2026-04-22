@@ -19,6 +19,8 @@ NEVER declare the swarm complete while any worker is still BLOCKED or hasn't rep
 
 {{workerListing}}
 
+{{workerDependencies}}
+
 ## First Step: Spawn The Workers
 
 Before spawning, keep the child-terminal cap in mind: you cannot create more than {{maxChildrenPerParent}} children under your coordinator terminal.

@@ -57,24 +57,37 @@ export type ChannelStoreOptions = {
 const DEFAULT_MAX_RETRIES = 5;
 
 export class ChannelStore {
-  private readonly db: Database.Database;
+  private readonly dbPath: string;
+  private readonly useWal: boolean;
   private readonly maxRetries: number;
+  private _db: Database.Database | null = null;
 
   constructor(options: ChannelStoreOptions) {
+    this.dbPath = options.dbPath;
+    this.useWal = options.useWal !== false;
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+    // DB is opened lazily on first operation so constructing ChannelStore in a
+    // test harness or during pre-setup doesn't create `.octogent/state/` files.
+  }
 
-    // Ensure parent dir exists unless this is an in-memory DB.
-    if (options.dbPath !== ":memory:") {
-      const parent = dirname(options.dbPath);
+  /**
+   * Return the underlying DB, opening + migrating on first call.
+   */
+  private get db(): Database.Database {
+    if (this._db) return this._db;
+
+    if (this.dbPath !== ":memory:") {
+      const parent = dirname(this.dbPath);
       if (!existsSync(parent)) mkdirSync(parent, { recursive: true });
     }
 
-    this.db = new Database(options.dbPath);
-    if (options.useWal !== false && options.dbPath !== ":memory:") {
-      this.db.pragma("journal_mode = WAL");
+    this._db = new Database(this.dbPath);
+    if (this.useWal && this.dbPath !== ":memory:") {
+      this._db.pragma("journal_mode = WAL");
     }
-    this.db.pragma("busy_timeout = 5000");
+    this._db.pragma("busy_timeout = 5000");
     this.migrate();
+    return this._db;
   }
 
   private migrate(): void {
@@ -269,9 +282,12 @@ export class ChannelStore {
     return result.changes;
   }
 
-  /** Close the underlying DB handle. Call on shutdown. */
+  /** Close the underlying DB handle if opened. Safe to call on never-opened stores. */
   close(): void {
-    this.db.close();
+    if (this._db) {
+      this._db.close();
+      this._db = null;
+    }
   }
 }
 

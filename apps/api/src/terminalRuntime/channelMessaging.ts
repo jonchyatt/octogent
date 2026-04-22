@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+
 import { logVerbose } from "../logging";
 import { ChannelStore } from "./channelStore";
 import type { ChannelMessage, PersistedTerminal, TerminalSession } from "./types";
@@ -32,10 +34,13 @@ export const createChannelMessaging = (deps: CreateChannelMessagingOptions) => {
   let channelMessageCounter = 0;
 
   // On boot, recover anything that was stuck in queued/processing (e.g., from
-  // a hard crash that happened mid-delivery). Default 10-min threshold.
-  const recovered = store.recoverStale();
-  if (recovered > 0) {
-    logVerbose(`[Channel] Recovered ${recovered} stale message(s) from prior session`);
+  // a hard crash that happened mid-delivery). Default 10-min threshold. Only run
+  // if the DB file already exists — fresh workspaces shouldn't create it eagerly.
+  if (existsSync(dbPath)) {
+    const recovered = store.recoverStale();
+    if (recovered > 0) {
+      logVerbose(`[Channel] Recovered ${recovered} stale message(s) from prior session`);
+    }
   }
 
   const deliverChannelMessages = (terminalId: string): number => {

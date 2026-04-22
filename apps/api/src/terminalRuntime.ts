@@ -794,6 +794,7 @@ export const createTerminalRuntime = ({
     async close() {
       sessionRuntime.close();
       await registryPersistence.close();
+      channelMessaging.close();
       for (const client of terminalEventClients) {
         client.close();
       }
