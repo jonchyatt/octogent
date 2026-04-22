@@ -12,3 +12,6 @@
 **/coverage/
 
 .octogent
+
+# Runtime logs from dev launcher
+.startup.log

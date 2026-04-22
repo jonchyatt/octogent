@@ -156,9 +156,11 @@ describe("execTurnCoordinator.handleExecSessionEnd", () => {
     expect(onTerminalDead).not.toHaveBeenCalled();
   });
 
-  it("MED-1: returns 'dead' + escalates when killedByTimeout flag is set", () => {
+  it("MED-1 + P1b.9: second consecutive timeout (retryCount=1) escalates DEAD", () => {
     const { coordinator, drain, onTerminalDead, terminals, persist } =
-      makeCoordinatorHarness(makeTerminal({ turnNumber: 2, killedByTimeout: true }));
+      makeCoordinatorHarness(
+        makeTerminal({ turnNumber: 2, killedByTimeout: true, retryCount: 1 }),
+      );
     expect(coordinator.handleExecSessionEnd("terminal-1", "operator_kill")).toBe("dead");
     expect(drain).not.toHaveBeenCalled();
     expect(onTerminalDead).toHaveBeenCalledWith({
@@ -166,9 +168,172 @@ describe("execTurnCoordinator.handleExecSessionEnd", () => {
       terminalId: "terminal-1",
       turnNumber: 2,
     });
-    // Flag is cleared after consumption.
+    // Both flags cleared after escalation.
     expect(terminals.get("terminal-1")?.killedByTimeout).toBeUndefined();
+    expect(terminals.get("terminal-1")?.retryCount).toBeUndefined();
     expect(persist).toHaveBeenCalled();
+  });
+
+  it("P1b.9: first timeout (retryCount=0) + empty queue → respawn with synthetic marker alone", () => {
+    const { coordinator, drain, onTerminalDead, markDelivered, markFailed, startSession, terminals, persist } =
+      makeCoordinatorHarness(makeTerminal({ turnNumber: 1, killedByTimeout: true }));
+    drain.mockReturnValue(null);
+
+    expect(coordinator.handleExecSessionEnd("terminal-1", "operator_kill")).toBe("respawn");
+
+    const t = terminals.get("terminal-1");
+    expect(t?.retryCount).toBe(1);
+    expect(t?.turnNumber).toBe(2);
+    expect(t?.nextTurnPrompt).toBe(
+      "[Previous exec turn timed out and was killed. Resuming session.]",
+    );
+    expect(t?.killedByTimeout).toBeUndefined();
+    expect(startSession).toHaveBeenCalledWith("terminal-1");
+    expect(onTerminalDead).not.toHaveBeenCalled();
+    expect(markDelivered).not.toHaveBeenCalled(); // no drained messages to mark
+    expect(markFailed).not.toHaveBeenCalled();
+    expect(persist).toHaveBeenCalled();
+  });
+
+  it("P1b.9: first timeout + queue has new messages → synthetic marker + drained composed, mark delivered", () => {
+    const { coordinator, drain, onTerminalDead, markDelivered, startSession, terminals } =
+      makeCoordinatorHarness(makeTerminal({ turnNumber: 1, killedByTimeout: true }));
+    drain.mockReturnValue({
+      prompt: "[Channel from peer]: ping",
+      messageIds: ["msg-1", "msg-2"],
+    });
+
+    expect(coordinator.handleExecSessionEnd("terminal-1", "operator_kill")).toBe("respawn");
+
+    const t = terminals.get("terminal-1");
+    expect(t?.retryCount).toBe(1);
+    expect(t?.turnNumber).toBe(2);
+    expect(t?.nextTurnPrompt).toBe(
+      "[Previous exec turn timed out and was killed. Resuming session.]\n\n[Channel from peer]: ping",
+    );
+    expect(startSession).toHaveBeenCalledWith("terminal-1");
+    expect(markDelivered).toHaveBeenCalledWith(["msg-1", "msg-2"]);
+    expect(onTerminalDead).not.toHaveBeenCalled();
+  });
+
+  it("P1b.9: first timeout + startSession returns false → DEAD + messages FAILED + retry budget consumed", () => {
+    const { coordinator, drain, markFailed, onTerminalDead, startSession, terminals, persist } =
+      makeCoordinatorHarness(makeTerminal({ turnNumber: 1, killedByTimeout: true }));
+    drain.mockReturnValue({ prompt: "p", messageIds: ["msg-1"] });
+    startSession.mockReturnValue(false);
+
+    expect(coordinator.handleExecSessionEnd("terminal-1", "operator_kill")).toBe("dead");
+
+    const t = terminals.get("terminal-1");
+    // In-memory reverted — disk state should match pre-timeout turnNumber.
+    expect(t?.turnNumber).toBe(1);
+    expect(t?.nextTurnPrompt).toBeUndefined();
+    expect(t?.retryCount).toBeUndefined();
+    expect(t?.killedByTimeout).toBeUndefined();
+    expect(markFailed).toHaveBeenCalledWith(["msg-1"], expect.stringMatching(/timeout retry/));
+    expect(onTerminalDead).toHaveBeenCalledWith({
+      kind: "timeout",
+      terminalId: "terminal-1",
+      turnNumber: 1,
+    });
+    expect(persist).toHaveBeenCalled();
+  });
+
+  it("P1b.9: first timeout + startSession throws → DEAD + messages FAILED + budget consumed", () => {
+    const { coordinator, drain, markFailed, onTerminalDead, startSession, terminals } =
+      makeCoordinatorHarness(makeTerminal({ turnNumber: 1, killedByTimeout: true }));
+    drain.mockReturnValue({ prompt: "p", messageIds: ["msg-1"] });
+    startSession.mockImplementation(() => {
+      throw new Error("spawn blew up");
+    });
+
+    expect(coordinator.handleExecSessionEnd("terminal-1", "operator_kill")).toBe("dead");
+
+    const t = terminals.get("terminal-1");
+    expect(t?.retryCount).toBeUndefined();
+    expect(t?.turnNumber).toBe(1);
+    expect(markFailed).toHaveBeenCalled();
+    expect(onTerminalDead).toHaveBeenCalledWith({
+      kind: "timeout",
+      terminalId: "terminal-1",
+      turnNumber: 1,
+    });
+  });
+
+  it("P1b.9: first timeout at max-turns ceiling → DEAD with kind=max_turns (structural beats coincident)", () => {
+    const { coordinator, drain, onTerminalDead, startSession, terminals } =
+      makeCoordinatorHarness(
+        makeTerminal({ turnNumber: 3, killedByTimeout: true }),
+        { maxTurns: 3 },
+      );
+
+    expect(coordinator.handleExecSessionEnd("terminal-1", "operator_kill")).toBe("dead");
+
+    expect(drain).not.toHaveBeenCalled();
+    expect(startSession).not.toHaveBeenCalled();
+    expect(onTerminalDead).toHaveBeenCalledWith({
+      kind: "max_turns",
+      terminalId: "terminal-1",
+      turnNumber: 3,
+    });
+    expect(terminals.get("terminal-1")?.retryCount).toBeUndefined();
+    expect(terminals.get("terminal-1")?.killedByTimeout).toBeUndefined();
+  });
+
+  it("P1b.9: clean pty_exit with retryCount=1 resets it to undefined + persists", () => {
+    const { coordinator, drain, persist, terminals } = makeCoordinatorHarness(
+      makeTerminal({ turnNumber: 2, retryCount: 1 }),
+    );
+    drain.mockReturnValue(null); // queue empty → just a clean done
+
+    expect(coordinator.handleExecSessionEnd("terminal-1", "pty_exit")).toBe("done");
+
+    const t = terminals.get("terminal-1");
+    expect(t?.retryCount).toBeUndefined();
+    // Persist fired for the reset (disk must reflect the budget refresh).
+    expect(persist).toHaveBeenCalled();
+  });
+
+  it("P1b.9: clean pty_exit with retryCount=0/undefined skips the reset persist", () => {
+    const { coordinator, drain, persist } = makeCoordinatorHarness(
+      makeTerminal({ turnNumber: 2 }),
+    );
+    drain.mockReturnValue(null);
+
+    expect(coordinator.handleExecSessionEnd("terminal-1", "pty_exit")).toBe("done");
+
+    // No reset to persist — persist should NOT fire (the done path doesn't
+    // otherwise call it when queue is empty).
+    expect(persist).not.toHaveBeenCalled();
+  });
+
+  it("P1b.9: timeout → retry → clean exit → timeout sequence treats second timeout as first (reset worked)", () => {
+    const { coordinator, drain, onTerminalDead, terminals } = makeCoordinatorHarness(
+      makeTerminal({ turnNumber: 1, killedByTimeout: true }),
+    );
+    drain.mockReturnValue(null);
+
+    // First timeout → retry (retryCount 0→1).
+    expect(coordinator.handleExecSessionEnd("terminal-1", "operator_kill")).toBe("respawn");
+    const afterFirst = terminals.get("terminal-1");
+    expect(afterFirst?.retryCount).toBe(1);
+    // Simulate ensureSession consuming nextTurnPrompt (real flow clears it
+    // at sessionRuntime.ts:689 after spawn). The mock startSession doesn't,
+    // so we mirror that here to model real behavior.
+    if (afterFirst) delete afterFirst.nextTurnPrompt;
+
+    // Clean exit between timeouts → retryCount resets to undefined.
+    expect(coordinator.handleExecSessionEnd("terminal-1", "pty_exit")).toBe("done");
+    expect(terminals.get("terminal-1")?.retryCount).toBeUndefined();
+
+    // Second timeout — but with retryCount reset, this is again a FIRST timeout.
+    const beforeSecond = terminals.get("terminal-1");
+    if (beforeSecond) beforeSecond.killedByTimeout = true;
+    expect(coordinator.handleExecSessionEnd("terminal-1", "operator_kill")).toBe("respawn");
+    expect(terminals.get("terminal-1")?.retryCount).toBe(1);
+
+    // No DEAD escalation fired across the sequence.
+    expect(onTerminalDead).not.toHaveBeenCalled();
   });
 
   it("returns 'done' when queue is empty after clean exit", () => {

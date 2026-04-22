@@ -8,7 +8,8 @@ import type { PersistedTerminal } from "./types";
  * State machine:
  *   TURN 0 SPAWN → (exec exits clean + queue empty)              → DONE
  *                → (exec exits clean + queue non-empty)           → TURN N+1 RESPAWN
- *                → (exec times out — killedByTimeout set)         → DEAD (escalate)
+ *                → (exec times out, retryCount=0)                 → TURN N+1 RESPAWN (synthetic marker + any new drained)
+ *                → (exec times out, retryCount>=1)                → DEAD (escalate)
  *                → (operator stop/kill — no flag)                 → DONE
  *   Guards:
  *     - agentProvider === "claude-code"                          → DONE
@@ -17,6 +18,16 @@ import type { PersistedTerminal } from "./types";
  *       (another respawn already in-flight — MED-4 re-entrancy guard)
  *     - turnNumber >= OCTOGENT_EXEC_MAX_TURNS                    → DEAD
  *       (runaway ping-pong protection — LOW-3)
+ *
+ * P1b.9 timeout retry semantics:
+ *   First timeout (retryCount undefined/0): bump retryCount→1, drain any
+ *   newly-arrived pending, compose nextTurnPrompt as
+ *   `"[Previous exec turn timed out and was killed. Resuming session.]"`
+ *   optionally followed by the drained composed prompt, bump turnNumber,
+ *   respawn. Codex resumes its session with an honest note and any new
+ *   user input. Second CONSECUTIVE timeout (retryCount>=1) escalates
+ *   DEAD without a further retry. Clean pty_exit resets retryCount to 0
+ *   (non-consecutive timeouts don't accumulate).
  *
  * The coordinator is invoked by sessionRuntime via the onExecSessionEnd
  * callback wired into teardownSession. It does NOT poll — it reacts to
@@ -126,26 +137,117 @@ export const createExecTurnCoordinator = (
       return "done";
     }
 
-    // MED-1: timeout escalation. The sessionRuntime timeout callback sets
-    // killedByTimeout=true right before killSession, then teardown fires
-    // onExecSessionEnd with reason="operator_kill". Distinguish by checking
-    // the flag. (P1b.9 will layer retry-once-then-DEAD on top of this hook;
-    // for now, one timeout = DEAD.)
+    // P1b.9: timeout retry-once-then-DEAD. The sessionRuntime timeout callback
+    // sets killedByTimeout=true right before killSession, then teardown fires
+    // onExecSessionEnd with reason="operator_kill". On FIRST consecutive
+    // timeout (retryCount 0/undefined), bump retryCount→1, drain any new
+    // pending, compose a synthetic-marker prompt so Codex knows the prior
+    // turn was killed, respawn. On SECOND consecutive timeout (retryCount>=1),
+    // escalate DEAD. Clean exits reset retryCount further down.
     if (reason === "operator_kill" && terminal.killedByTimeout === true) {
+      const currentRetries = terminal.retryCount ?? 0;
+      const currentTurn = terminal.turnNumber ?? 0;
+
+      // Second consecutive timeout → DEAD.
+      if (currentRetries >= 1) {
+        delete terminal.killedByTimeout;
+        delete terminal.retryCount;
+        persistTerminalChanges?.();
+        onTerminalDead?.({
+          kind: "timeout",
+          terminalId,
+          turnNumber: currentTurn,
+        });
+        return "dead";
+      }
+
+      // First timeout → retry once. Also check max-turns ceiling — if we're
+      // already at the ceiling, a retry would push past it. Escalate DEAD
+      // with max_turns reason (the timeout is coincident but LOW-3 is the
+      // structural cause).
+      if (currentTurn >= maxTurnsCeiling) {
+        delete terminal.killedByTimeout;
+        delete terminal.retryCount;
+        persistTerminalChanges?.();
+        onTerminalDead?.({
+          kind: "max_turns",
+          terminalId,
+          turnNumber: currentTurn,
+        });
+        return "dead";
+      }
+
+      // Drain any newly-arrived pending for retry (may be null/empty — that's
+      // fine, the synthetic marker alone is a valid resume prompt).
+      const drainedRetry = drainPendingForExecResume(terminalId);
+      const syntheticMarker =
+        "[Previous exec turn timed out and was killed. Resuming session.]";
+      const retryPrompt =
+        drainedRetry && drainedRetry.messageIds.length > 0
+          ? `${syntheticMarker}\n\n${drainedRetry.prompt}`
+          : syntheticMarker;
+
+      // Stage the retry: bump retryCount + turnNumber + nextTurnPrompt IN
+      // MEMORY ONLY (HIGH-2 crash-consistency invariant). Persist only on
+      // spawn success.
+      terminal.nextTurnPrompt = retryPrompt;
+      terminal.turnNumber = currentTurn + 1;
+      terminal.retryCount = currentRetries + 1;
       delete terminal.killedByTimeout;
+
+      let respawnOk = false;
+      try {
+        respawnOk = startSession(terminalId);
+      } catch {
+        respawnOk = false;
+      }
+
+      if (!respawnOk) {
+        // Retry spawn failed. Revert in-memory state (disk untouched).
+        // killedByTimeout was consumed; re-setting it on failure would be
+        // a lie about what the runtime did, so leave it cleared. The retry
+        // attempt is spent — mark any drained messages FAILED and escalate
+        // DEAD (we already consumed our one retry budget on this attempt).
+        delete terminal.nextTurnPrompt;
+        terminal.turnNumber = currentTurn;
+        delete terminal.retryCount;
+        if (drainedRetry && drainedRetry.messageIds.length > 0) {
+          markExecPromptFailed(
+            drainedRetry.messageIds,
+            "timeout retry startSession returned false",
+          );
+        }
+        persistTerminalChanges?.();
+        onTerminalDead?.({
+          kind: "timeout",
+          terminalId,
+          turnNumber: currentTurn,
+        });
+        return "dead";
+      }
+
+      // Retry spawn succeeded. Persist bumped state and mark any drained
+      // messages delivered (they rode in on the synthetic-marker prompt).
       persistTerminalChanges?.();
-      onTerminalDead?.({
-        kind: "timeout",
-        terminalId,
-        turnNumber: terminal.turnNumber ?? 0,
-      });
-      return "dead";
+      if (drainedRetry && drainedRetry.messageIds.length > 0) {
+        markExecPromptDelivered(drainedRetry.messageIds);
+      }
+      return "respawn";
     }
 
     // Only respawn on clean exits. operator_stop / operator_kill without
     // the timeout flag = user said "enough", don't respawn.
     if (reason !== "pty_exit") {
       return "done";
+    }
+
+    // P1b.9: a clean turn-exit means the retry budget is fully refreshed.
+    // Only CONSECUTIVE timeouts escalate to DEAD — one clean turn in between
+    // resets the counter. Persist the reset so a post-reset crash doesn't
+    // leave disk in retryCount=1 state.
+    if ((terminal.retryCount ?? 0) > 0) {
+      delete terminal.retryCount;
+      persistTerminalChanges?.();
     }
 
     // MED-4: re-entrancy guard. If another respawn is already in-flight

@@ -288,6 +288,13 @@ const parseV3Terminals = (
     if (typeof entry.codexSessionId === "string" && entry.codexSessionId.length > 0) {
       terminal.codexSessionId = entry.codexSessionId;
     }
+    if (
+      typeof entry.retryCount === "number" &&
+      Number.isInteger(entry.retryCount) &&
+      entry.retryCount >= 0
+    ) {
+      terminal.retryCount = entry.retryCount;
+    }
     if (typeof entry.initialPrompt === "string") terminal.initialPrompt = entry.initialPrompt;
     if (typeof entry.initialInputDraft === "string") {
       terminal.initialInputDraft = entry.initialInputDraft;

@@ -189,6 +189,11 @@ export type PersistedTerminal = {
   // to distinguish timeout-kill (escalate to DEAD) from operator-kill
   // (silent done). Cleared after the coordinator consumes it.
   killedByTimeout?: boolean;
+  // Exec-mode only: how many CONSECUTIVE timeout retries have been issued
+  // for this terminal. 0/undefined = no retry in flight. 1 = one retry
+  // attempt issued, second consecutive timeout escalates to DEAD. Reset to
+  // 0 on any clean pty_exit (non-consecutive timeouts don't accumulate).
+  retryCount?: number;
   initialPrompt?: string;
   initialInputDraft?: string;
   lastActiveAt?: string;
