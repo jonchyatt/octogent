@@ -8,6 +8,13 @@ const externals = [
   ...builtinModules.map((moduleName) => `node:${moduleName}`),
   "node-pty",
   "ws",
+  // Native-addon deps must stay external — `better-sqlite3` is loaded via
+  // `bindings`, which references the CommonJS `__filename` global that is
+  // NOT defined in the emitted ESM bundle (see docs/KNOWN-ISSUES.md §1).
+  // Inlining these into the bundle crashes on first native-addon load.
+  // External = runtime require() from node_modules, which polyfills correctly.
+  "better-sqlite3",
+  "bindings",
 ];
 
 export default defineConfig({

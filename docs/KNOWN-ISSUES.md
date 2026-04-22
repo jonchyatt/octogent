@@ -2,6 +2,15 @@
 
 ## 1. Vite-bundled dist crashes on first channel-store use (`__filename is not defined`)
 
+**Status: RESOLVED (2026-04-22, Session 34).** Fix: mark `better-sqlite3` +
+`bindings` as external in `apps/web/vite.api.bundle.config.mts` (candidate
+fix #1 below). Bundle rebuilt + smoke-verified: `node bin/octogent terminal
+list` now boots cleanly against a pre-existing `channels.db` (the
+`recoverStale()` native-binding codepath that used to crash at startup).
+The bundle now emits `import Database from "better-sqlite3";` as an
+unbundled ESM import, resolved at runtime from `node_modules`, which
+handles the native-addon CommonJS-interop correctly.
+
 **Severity:** HIGH — blocks production use of the channel messaging HTTP API.
 
 **Symptom.** Running `node bin/octogent` (the Vite-bundled production entry
