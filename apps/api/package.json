@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@octogent/core": "workspace:*",
+    "better-sqlite3": "^12.9.0",
     "node-pty": "^1.1.0",
     "ws": "^8.19.0"
   },

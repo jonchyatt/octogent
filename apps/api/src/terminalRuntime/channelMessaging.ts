@@ -1,45 +1,85 @@
 import { logVerbose } from "../logging";
+import { ChannelStore } from "./channelStore";
 import type { ChannelMessage, PersistedTerminal, TerminalSession } from "./types";
 
-export const createChannelMessaging = (deps: {
+/**
+ * Channel messaging — agent-to-agent message delivery.
+ *
+ * As of Jarvis M0.02 Phase 10.8.1 (Session 31), backed by a SQLite-WAL durable
+ * store (`channelStore.ts`) instead of the prior in-memory Map. External API
+ * surface is unchanged — `sendChannelMessage` / `listChannelMessages` /
+ * `deliverChannelMessages` behave identically to callers.
+ *
+ * The durable store adds:
+ *   - Messages survive API restarts
+ *   - Workers atomically `claim` pending on boot
+ *   - Stale messages auto-recover from queued/processing after 10 min
+ *   - Retry with dead-letter at MAX_RETRIES (5)
+ *   - Status counts for diagnostics
+ */
+
+export type CreateChannelMessagingOptions = {
   terminals: Map<string, PersistedTerminal>;
   sessions: Map<string, TerminalSession>;
   writeInput: (terminalId: string, data: string) => boolean;
-}) => {
-  const { terminals, sessions, writeInput } = deps;
-  const channelQueues = new Map<string, ChannelMessage[]>();
+  /** Absolute path to SQLite DB file. Typically under the project state dir. */
+  dbPath: string;
+};
+
+export const createChannelMessaging = (deps: CreateChannelMessagingOptions) => {
+  const { terminals, sessions, writeInput, dbPath } = deps;
+  const store = new ChannelStore({ dbPath });
   let channelMessageCounter = 0;
 
-  const deliverChannelMessages = (terminalId: string): number => {
-    const queue = channelQueues.get(terminalId);
-    if (!queue || queue.length === 0) {
-      return 0;
-    }
+  // On boot, recover anything that was stuck in queued/processing (e.g., from
+  // a hard crash that happened mid-delivery). Default 10-min threshold.
+  const recovered = store.recoverStale();
+  if (recovered > 0) {
+    logVerbose(`[Channel] Recovered ${recovered} stale message(s) from prior session`);
+  }
 
+  const deliverChannelMessages = (terminalId: string): number => {
     const session = sessions.get(terminalId);
     if (!session) {
       return 0;
     }
 
-    const undelivered = queue.filter((m) => !m.delivered);
-    if (undelivered.length === 0) {
+    // Claim all pending messages for this terminal (pending → queued, atomic).
+    const claimed = store.claimPendingFor(terminalId);
+    if (claimed.length === 0) {
       return 0;
     }
 
-    // Compose all pending messages into a single prompt injection.
-    const lines = undelivered.map(
+    // Compose into a single PTY write, mirroring prior behavior.
+    const lines = claimed.map(
       (m) => `[Channel message from ${m.fromTerminalId}]: ${m.content}`,
     );
     const prompt = `${lines.join("\n")}\r`;
 
-    logVerbose(`[Channel] Delivering ${undelivered.length} message(s) to ${terminalId}`);
+    logVerbose(`[Channel] Delivering ${claimed.length} message(s) to ${terminalId}`);
 
-    for (const m of undelivered) {
-      m.delivered = true;
+    // Mark processing, write to PTY, mark delivered. If writeInput throws or
+    // returns false, fail the messages so they revert to pending for retry.
+    for (const m of claimed) {
+      store.markProcessing(m.messageId);
     }
 
-    writeInput(terminalId, prompt);
-    return undelivered.length;
+    let ok = false;
+    try {
+      ok = writeInput(terminalId, prompt) !== false;
+    } catch (err) {
+      const errMsg = (err as Error)?.message ?? String(err);
+      for (const m of claimed) store.markFailed(m.messageId, errMsg);
+      return 0;
+    }
+
+    if (!ok) {
+      for (const m of claimed) store.markFailed(m.messageId, "writeInput returned false");
+      return 0;
+    }
+
+    for (const m of claimed) store.markDelivered(m.messageId);
+    return claimed.length;
   };
 
   return {
@@ -54,7 +94,7 @@ export const createChannelMessaging = (deps: {
 
       channelMessageCounter += 1;
       const message: ChannelMessage = {
-        messageId: `msg-${channelMessageCounter}`,
+        messageId: `msg-${Date.now()}-${channelMessageCounter}`,
         fromTerminalId,
         toTerminalId,
         content,
@@ -62,15 +102,17 @@ export const createChannelMessaging = (deps: {
         delivered: false,
       };
 
-      const queue = channelQueues.get(toTerminalId) ?? [];
-      queue.push(message);
-      channelQueues.set(toTerminalId, queue);
+      const inserted = store.enqueue(message);
+      if (inserted === null) {
+        // Duplicate messageId (extremely rare given timestamp + counter); skip.
+        return null;
+      }
 
       logVerbose(
         `[Channel] Queued message ${message.messageId} from=${fromTerminalId} to=${toTerminalId}`,
       );
 
-      // If the target session is idle, deliver immediately.
+      // If the target session is idle, deliver immediately (same hot-path as before).
       const targetSession = sessions.get(toTerminalId);
       if (targetSession && targetSession.agentState === "idle") {
         deliverChannelMessages(toTerminalId);
@@ -80,9 +122,19 @@ export const createChannelMessaging = (deps: {
     },
 
     listChannelMessages(terminalId: string): ChannelMessage[] {
-      return channelQueues.get(terminalId) ?? [];
+      return store.listForTerminal(terminalId);
     },
 
     deliverChannelMessages,
+
+    /** Diagnostic: current status counts across all messages. */
+    getChannelStatusCounts() {
+      return store.getStatusCounts();
+    },
+
+    /** Call on server shutdown to close the DB handle cleanly. */
+    close(): void {
+      store.close();
+    },
   };
 };

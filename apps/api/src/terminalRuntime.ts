@@ -265,6 +265,7 @@ export const createTerminalRuntime = ({
     terminals,
     sessions,
     writeInput: (terminalId: string, data: string) => sessionRuntime.writeInput(terminalId, data),
+    dbPath: join(stateDir, "state", "channels.db"),
   });
 
   const hookProcessor = createHookProcessor({
