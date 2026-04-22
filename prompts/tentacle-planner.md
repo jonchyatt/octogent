@@ -25,13 +25,13 @@ Not every codebase needs all of these. Tailor the list to what actually exists a
 For each approved department, use the Octogent CLI:
 
 ```bash
-./bin/octogent tentacle create <name> --description "Short description of scope and purpose."
+octogent tentacle create <name> --description "Short description of scope and purpose."
 ```
 
 To check what already exists:
 
 ```bash
-./bin/octogent tentacle list
+octogent tentacle list
 ```
 
 Use lowercase kebab-case for names (e.g., `core-logic`, `frontend-ui`, `infrastructure`).

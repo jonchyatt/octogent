@@ -16,6 +16,7 @@ import {
 import { detectCycle, parseTodoNeeds } from "@octogent/core";
 
 import { resolvePrompt } from "../prompts";
+import { DEFAULT_AGENT_PROVIDER } from "../terminalRuntime/constants";
 import { MAX_CHILDREN_PER_PARENT, RuntimeInputError } from "../terminalRuntime";
 import type { ApiRouteHandler } from "./routeHelpers";
 import {
@@ -863,11 +864,11 @@ export const handleDeckTentacleSwarmRoute: ApiRouteHandler = async (
             `Your parent coordinator is at terminal \`${parentTerminalId}\`.`,
             "When you complete your task, report back:",
             "```bash",
-            `node bin/octogent channel send ${parentTerminalId} "DONE: ${item.text}" --from ${workerTerminalId}`,
+            `octogent channel send ${parentTerminalId} "DONE: ${item.text}" --from ${workerTerminalId}`,
             "```",
             "If you are blocked, ask for help:",
             "```bash",
-            `node bin/octogent channel send ${parentTerminalId} "BLOCKED: <describe what you need>" --from ${workerTerminalId}`,
+            `octogent channel send ${parentTerminalId} "BLOCKED: <describe what you need>" --from ${workerTerminalId}`,
             "```",
           ].join("\n");
 
@@ -887,8 +888,21 @@ export const handleDeckTentacleSwarmRoute: ApiRouteHandler = async (
             parentSection,
           });
 
+          // Preserve --agent-provider so a Codex parent doesn't accidentally spawn
+          // Claude workers. The server picks up agentProvider from the POST body
+          // (validated by parseTerminalAgentProvider), but the coordinator prompt
+          // is what actually types this into a shell, so the flag has to be in the
+          // generated command string verbatim.
+          //
+          // Always emit the flag with the *effective* provider — either the
+          // explicit request or the configured default. Per Boardroom Codex
+          // [MEDIUM] Session 31: omitting the flag when the request was
+          // undefined preserves exactly the class of ambiguity P0 was trying
+          // to remove.
+          const effectiveProvider =
+            agentProviderResult.agentProvider ?? DEFAULT_AGENT_PROVIDER;
           const commandParts = [
-            "node bin/octogent terminal create",
+            "octogent terminal create",
             `--terminal-id ${shellSingleQuote(workerTerminalId)}`,
             `--tentacle-id ${shellSingleQuote(tentacleId)}`,
             `--parent-terminal-id ${shellSingleQuote(parentTerminalId)}`,
@@ -898,6 +912,7 @@ export const handleDeckTentacleSwarmRoute: ApiRouteHandler = async (
             `--auto-rename-prompt-context ${shellSingleQuote(item.text)}`,
             "--prompt-template swarm-worker",
             `--prompt-variables ${shellSingleQuote(promptVariables)}`,
+            `--agent-provider ${shellSingleQuote(effectiveProvider)}`,
           ];
           if (workerWorkspaceMode === "worktree") {
             commandParts.splice(3, 0, `--worktree-id ${shellSingleQuote(workerTerminalId)}`);
