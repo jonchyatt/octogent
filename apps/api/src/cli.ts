@@ -650,6 +650,106 @@ const channelList = async () => {
   }
 };
 
+const channelParseAndEnqueue = async () => {
+  // Read text from --text flag, --file path, or stdin. Parse [@agent: msg]
+  // bracket-mentions and enqueue each as a channel message addressed to the
+  // mentioned terminal, sent from --from (or OCTOGENT_SESSION_ID). Invalid
+  // targets are silently dropped (404 from send endpoint) but reported to stderr.
+  const fromTerminalId = parseFlag("--from") ?? process.env.OCTOGENT_SESSION_ID ?? "";
+  if (!fromTerminalId) {
+    console.error("Error: --from <terminal-id> required (or OCTOGENT_SESSION_ID env).");
+    process.exit(1);
+  }
+
+  const explicitText = parseFlag("--text");
+  const filePath = parseFlag("--file");
+  const dryRun = args.includes("--dry-run");
+
+  let text: string;
+  if (explicitText) {
+    text = explicitText;
+  } else if (filePath) {
+    try {
+      text = (await import("node:fs")).readFileSync(filePath, "utf8");
+    } catch (err) {
+      console.error(`Error reading --file ${filePath}: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  } else {
+    // Read stdin until EOF.
+    text = await new Promise<string>((resolve, reject) => {
+      let buf = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => {
+        buf += chunk;
+      });
+      process.stdin.on("end", () => resolve(buf));
+      process.stdin.on("error", reject);
+    });
+  }
+
+  if (!text.trim()) {
+    console.error("Error: no input text (provide via --text, --file, or stdin).");
+    process.exit(1);
+  }
+
+  const { extractTeammateMentions } = await import("@octogent/core");
+  const apiBase = resolveRuntimeApiBase();
+
+  // Fetch list of active terminal IDs once; use as the validator.
+  let validIds = new Set<string>();
+  try {
+    const response = await fetch(`${apiBase}/api/terminal-snapshots`);
+    if (response.ok) {
+      const snapshots = (await response.json()) as Array<Record<string, unknown>>;
+      validIds = new Set(
+        snapshots
+          .map((t) => (typeof t.terminalId === "string" ? t.terminalId : null))
+          .filter((id): id is string => id !== null),
+      );
+    }
+  } catch {
+    // Server unreachable — surface via apiError below on first send attempt
+  }
+
+  const mentions = extractTeammateMentions(text, {
+    fromTerminalId,
+    isValidTarget: (id) => validIds.has(id),
+  });
+
+  if (mentions.length === 0) {
+    console.log("No valid [@terminal: msg] mentions found.");
+    return;
+  }
+
+  console.log(`Found ${mentions.length} mention(s) from ${fromTerminalId}:`);
+  for (const m of mentions) {
+    console.log(`  → ${m.toTerminalId}: ${m.message.slice(0, 80)}${m.message.length > 80 ? "…" : ""}`);
+    if (dryRun) continue;
+
+    try {
+      const response = await fetch(
+        `${apiBase}/api/channels/${encodeURIComponent(m.toTerminalId)}/messages`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fromTerminalId, content: m.message }),
+        },
+      );
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+        console.error(`    [FAIL] ${m.toTerminalId}: ${data.error ?? response.statusText}`);
+      }
+    } catch (err) {
+      console.error(`    [FAIL] ${m.toTerminalId}: ${(err as Error).message}`);
+    }
+  }
+
+  if (dryRun) {
+    console.log("(dry-run — nothing was actually enqueued)");
+  }
+};
+
 const main = async () => {
   if (!command || command === "start") {
     return startServer();
@@ -708,6 +808,9 @@ const main = async () => {
     if (args[1] === "list" || args[1] === "ls") {
       return channelList();
     }
+    if (args[1] === "parse-and-enqueue" || args[1] === "parse") {
+      return channelParseAndEnqueue();
+    }
   }
 
   console.log(`Usage:
@@ -739,7 +842,10 @@ const main = async () => {
   octogent terminal kill <id>          Kill a terminal session or recorded process
   octogent terminal prune              Remove stale, stopped, and exited terminal records
   octogent channel send <id> <msg>     Send a channel message
-  octogent channel list <id>           List channel messages`);
+  octogent channel list <id>           List channel messages
+  octogent channel parse --from <id>   Parse [@terminal: msg] mentions from text
+    [--text STR | --file PATH | stdin] and enqueue each as a channel message.
+    [--dry-run]                        Preview without sending.`);
   process.exit(1);
 };
 
