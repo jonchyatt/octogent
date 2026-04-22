@@ -347,14 +347,18 @@ const tentacleCreate = async () => {
   }
 
   const description = parseFlag("--description") ?? parseFlag("-d") ?? "";
+  const agentProvider = parseFlag("--agent-provider");
   const { color, octopus } = randomAppearance();
   const apiBase = resolveRuntimeApiBase();
+
+  const tentacleBody: Record<string, unknown> = { name, description, color, octopus };
+  if (agentProvider) tentacleBody.agentProvider = agentProvider;
 
   try {
     const response = await fetch(`${apiBase}/api/deck/tentacles`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description, color, octopus }),
+      body: JSON.stringify(tentacleBody),
     });
     const data = (await response.json()) as Record<string, unknown>;
     if (!response.ok) {
@@ -404,6 +408,7 @@ const terminalCreate = async () => {
   const autoRenamePromptContext = parseFlag("--auto-rename-prompt-context");
   const promptTemplate = parseFlag("--prompt-template");
   const promptVariables = parseJsonFlag("--prompt-variables");
+  const agentProvider = parseFlag("--agent-provider");
   const apiBase = resolveRuntimeApiBase();
 
   const body: Record<string, unknown> = {};
@@ -418,6 +423,7 @@ const terminalCreate = async () => {
   if (autoRenamePromptContext) body.autoRenamePromptContext = autoRenamePromptContext;
   if (promptTemplate) body.promptTemplate = promptTemplate;
   if (promptVariables) body.promptVariables = promptVariables;
+  if (agentProvider) body.agentProvider = agentProvider;
 
   try {
     const response = await fetch(`${apiBase}/api/terminals`, {
@@ -675,6 +681,8 @@ const main = async () => {
   octogent projects                    List registered projects
 
   octogent tentacle create <name>      Create a tentacle (Octogent must be running)
+    --description, -d                  Tentacle description
+    --agent-provider                   claude-code (default) | codex
   octogent tentacle list               List tentacles
   octogent terminal create [options]   Create a terminal
     --name, -n                         Terminal display name
@@ -686,6 +694,7 @@ const main = async () => {
     --parent-terminal-id               Parent terminal ID for child terminals
     --prompt-template                  Prompt template name
     --prompt-variables                 JSON object of prompt template variables
+    --agent-provider                   claude-code (default) | codex
   octogent terminal list               List terminal lifecycle state
   octogent terminal stop <id>          Stop a terminal session
   octogent terminal kill <id>          Kill a terminal session or recorded process
