@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
+import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 
 import {
@@ -396,6 +397,28 @@ const tentacleList = async () => {
   }
 };
 
+const resolvePersonaBody = (name: string): string => {
+  // Project-local override first, global fallback.
+  const candidates = [
+    join(process.cwd(), ".octogent", "personas", `${name}.md`),
+    join(homedir(), ".octogent", "personas", `${name}.md`),
+  ];
+  for (const path of candidates) {
+    if (existsSync(path)) {
+      try {
+        return readFileSync(path, "utf8").trim();
+      } catch (err) {
+        console.error(`Warning: could not read persona file ${path}: ${(err as Error).message}`);
+      }
+    }
+  }
+  console.error(
+    `Error: persona "${name}" not found. Looked in:\n  ${candidates.join("\n  ")}\n` +
+      `Create ~/.octogent/personas/${name}.md or a project-local override.`,
+  );
+  process.exit(1);
+};
+
 const terminalCreate = async () => {
   const name = parseFlag("--name") ?? parseFlag("-n");
   const initialPrompt = parseFlag("--initial-prompt") ?? parseFlag("-p");
@@ -409,11 +432,23 @@ const terminalCreate = async () => {
   const promptTemplate = parseFlag("--prompt-template");
   const promptVariables = parseJsonFlag("--prompt-variables");
   const agentProvider = parseFlag("--agent-provider");
+  const persona = parseFlag("--persona");
   const apiBase = resolveRuntimeApiBase();
+
+  // Compose initialPrompt: persona framing (if any) + original prompt.
+  // Persona-only is valid — sends just the framing as the bootstrap prompt.
+  // Prompt-only is valid — existing behavior, unchanged.
+  let composedPrompt = initialPrompt;
+  if (persona) {
+    const personaBody = resolvePersonaBody(persona);
+    composedPrompt = initialPrompt
+      ? `${personaBody}\n\n---\n\n${initialPrompt}`
+      : personaBody;
+  }
 
   const body: Record<string, unknown> = {};
   if (name) body.name = name;
-  if (initialPrompt) body.initialPrompt = initialPrompt;
+  if (composedPrompt) body.initialPrompt = composedPrompt;
   if (workspaceMode) body.workspaceMode = workspaceMode;
   if (terminalId) body.terminalId = terminalId;
   if (tentacleId) body.tentacleId = tentacleId;
@@ -695,6 +730,10 @@ const main = async () => {
     --prompt-template                  Prompt template name
     --prompt-variables                 JSON object of prompt template variables
     --agent-provider                   claude-code (default) | codex
+    --persona                          Name of persona file in ~/.octogent/personas/
+                                       (project override: ./.octogent/personas/)
+                                       Shipped: builder, reviewer, architect,
+                                                security, conservative, aggressive
   octogent terminal list               List terminal lifecycle state
   octogent terminal stop <id>          Stop a terminal session
   octogent terminal kill <id>          Kill a terminal session or recorded process
