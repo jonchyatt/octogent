@@ -1,7 +1,7 @@
 import type { AgentRuntimeState } from "./agentRuntime";
 
-export type AgentState = "live" | "idle" | "queued" | "blocked" | "stopped" | "exited" | "stale";
-export type TerminalLifecycleState = "registered" | "running" | "stopped" | "exited" | "stale";
+export type AgentState = "live" | "idle" | "queued" | "blocked" | "stopped" | "exited" | "stale" | "dead";
+export type TerminalLifecycleState = "registered" | "running" | "stopped" | "exited" | "stale" | "dead";
 export type TentacleWorkspaceMode = "shared" | "worktree";
 
 export type TerminalSnapshot = {

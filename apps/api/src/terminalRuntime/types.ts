@@ -95,6 +95,13 @@ export type TerminalSession = {
   // Exec-mode only: timeout timer that force-kills a hung worker. Cleared on
   // clean exit.
   execTimeoutTimer?: ReturnType<typeof setTimeout> | undefined;
+  // Exec-mode only: set to true by the timeout callback right before it fires
+  // killSession, so the exec turn coordinator can distinguish timeout-kill
+  // (→ escalate to DEAD) from operator-kill (→ silent done). Read by
+  // onExecSessionEnd after teardown removes the session from the map; the
+  // flag is also mirrored onto the PersistedTerminal so the signal survives
+  // session teardown.
+  killedByTimeout?: boolean;
   transcriptEventCount?: number;
   pendingInput?: string;
   hasTranscriptEnded?: boolean;
@@ -162,6 +169,17 @@ export type PersistedTerminal = {
   // queued channel messages). Consumed + cleared by ensureSession at spawn
   // time. Absent for turn 0 (first spawn uses initialPrompt directly).
   nextTurnPrompt?: string;
+  // Exec-mode only: Codex session UUID captured from the first turn's
+  // `--output-last-message` sidecar OR parsed from stdout. When present,
+  // resume turns use `codex exec resume <uuid>` instead of `--last` — safe
+  // even when multiple exec terminals share the same cwd. Absent until we
+  // see a session UUID in the exec output.
+  codexSessionId?: string;
+  // Exec-mode only: one-shot flag set by the sessionRuntime timeout callback
+  // right before killSession. The coordinator reads it in handleExecSessionEnd
+  // to distinguish timeout-kill (escalate to DEAD) from operator-kill
+  // (silent done). Cleared after the coordinator consumes it.
+  killedByTimeout?: boolean;
   initialPrompt?: string;
   initialInputDraft?: string;
   lastActiveAt?: string;

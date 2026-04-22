@@ -61,15 +61,24 @@ type CreateSessionRuntimeOptions = {
   onSessionStart?: (terminalId: string, details: TerminalSessionStartDetails) => void;
   onSessionEnd?: (terminalId: string, details: TerminalSessionEndDetails) => void;
   /**
-   * Exec-mode specific post-teardown hook. Fires AFTER onSessionEnd for
-   * terminals with runtimeMode="exec". The coordinator decides whether to
-   * respawn the terminal (turn N+1) based on queued channel messages.
+   * Exec-mode specific post-teardown hook. Fires BEFORE onSessionEnd for
+   * terminals with runtimeMode="exec" so the coordinator can decide whether
+   * to respawn the terminal before the "exited" lifecycle event broadcasts
+   * (avoids exited → running UI flicker — LOW-2). Coordinator returns a
+   * string that teardown uses to decide whether to suppress the subsequent
+   * onSessionEnd broadcast:
+   *   "respawn" — suppress onSessionEnd (next turn's onSessionStart is the
+   *               next lifecycle event).
+   *   "dead"    — fire onSessionEnd normally (captures endedAt/exitCode);
+   *               coordinator already flipped lifecycle to "dead".
+   *   "done"    — fire onSessionEnd normally (standard exit path).
+   *   "skip"    — not a coordinator concern; treat as "done".
    * Ignored for interactive-mode terminals.
    */
   onExecSessionEnd?: (
     terminalId: string,
     reason: TerminalSessionEndDetails["reason"],
-  ) => void;
+  ) => "respawn" | "done" | "dead" | "skip";
 };
 
 const ANSI_BEL = String.fromCharCode(0x07);
@@ -354,19 +363,30 @@ export const createSessionRuntime = ({
     clearIdleCloseTimer(session);
     clearPromptTimers(session);
     closeTranscript(session, sessionId, event);
-    onSessionEnd?.(sessionId, {
-      reason:
-        event.reason === "pty_exit" ||
-        event.reason === "operator_stop" ||
-        event.reason === "operator_kill"
-          ? event.reason
-          : "session_close",
+
+    const normalizedReason: TerminalSessionEndDetails["reason"] =
+      event.reason === "pty_exit" ||
+      event.reason === "operator_stop" ||
+      event.reason === "operator_kill"
+        ? event.reason
+        : "session_close";
+    const sessionEndDetails: TerminalSessionEndDetails = {
+      reason: normalizedReason,
       endedAt: typeof event.timestamp === "string" ? event.timestamp : new Date().toISOString(),
       ...(typeof event.exitCode === "number" ? { exitCode: event.exitCode } : {}),
       ...(typeof event.signal === "number" || typeof event.signal === "string"
         ? { signal: event.signal }
         : {}),
-    });
+    };
+    // For exec-mode, onSessionEnd fires AFTER onExecSessionEnd so the
+    // coordinator's respawn decision can suppress the intermediate "exited"
+    // broadcast (LOW-2). For interactive mode, fire onSessionEnd immediately
+    // — there is no coordinator to consult.
+    const terminalRecordForTeardown = terminals.get(sessionId);
+    const isExecTeardown = terminalRecordForTeardown?.runtimeMode === "exec";
+    if (!isExecTeardown) {
+      onSessionEnd?.(sessionId, sessionEndDetails);
+    }
 
     if (session.statePollTimer) {
       clearInterval(session.statePollTimer);
@@ -415,20 +435,27 @@ export const createSessionRuntime = ({
     // turn without tripping the "already running" guard in ensureSession.
     // Only for exec-mode terminals — interactive teardown is terminal (no
     // auto-respawn).
-    const terminalRecord = terminals.get(sessionId);
-    if (terminalRecord?.runtimeMode === "exec" && onExecSessionEnd) {
-      const reason =
-        event.reason === "pty_exit" ||
-        event.reason === "operator_stop" ||
-        event.reason === "operator_kill" ||
-        event.reason === "session_close"
-          ? event.reason
-          : "session_close";
+    //
+    // Ordering (LOW-2): coordinator runs BEFORE onSessionEnd for exec. If
+    // coordinator returns "respawn", onSessionEnd is suppressed (the next
+    // turn's onSessionStart is the next real lifecycle event, avoiding an
+    // exited → running UI flicker). Otherwise onSessionEnd fires as normal.
+    if (isExecTeardown && onExecSessionEnd) {
+      const execReason: TerminalSessionEndDetails["reason"] = normalizedReason;
+      let coordinatorResult: "respawn" | "done" | "dead" | "skip" = "done";
       try {
-        onExecSessionEnd(sessionId, reason);
+        coordinatorResult = onExecSessionEnd(sessionId, execReason);
       } catch {
         // Don't let coordinator failures bubble up into the teardown path.
+        coordinatorResult = "done";
       }
+      if (coordinatorResult !== "respawn") {
+        onSessionEnd?.(sessionId, sessionEndDetails);
+      }
+    } else if (isExecTeardown) {
+      // Exec mode but no coordinator wired — still fire onSessionEnd so
+      // the terminal doesn't look stuck in "running" forever.
+      onSessionEnd?.(sessionId, sessionEndDetails);
     }
   };
 
@@ -636,7 +663,7 @@ export const createSessionRuntime = ({
       let stdin: string;
       try {
         ({ command, args, stdin } = isResumeTurn
-          ? buildResumeCommand(provider, prompt, outfile)
+          ? buildResumeCommand(provider, prompt, outfile, terminalRecord?.codexSessionId)
           : buildExecCommand(provider, prompt, outfile));
       } catch (error) {
         throw new Error(`Unable to build exec command: ${toErrorMessage(error)}`);
@@ -805,6 +832,13 @@ export const createSessionRuntime = ({
     // Exec-mode safety timer: force-kill a worker that exceeds the configured
     // ceiling. Prevents hung codex/claude processes from holding a session
     // slot forever. Cleared in teardownSession when the worker exits cleanly.
+    //
+    // MED-1 (timeout visibility): set `killedByTimeout` on BOTH session and
+    // terminal before killSession fires. teardownSession removes the session
+    // from the map, so the coordinator can only read the flag off the
+    // PersistedTerminal record after teardown. Setting both is the belt +
+    // suspenders — session flag for any in-process observer, terminal flag
+    // for the coordinator's post-teardown decision.
     if (isExecMode && execTimeoutCeilingMs > 0) {
       session.execTimeoutTimer = setTimeout(() => {
         if (session.isClosed || sessions.get(sessionId) !== session) {
@@ -818,6 +852,11 @@ export const createSessionRuntime = ({
           type: "output",
           data: `\r\n[exec worker exceeded ${execTimeoutCeilingMs}ms ceiling — killing]\r\n`,
         });
+        session.killedByTimeout = true;
+        const terminalForTimeout = terminals.get(sessionId);
+        if (terminalForTimeout) {
+          terminalForTimeout.killedByTimeout = true;
+        }
         killSession(sessionId, "SIGTERM");
       }, execTimeoutCeilingMs);
     }

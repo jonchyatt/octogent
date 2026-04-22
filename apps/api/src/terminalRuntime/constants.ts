@@ -89,52 +89,52 @@ export const buildExecCommand = (
 };
 
 // Build the argv for resuming a prior exec session with a new prompt.
-// Parallel to buildExecCommand but uses `codex exec resume --last` which
-// picks up the most recent session in the current cwd and replays its
-// context — so turn N+1 only needs to send the NEW content (queued channel
-// messages), not re-send turn N's prompt or output.
+// Parallel to buildExecCommand but uses `codex exec resume <sessionId>`
+// when a session UUID is available (safe under shared-cwd), or `--last`
+// when not (worktree-only — coordinator gates this).
 //
 // Empirically verified 2026-04-22: same session UUID across turns, prior
 // context carries (Codex recalled a word from turn 1 without re-reading
-// the file in turn 2), cwd auto-filters sessions.
+// the file in turn 2).
 //
-// Claude-code has no direct resume analog yet — we fall back to a fresh
-// exec invocation with the queued messages as prompt. Continuity suffers
-// but the worker still makes forward progress.
+// Hard-coded invocation shape — we do NOT parse/mutate the user's
+// OCTOGENT_CODEX_EXEC_CMD prefix here. If the user customized the exec
+// prefix with extra flags, resume still uses the canonical Codex
+// invocation. The tradeoff (bespoke exec flags not honored on resume)
+// is worth the safety (no fragile argv splicing around a user-supplied
+// string).
+//
+// Claude-code has no direct resume analog yet — the coordinator refuses
+// to respawn claude-code workers entirely (MED-2). If this function is
+// somehow called for claude-code, we fall back to buildExecCommand so
+// the caller still gets a valid argv, but the coordinator path should
+// never reach here.
 export const buildResumeCommand = (
   provider: string,
   prompt: string,
   outfile: string,
+  sessionId?: string,
 ): { command: string; args: string[]; stdin: string } => {
   if (provider === "codex") {
-    const prefix = TERMINAL_EXEC_COMMANDS.codex ?? DEFAULT_CODEX_EXEC_CMD;
-    const parts = prefix.split(/\s+/).filter((part) => part.length > 0);
-    if (parts.length === 0) {
-      throw new Error("buildResumeCommand: empty codex exec prefix.");
-    }
-    const [command, ...baseArgs] = parts as [string, ...string[]];
-    // Insert `resume --last` between `exec` and the sandbox/approvals flags.
-    // baseArgs[0] is "exec" in the default; after that we need resume flags.
-    const execIndex = baseArgs.findIndex((arg) => arg === "exec");
-    const resumeArgs =
-      execIndex >= 0
-        ? [
-            ...baseArgs.slice(0, execIndex + 1),
-            "resume",
-            "--last",
-            ...baseArgs.slice(execIndex + 1),
-          ]
-        : ["resume", "--last", ...baseArgs];
+    const sandboxFlag = "--dangerously-bypass-approvals-and-sandbox";
+    const resumeTarget = sessionId && sessionId.length > 0 ? sessionId : "--last";
     return {
-      command,
-      args: [...resumeArgs, "--output-last-message", outfile, "-"],
+      command: "codex",
+      args: [
+        "exec",
+        "resume",
+        resumeTarget,
+        sandboxFlag,
+        "--output-last-message",
+        outfile,
+        "-",
+      ],
       stdin: prompt,
     };
   }
 
-  // Claude fallback: no resume primitive, treat as a fresh exec turn. Context
-  // is lost from the worker's perspective, but the queued messages still
-  // drive forward progress.
+  // Claude fallback (unreachable from coordinator post-MED-2 but safe if
+  // called directly). No resume primitive; fresh exec loses context.
   return buildExecCommand(provider, prompt, outfile);
 };
 
@@ -144,6 +144,14 @@ export const buildResumeCommand = (
 // per-process via OCTOGENT_EXEC_TIMEOUT_MS.
 export const TERMINAL_EXEC_TIMEOUT_MS =
   Number.parseInt(process.env.OCTOGENT_EXEC_TIMEOUT_MS ?? "", 10) || 10 * 60 * 1000;
+
+// Hard ceiling on how many auto-respawn turns the exec turn coordinator will
+// drive for a single terminal. Protects against runaway ping-pong (e.g., two
+// exec workers channel-messaging each other in a loop — no human in the
+// loop, API cost unbounded). Escalates the terminal to DEAD when the limit
+// is hit. Override per-process via OCTOGENT_EXEC_MAX_TURNS.
+export const TERMINAL_EXEC_MAX_TURNS =
+  Number.parseInt(process.env.OCTOGENT_EXEC_MAX_TURNS ?? "", 10) || 50;
 
 export const TERMINAL_SESSION_IDLE_GRACE_MS = 5 * 60 * 1000;
 export const TERMINAL_SCROLLBACK_MAX_BYTES = 512 * 1024;

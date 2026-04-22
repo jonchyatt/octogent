@@ -37,7 +37,8 @@ const isTerminalLifecycleState = (value: unknown): value is TerminalLifecycleSta
   value === "running" ||
   value === "stopped" ||
   value === "exited" ||
-  value === "stale";
+  value === "stale" ||
+  value === "dead";
 
 const inferTerminalNameOrigin = (terminalId: string, tentacleName: string): TerminalNameOrigin => {
   if (tentacleName === terminalId || /^Octogent Terminal \d+$/.test(tentacleName)) {
@@ -281,6 +282,9 @@ const parseV3Terminals = (
     }
     if (typeof entry.nextTurnPrompt === "string" && entry.nextTurnPrompt.length > 0) {
       terminal.nextTurnPrompt = entry.nextTurnPrompt;
+    }
+    if (typeof entry.codexSessionId === "string" && entry.codexSessionId.length > 0) {
+      terminal.codexSessionId = entry.codexSessionId;
     }
     if (typeof entry.initialPrompt === "string") terminal.initialPrompt = entry.initialPrompt;
     if (typeof entry.initialInputDraft === "string") {

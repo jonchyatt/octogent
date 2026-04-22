@@ -135,6 +135,8 @@ export const createTerminalRuntime = ({
         return "exited";
       case "stopped":
         return "stopped";
+      case "dead":
+        return "dead";
       default:
         return "live";
     }
@@ -174,7 +176,16 @@ export const createTerminalRuntime = ({
       return;
     }
 
-    terminal.lifecycleState = details.reason === "pty_exit" ? "exited" : "stopped";
+    // Never downgrade "dead" to "exited"/"stopped". The coordinator's
+    // escalation path (markTerminalDead) sets "dead" and calls this for
+    // endedAt/exitCode capture; we must not overwrite its lifecycle verdict.
+    const previousLifecycle = terminal.lifecycleState;
+    terminal.lifecycleState =
+      previousLifecycle === "dead"
+        ? "dead"
+        : details.reason === "pty_exit"
+          ? "exited"
+          : "stopped";
     terminal.lifecycleReason = details.reason;
     terminal.lifecycleUpdatedAt = details.endedAt;
     terminal.endedAt = details.endedAt;
@@ -190,6 +201,30 @@ export const createTerminalRuntime = ({
       terminal.exitSignal = undefined;
     }
     persistRegistry();
+    broadcastTerminalEvent({
+      type: "terminal-updated",
+      snapshot: toTerminalSnapshot(terminal),
+    });
+  };
+
+  const markTerminalDead = (
+    terminalId: string,
+    reason: "timeout" | "max_turns",
+    details: { turnNumber: number },
+  ) => {
+    const terminal = terminals.get(terminalId);
+    if (!terminal) {
+      return;
+    }
+
+    terminal.lifecycleState = "dead";
+    terminal.lifecycleReason =
+      reason === "timeout"
+        ? `exec_timeout_turn_${details.turnNumber}`
+        : `exec_max_turns_${details.turnNumber}`;
+    terminal.lifecycleUpdatedAt = new Date().toISOString();
+    persistRegistry();
+    broadcastTerminalStateChanged(terminalId, "dead");
     broadcastTerminalEvent({
       type: "terminal-updated",
       snapshot: toTerminalSnapshot(terminal),
@@ -272,9 +307,12 @@ export const createTerminalRuntime = ({
     onStateChange: broadcastTerminalStateChanged,
     onSessionStart: markTerminalRunning,
     onSessionEnd: markTerminalEnded,
-    onExecSessionEnd: (terminalId, reason) => {
-      execTurnCoordinator?.handleExecSessionEnd(terminalId, reason);
-    },
+    // Returns coordinator's decision so teardownSession can suppress the
+    // subsequent onSessionEnd broadcast on respawn (LOW-2). If coordinator
+    // isn't wired yet (brief construction window — LOW-1), default to
+    // "done" so teardownSession fires onSessionEnd as normal.
+    onExecSessionEnd: (terminalId, reason) =>
+      execTurnCoordinator?.handleExecSessionEnd(terminalId, reason) ?? "done",
   });
 
   const gitOps = createGitOperations({
@@ -297,6 +335,11 @@ export const createTerminalRuntime = ({
     markExecPromptFailed: channelMessaging.markExecPromptFailed,
     startSession: sessionRuntime.startSession,
     persistTerminalChanges: persistRegistry,
+    onTerminalDead: (escalation) => {
+      markTerminalDead(escalation.terminalId, escalation.kind, {
+        turnNumber: escalation.turnNumber,
+      });
+    },
   });
 
   const hookProcessor = createHookProcessor({
@@ -457,6 +500,18 @@ export const createTerminalRuntime = ({
           `Parent terminal "${parentTerminalId}" already has ${MAX_CHILDREN_PER_PARENT} children (limit reached).`,
         );
       }
+    }
+
+    // HIGH-1: exec-mode workers are only safe under workspaceMode="worktree".
+    // `codex exec resume --last` is cwd-scoped — under "shared" mode, multiple
+    // exec terminals point at the same cwd and --last would grab whichever
+    // was most recent, not necessarily THIS terminal's prior turn. Until we
+    // capture the per-turn Codex session UUID and use `resume <uuid>`, refuse
+    // exec + shared at creation time.
+    if (runtimeMode === "exec" && workspaceMode !== "worktree") {
+      throw new RuntimeInputError(
+        'Exec-mode terminals require workspaceMode="worktree". Shared cwd is unsafe for `codex exec resume --last` (could resume the wrong session). Re-create with --workspace-mode=worktree.',
+      );
     }
 
     const terminalId =
