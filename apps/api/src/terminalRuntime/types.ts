@@ -153,6 +153,15 @@ export type PersistedTerminal = {
   workspaceMode: TentacleWorkspaceMode;
   agentProvider?: TerminalAgentProvider;
   runtimeMode?: TerminalRuntimeMode;
+  // Exec-mode only: how many exec turns this terminal has run. 0 = initial
+  // spawn pending; 1 = first turn started/done; 2+ = resumed turns. Incremented
+  // by the exec turn coordinator when it respawns the session to deliver
+  // queued channel messages.
+  turnNumber?: number;
+  // Exec-mode only: prompt to send on the NEXT turn (typically composed from
+  // queued channel messages). Consumed + cleared by ensureSession at spawn
+  // time. Absent for turn 0 (first spawn uses initialPrompt directly).
+  nextTurnPrompt?: string;
   initialPrompt?: string;
   initialInputDraft?: string;
   lastActiveAt?: string;

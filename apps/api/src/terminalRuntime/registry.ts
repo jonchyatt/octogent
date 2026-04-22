@@ -272,6 +272,16 @@ const parseV3Terminals = (
       terminal.parentTerminalId = entry.parentTerminalId;
     if (isTerminalAgentProvider(entry.agentProvider)) terminal.agentProvider = entry.agentProvider;
     if (isTerminalRuntimeMode(entry.runtimeMode)) terminal.runtimeMode = entry.runtimeMode;
+    if (
+      typeof entry.turnNumber === "number" &&
+      Number.isInteger(entry.turnNumber) &&
+      entry.turnNumber >= 0
+    ) {
+      terminal.turnNumber = entry.turnNumber;
+    }
+    if (typeof entry.nextTurnPrompt === "string" && entry.nextTurnPrompt.length > 0) {
+      terminal.nextTurnPrompt = entry.nextTurnPrompt;
+    }
     if (typeof entry.initialPrompt === "string") terminal.initialPrompt = entry.initialPrompt;
     if (typeof entry.initialInputDraft === "string") {
       terminal.initialInputDraft = entry.initialInputDraft;

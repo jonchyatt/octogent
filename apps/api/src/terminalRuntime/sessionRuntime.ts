@@ -15,6 +15,7 @@ import {
   TERMINAL_SCROLLBACK_MAX_BYTES,
   TERMINAL_SESSION_IDLE_GRACE_MS,
   buildExecCommand,
+  buildResumeCommand,
 } from "./constants";
 import { spawnExecChild } from "./execSessionAdapter";
 import {
@@ -59,6 +60,16 @@ type CreateSessionRuntimeOptions = {
   onStateChange?: (terminalId: string, state: AgentRuntimeState, toolName?: string) => void;
   onSessionStart?: (terminalId: string, details: TerminalSessionStartDetails) => void;
   onSessionEnd?: (terminalId: string, details: TerminalSessionEndDetails) => void;
+  /**
+   * Exec-mode specific post-teardown hook. Fires AFTER onSessionEnd for
+   * terminals with runtimeMode="exec". The coordinator decides whether to
+   * respawn the terminal (turn N+1) based on queued channel messages.
+   * Ignored for interactive-mode terminals.
+   */
+  onExecSessionEnd?: (
+    terminalId: string,
+    reason: TerminalSessionEndDetails["reason"],
+  ) => void;
 };
 
 const ANSI_BEL = String.fromCharCode(0x07);
@@ -84,6 +95,7 @@ export const createSessionRuntime = ({
   onStateChange,
   onSessionStart,
   onSessionEnd,
+  onExecSessionEnd,
 }: CreateSessionRuntimeOptions) => {
   const DEFAULT_PTY_COLS = 120;
   const DEFAULT_PTY_ROWS = 35;
@@ -397,6 +409,27 @@ export const createSessionRuntime = ({
     if (sessions.get(sessionId) === session) {
       sessions.delete(sessionId);
     }
+
+    // Exec-mode post-teardown hook: fire AFTER the session is removed from
+    // the map so the coordinator can immediately startSession for the next
+    // turn without tripping the "already running" guard in ensureSession.
+    // Only for exec-mode terminals — interactive teardown is terminal (no
+    // auto-respawn).
+    const terminalRecord = terminals.get(sessionId);
+    if (terminalRecord?.runtimeMode === "exec" && onExecSessionEnd) {
+      const reason =
+        event.reason === "pty_exit" ||
+        event.reason === "operator_stop" ||
+        event.reason === "operator_kill" ||
+        event.reason === "session_close"
+          ? event.reason
+          : "session_close";
+      try {
+        onExecSessionEnd(sessionId, reason);
+      } catch {
+        // Don't let coordinator failures bubble up into the teardown path.
+      }
+    }
   };
 
   const closeSession = (sessionId: string): boolean => {
@@ -578,10 +611,20 @@ export const createSessionRuntime = ({
     let pty: TerminalProcessHandle;
     if (isExecMode) {
       const provider = terminalRecord?.agentProvider ?? DEFAULT_AGENT_PROVIDER;
-      const prompt = terminalRecord?.initialPrompt ?? "";
+      const turnNumber = terminalRecord?.turnNumber ?? 0;
+      // Turn 0 = initial exec, uses initialPrompt + buildExecCommand.
+      // Turn 1+ = resume via buildResumeCommand + nextTurnPrompt (queued
+      // channel messages). nextTurnPrompt is consumed here — cleared below
+      // so a stale value can't leak into a later turn.
+      const isResumeTurn = turnNumber >= 1;
+      const prompt = isResumeTurn
+        ? (terminalRecord?.nextTurnPrompt ?? "")
+        : (terminalRecord?.initialPrompt ?? "");
       if (!prompt) {
         throw new Error(
-          `Exec-mode terminal ${sessionId} has no initialPrompt — exec workers require a prompt passed as argv.`,
+          isResumeTurn
+            ? `Exec-mode terminal ${sessionId} turn ${turnNumber} has no nextTurnPrompt — coordinator must stash queued messages before respawn.`
+            : `Exec-mode terminal ${sessionId} has no initialPrompt — exec workers require a prompt.`,
         );
       }
 
@@ -592,7 +635,9 @@ export const createSessionRuntime = ({
       let args: string[];
       let stdin: string;
       try {
-        ({ command, args, stdin } = buildExecCommand(provider, prompt, outfile));
+        ({ command, args, stdin } = isResumeTurn
+          ? buildResumeCommand(provider, prompt, outfile)
+          : buildExecCommand(provider, prompt, outfile));
       } catch (error) {
         throw new Error(`Unable to build exec command: ${toErrorMessage(error)}`);
       }
@@ -607,6 +652,13 @@ export const createSessionRuntime = ({
         });
       } catch (error) {
         throw new Error(`Unable to spawn exec worker (${command}): ${toErrorMessage(error)}`);
+      }
+
+      // Consume the one-shot next-turn prompt. The coordinator re-stashes
+      // a new one before every respawn, so clearing here prevents a stale
+      // prompt from leaking into a future turn if something odd happens.
+      if (isResumeTurn && terminalRecord) {
+        delete terminalRecord.nextTurnPrompt;
       }
     } else {
       ensureNodePtySpawnHelperExecutable();

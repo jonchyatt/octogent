@@ -88,6 +88,56 @@ export const buildExecCommand = (
   };
 };
 
+// Build the argv for resuming a prior exec session with a new prompt.
+// Parallel to buildExecCommand but uses `codex exec resume --last` which
+// picks up the most recent session in the current cwd and replays its
+// context — so turn N+1 only needs to send the NEW content (queued channel
+// messages), not re-send turn N's prompt or output.
+//
+// Empirically verified 2026-04-22: same session UUID across turns, prior
+// context carries (Codex recalled a word from turn 1 without re-reading
+// the file in turn 2), cwd auto-filters sessions.
+//
+// Claude-code has no direct resume analog yet — we fall back to a fresh
+// exec invocation with the queued messages as prompt. Continuity suffers
+// but the worker still makes forward progress.
+export const buildResumeCommand = (
+  provider: string,
+  prompt: string,
+  outfile: string,
+): { command: string; args: string[]; stdin: string } => {
+  if (provider === "codex") {
+    const prefix = TERMINAL_EXEC_COMMANDS.codex ?? DEFAULT_CODEX_EXEC_CMD;
+    const parts = prefix.split(/\s+/).filter((part) => part.length > 0);
+    if (parts.length === 0) {
+      throw new Error("buildResumeCommand: empty codex exec prefix.");
+    }
+    const [command, ...baseArgs] = parts as [string, ...string[]];
+    // Insert `resume --last` between `exec` and the sandbox/approvals flags.
+    // baseArgs[0] is "exec" in the default; after that we need resume flags.
+    const execIndex = baseArgs.findIndex((arg) => arg === "exec");
+    const resumeArgs =
+      execIndex >= 0
+        ? [
+            ...baseArgs.slice(0, execIndex + 1),
+            "resume",
+            "--last",
+            ...baseArgs.slice(execIndex + 1),
+          ]
+        : ["resume", "--last", ...baseArgs];
+    return {
+      command,
+      args: [...resumeArgs, "--output-last-message", outfile, "-"],
+      stdin: prompt,
+    };
+  }
+
+  // Claude fallback: no resume primitive, treat as a fresh exec turn. Context
+  // is lost from the worker's perspective, but the queued messages still
+  // drive forward progress.
+  return buildExecCommand(provider, prompt, outfile);
+};
+
 // Hard ceiling on exec-mode worker runtime. Protects against hung workers
 // (network stall, runaway model, broken prompt) that would otherwise hold
 // a session slot indefinitely. Fires killSession when elapsed. Override

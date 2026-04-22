@@ -29,6 +29,10 @@ import {
   pruneUiStateTerminalReferences,
 } from "./terminalRuntime/registry";
 import { createSessionRuntime } from "./terminalRuntime/sessionRuntime";
+import {
+  type ExecTurnCoordinator,
+  createExecTurnCoordinator,
+} from "./terminalRuntime/execTurnCoordinator";
 import { createDefaultGitClient } from "./terminalRuntime/systemClients";
 import type { DirectSessionListener } from "./terminalRuntime/types";
 import {
@@ -247,6 +251,13 @@ export const createTerminalRuntime = ({
     });
   };
 
+  // The exec turn coordinator + channelMessaging + sessionRuntime form a
+  // circular dep: sessionRuntime fires onExecSessionEnd → coordinator →
+  // coordinator reads from channelMessaging + calls sessionRuntime.startSession.
+  // Late-bind the coordinator via a mutable holder so we can wire it after
+  // channelMessaging is constructed.
+  let execTurnCoordinator: ExecTurnCoordinator | undefined;
+
   const sessionRuntime = createSessionRuntime({
     websocketServer,
     terminals,
@@ -261,6 +272,9 @@ export const createTerminalRuntime = ({
     onStateChange: broadcastTerminalStateChanged,
     onSessionStart: markTerminalRunning,
     onSessionEnd: markTerminalEnded,
+    onExecSessionEnd: (terminalId, reason) => {
+      execTurnCoordinator?.handleExecSessionEnd(terminalId, reason);
+    },
   });
 
   const gitOps = createGitOperations({
@@ -274,6 +288,15 @@ export const createTerminalRuntime = ({
     sessions,
     writeInput: (terminalId: string, data: string) => sessionRuntime.writeInput(terminalId, data),
     dbPath: join(stateDir, "state", "channels.db"),
+  });
+
+  execTurnCoordinator = createExecTurnCoordinator({
+    terminals,
+    drainPendingForExecResume: channelMessaging.drainPendingForExecResume,
+    markExecPromptDelivered: channelMessaging.markExecPromptDelivered,
+    markExecPromptFailed: channelMessaging.markExecPromptFailed,
+    startSession: sessionRuntime.startSession,
+    persistTerminalChanges: persistRegistry,
   });
 
   const hookProcessor = createHookProcessor({

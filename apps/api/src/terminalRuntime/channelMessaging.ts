@@ -118,8 +118,17 @@ export const createChannelMessaging = (deps: CreateChannelMessagingOptions) => {
       );
 
       // If the target session is idle, deliver immediately (same hot-path as before).
+      //
+      // Exception: exec-mode terminals must NEVER take the PTY-write delivery
+      // path. Their writeInput is a no-op (prompt is already committed as
+      // argv/stdin), which would fail the messages immediately. Queue-only
+      // for exec; the exec turn coordinator drains on session exit and
+      // respawns via `codex exec resume --last` with the messages as the
+      // next-turn prompt.
+      const targetTerminal = terminals.get(toTerminalId);
+      const isExecMode = targetTerminal?.runtimeMode === "exec";
       const targetSession = sessions.get(toTerminalId);
-      if (targetSession && targetSession.agentState === "idle") {
+      if (!isExecMode && targetSession && targetSession.agentState === "idle") {
         deliverChannelMessages(toTerminalId);
       }
 
@@ -131,6 +140,49 @@ export const createChannelMessaging = (deps: CreateChannelMessagingOptions) => {
     },
 
     deliverChannelMessages,
+
+    /**
+     * Drain pending channel messages for an exec-mode terminal and compose
+     * them into a next-turn prompt. Used by the exec turn coordinator after
+     * a worker exits to decide whether to respawn via `codex exec resume`.
+     *
+     * Atomically claims (pending → queued), returns the composed text +
+     * messageIds. The caller MUST follow up with markExecPromptDelivered or
+     * markExecPromptFailed — dangling claims auto-recover after 10 min via
+     * `store.recoverStale()`.
+     *
+     * Returns null if no pending messages (no respawn needed).
+     */
+    drainPendingForExecResume(
+      terminalId: string,
+    ): { prompt: string; messageIds: string[] } | null {
+      const claimed = store.claimPendingFor(terminalId);
+      if (claimed.length === 0) {
+        return null;
+      }
+      for (const m of claimed) {
+        store.markProcessing(m.messageId);
+      }
+      const lines = claimed.map(
+        (m) => `[Channel message from ${m.fromTerminalId}]: ${m.content}`,
+      );
+      return {
+        prompt: lines.join("\n"),
+        messageIds: claimed.map((m) => m.messageId),
+      };
+    },
+
+    markExecPromptDelivered(messageIds: string[]): void {
+      for (const id of messageIds) {
+        store.markDelivered(id);
+      }
+    },
+
+    markExecPromptFailed(messageIds: string[], error: string): void {
+      for (const id of messageIds) {
+        store.markFailed(id, error);
+      }
+    },
 
     /** Diagnostic: current status counts across all messages. */
     getChannelStatusCounts() {
