@@ -18,6 +18,7 @@ import {
   TERMINAL_STUCK_POLL_INTERVAL_MS,
   TERMINAL_STUCK_THRESHOLD_MS,
   TERMINAL_STUCK_TIER2_MS,
+  buildProviderEnvironmentOverrides,
   buildExecCommand,
   buildResumeCommand,
   resolveAgentProvider,
@@ -784,6 +785,7 @@ export const createSessionRuntime = ({
             octogentSessionId: sessionId,
             octogentTentacleId: tentacleId,
             ...(handoffDirForExec ? { octogentHandoffDir: handoffDirForExec } : {}),
+            extraEnv: buildProviderEnvironmentOverrides(provider),
           }),
           stdin,
         });
@@ -819,6 +821,7 @@ export const createSessionRuntime = ({
             octogentSessionId: sessionId,
             octogentTentacleId: tentacleId,
             ...(handoffDirForInteractive ? { octogentHandoffDir: handoffDirForInteractive } : {}),
+            extraEnv: buildProviderEnvironmentOverrides(terminalRecord?.agentProvider),
           }),
           name: "xterm-256color",
         }) as unknown as TerminalProcessHandle;

@@ -58,10 +58,14 @@ describe("parseTerminalRuntimeMode", () => {
 describe("buildExecCommand", () => {
   const originalCodexEnv = process.env.OCTOGENT_CODEX_EXEC_CMD;
   const originalClaudeEnv = process.env.OCTOGENT_CLAUDE_EXEC_CMD;
+  const originalKimiEnv = process.env.OCTOGENT_KIMI_EXEC_CMD;
+  const originalOpenClawAgentIdEnv = process.env.OCTOGENT_OPENCLAW_AGENT_ID;
 
   beforeEach(() => {
     delete process.env.OCTOGENT_CODEX_EXEC_CMD;
     delete process.env.OCTOGENT_CLAUDE_EXEC_CMD;
+    delete process.env.OCTOGENT_KIMI_EXEC_CMD;
+    delete process.env.OCTOGENT_OPENCLAW_AGENT_ID;
   });
 
   afterEach(() => {
@@ -74,6 +78,16 @@ describe("buildExecCommand", () => {
       delete process.env.OCTOGENT_CLAUDE_EXEC_CMD;
     } else {
       process.env.OCTOGENT_CLAUDE_EXEC_CMD = originalClaudeEnv;
+    }
+    if (originalKimiEnv === undefined) {
+      delete process.env.OCTOGENT_KIMI_EXEC_CMD;
+    } else {
+      process.env.OCTOGENT_KIMI_EXEC_CMD = originalKimiEnv;
+    }
+    if (originalOpenClawAgentIdEnv === undefined) {
+      delete process.env.OCTOGENT_OPENCLAW_AGENT_ID;
+    } else {
+      process.env.OCTOGENT_OPENCLAW_AGENT_ID = originalOpenClawAgentIdEnv;
     }
   });
 
@@ -99,6 +113,37 @@ describe("buildExecCommand", () => {
     // for permission prompts no one can answer.
     expect(result.args).toEqual(["-p", "--dangerously-skip-permissions"]);
     expect(result.stdin).toBe("hello");
+  });
+
+  it("builds Kimi exec invocation in print mode with stdin piped", () => {
+    const result = buildExecCommand("kimi", "hello", "/tmp/out.json");
+    expect(result.command).toBe("kimi");
+    expect(result.args).toEqual(["--print"]);
+    expect(result.stdin).toBe("hello");
+  });
+
+  it("passes roots into Kimi exec via --add-dir", () => {
+    const result = buildExecCommand("kimi", "hello", "/tmp/out.json", ["/repo-a", "/repo-b"]);
+    expect(result.command).toBe("kimi");
+    expect(result.args).toEqual(["--print", "--add-dir", "/repo-a", "--add-dir", "/repo-b"]);
+    expect(result.stdin).toBe("hello");
+  });
+
+  it("builds OpenClaw exec invocation with stable agent + session ids", () => {
+    process.env.OCTOGENT_OPENCLAW_AGENT_ID = "octogent-kimi";
+    const result = buildExecCommand("openclaw", "hello", "/tmp/out.json");
+    expect(result.command).toBe("openclaw");
+    expect(result.args).toEqual([
+      "agent",
+      "--json",
+      "--agent",
+      "octogent-kimi",
+      "--session-id",
+      "out",
+      "--message",
+      "hello",
+    ]);
+    expect(result.stdin).toBe("");
   });
 
   it("respects OCTOGENT_CODEX_EXEC_CMD override", () => {

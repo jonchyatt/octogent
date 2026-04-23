@@ -760,10 +760,11 @@ export const createTerminalRuntime = ({
     const worktreeId =
       requestedWorktreeId ?? (workspaceMode === "worktree" ? terminalId : undefined);
 
-    // Phase 0.01.3.2: when the caller opts into sandbox mode via --roots,
-    // auto-prepend the tentacle's project root (workspaceCwd) so Codex can
-    // read/write the main repo beyond its worktree. When --roots is absent,
-    // `computeEffectiveRoots` returns undefined and bypass mode is preserved
+    // Phase 0.01.3.2: when the caller supplies --roots, auto-prepend the
+    // tentacle's project root (workspaceCwd) so providers that honor
+    // `--add-dir` can read/write the main repo beyond the worktree. When
+    // --roots is absent, `computeEffectiveRoots` returns undefined and the
+    // provider's default launch posture is preserved
     // (no silent policy-tightening — feedback_additive_not_destructive.md).
     const effectiveRoots = computeEffectiveRoots(workspaceCwd, roots);
 

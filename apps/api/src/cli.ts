@@ -829,7 +829,7 @@ const main = async () => {
 
   octogent tentacle create <name>      Create a tentacle (Octogent must be running)
     --description, -d                  Tentacle description
-    --agent-provider                   claude-code (default) | codex
+    --agent-provider                   codex (default) | claude-code | kimi | openclaw
   octogent tentacle list               List tentacles
   octogent terminal create [options]   Create a terminal
     --name, -n                         Terminal display name
@@ -841,21 +841,19 @@ const main = async () => {
     --parent-terminal-id               Parent terminal ID for child terminals
     --prompt-template                  Prompt template name
     --prompt-variables                 JSON object of prompt template variables
-    --agent-provider                   claude-code (default) | codex
+    --agent-provider                   codex (default) | claude-code | kimi | openclaw
     --runtime-mode                     interactive (default) | exec
                                        exec mode spawns the agent as a direct
                                        child_process with prompt as argv — no
                                        TUI, single turn, atomic completion.
                                        Use for swarm workers.
-    --roots path1,path2,...            Codex-only: additional sandbox roots
-                                       the worker is allowed to write to
-                                       beyond its primary workspace.
-                                       Presence switches Codex from
-                                       --dangerously-bypass-approvals-and-sandbox
-                                       to --sandbox workspace-write with one
-                                       --add-dir per root. Absent preserves
-                                       today's default (bypass, full fs
-                                       access). Absolute paths recommended.
+    --roots path1,path2,...            Codex + Kimi: extra workspace roots
+                                       forwarded as one --add-dir per root.
+                                       Use when a worker must write outside
+                                       its primary workspace. Claude ignores
+                                       this flag. Absent preserves each
+                                       provider's default launch posture.
+                                       Absolute paths recommended.
                                        Example: --roots /path/to/Visopscreen
                                                 --roots /path/to/sidecar,/another
     --persona                          Name of persona file in ~/.octogent/personas/

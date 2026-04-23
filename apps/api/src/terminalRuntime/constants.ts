@@ -1,29 +1,16 @@
+import { basename, extname } from "node:path";
+
 export const TERMINAL_ID_PREFIX = "terminal-";
 export const TERMINAL_REGISTRY_VERSION = 3;
 export const TERMINAL_REGISTRY_RELATIVE_PATH = ".octogent/state/tentacles.json";
 export const TERMINAL_TRANSCRIPT_RELATIVE_PATH = ".octogent/state/transcripts";
 export const TENTACLE_WORKTREE_RELATIVE_PATH = ".octogent/worktrees";
 export const TENTACLE_WORKTREE_BRANCH_PREFIX = "octogent/";
-export const DEFAULT_AGENT_PROVIDER = "claude-code" as const;
+export const DEFAULT_AGENT_PROVIDER = "codex" as const;
 
-// Emergency kill switch: when `OCTOGENT_DISABLE_CODEX=1`, every codex
-// agent-provider request is transparently remapped to claude-code at the
-// provider-resolution choke points (build*Command + interactive bootstrap).
-// Stored terminal.agentProvider state is NOT mutated, so restarting the
-// daemon without the env var restores codex routing.
-//
-// Why: S38 respawn-loop bug burned Jon's paid Codex Pro quota — stuck
-// detection + retry + treating rate-limit/quota errors as transient =
-// infinite respawn. Until the root-cause circuit-breaker ships (Task
-// 10.9.7: quota/rate-limit errors non-retryable + operator_kill sets
-// do-not-respawn flag), this env var is the hard off-switch that
-// prevents ANY codex spawn regardless of how it was requested (operator
-// CLI, dashboard UI, swarm orchestrator, auto-respawn replan).
-export const isCodexDisabled = (): boolean =>
-  (process.env.OCTOGENT_DISABLE_CODEX ?? "").trim() === "1";
-
-export const resolveAgentProvider = (provider: string): string =>
-  isCodexDisabled() && provider === "codex" ? "claude-code" : provider;
+// Provider resolution must never silently change one model family into another.
+// Codex-labelled workers must run Codex, not a hidden Claude fallback.
+export const resolveAgentProvider = (provider: string): string => provider;
 
 // Bootstrap commands per provider. The Codex default mirrors how Jon runs it
 // locally — full authority, no approval prompts. Claude's equivalent is
@@ -36,12 +23,17 @@ export const resolveAgentProvider = (provider: string): string =>
 //   OCTOGENT_CODEX_CMD="codex --full-auto"        ← sandboxed auto-exec
 //   OCTOGENT_CODEX_CMD="codex -a never"           ← no approvals, no sandbox change
 //   OCTOGENT_CLAUDE_CMD="claude --dangerously-skip-permissions"
+//   OCTOGENT_KIMI_CMD="kimi --yolo"               ← interactive auto-approve
 const DEFAULT_CODEX_CMD = "codex --dangerously-bypass-approvals-and-sandbox";
 const DEFAULT_CLAUDE_CMD = "claude";
+const DEFAULT_KIMI_CMD = "kimi --yolo";
+const DEFAULT_OPENCLAW_CMD = "openclaw tui";
 
 export const TERMINAL_BOOTSTRAP_COMMANDS: Record<string, string> = {
   codex: process.env.OCTOGENT_CODEX_CMD?.trim() || DEFAULT_CODEX_CMD,
   "claude-code": process.env.OCTOGENT_CLAUDE_CMD?.trim() || DEFAULT_CLAUDE_CMD,
+  kimi: process.env.OCTOGENT_KIMI_CMD?.trim() || DEFAULT_KIMI_CMD,
+  openclaw: process.env.OCTOGENT_OPENCLAW_CMD?.trim() || DEFAULT_OPENCLAW_CMD,
 };
 
 // Exec-mode command prefixes (command + non-prompt flags). The prompt is
@@ -51,23 +43,23 @@ export const TERMINAL_BOOTSTRAP_COMMANDS: Record<string, string> = {
 //
 //   OCTOGENT_CODEX_EXEC_CMD overrides the Codex prefix
 //   OCTOGENT_CLAUDE_EXEC_CMD overrides the Claude prefix
+//   OCTOGENT_KIMI_EXEC_CMD overrides the Kimi prefix
 //
 // When the caller supplies `roots: readonly string[]` to buildExecCommand,
-// the Codex prefix's `--dangerously-bypass-approvals-and-sandbox` is
-// replaced with `--sandbox workspace-write` and one `--add-dir <path>` is
-// emitted per root. Without roots, bypass mode is preserved (today's
-// default — full fs access, no sandbox).
-//
-// This split is deliberate: bypass is safe for single-repo tentacles and
-// matches how Jon runs Codex locally. Introducing roots is an explicit opt-
-// in to the sandboxed posture, safer AND necessary for cross-repo work
-// (Phase 0.01.3 — jarvis tentacle writing to Visopscreen, sidecar, etc).
+// providers that support `--add-dir` (currently Codex and Kimi) keep their
+// configured autonomy posture and receive one `--add-dir` per root. Roots
+// expand writable scope; they do not silently tighten the provider into a
+// different sandbox mode.
 const DEFAULT_CODEX_EXEC_CMD = "codex exec --dangerously-bypass-approvals-and-sandbox";
 const DEFAULT_CLAUDE_EXEC_CMD = "claude -p --dangerously-skip-permissions";
+const DEFAULT_KIMI_EXEC_CMD = "kimi --print";
+const DEFAULT_OPENCLAW_EXEC_CMD = "openclaw agent --json";
 
 export const TERMINAL_EXEC_COMMANDS: Record<string, string> = {
   codex: process.env.OCTOGENT_CODEX_EXEC_CMD?.trim() || DEFAULT_CODEX_EXEC_CMD,
   "claude-code": process.env.OCTOGENT_CLAUDE_EXEC_CMD?.trim() || DEFAULT_CLAUDE_EXEC_CMD,
+  kimi: process.env.OCTOGENT_KIMI_EXEC_CMD?.trim() || DEFAULT_KIMI_EXEC_CMD,
+  openclaw: process.env.OCTOGENT_OPENCLAW_EXEC_CMD?.trim() || DEFAULT_OPENCLAW_EXEC_CMD,
 };
 
 // Build the argv for an exec-mode spawn. Returns `{ command, args, stdin }`
@@ -85,6 +77,7 @@ export const TERMINAL_EXEC_COMMANDS: Record<string, string> = {
 //   codex       — `codex exec <flags> --output-last-message <outfile> -`
 //                 + prompt piped on stdin
 //   claude-code — `claude -p <flags>` + prompt piped on stdin
+//   kimi        — `kimi --print <flags>` + prompt piped on stdin
 export const buildExecCommand = (
   provider: string,
   prompt: string,
@@ -111,10 +104,28 @@ export const buildExecCommand = (
     };
   }
 
+  if (effectiveProvider === "kimi") {
+    return {
+      command,
+      args: applyCodexRoots(baseArgs, roots),
+      stdin: prompt,
+    };
+  }
+
+  if (effectiveProvider === "openclaw") {
+    const agentId = process.env.OCTOGENT_OPENCLAW_AGENT_ID?.trim() || "octogent-kimi";
+    const sessionId = basename(outfile, extname(outfile));
+    return {
+      command,
+      args: [...baseArgs, "--agent", agentId, "--session-id", sessionId, "--message", prompt],
+      stdin: "",
+    };
+  }
+
   // Claude exec: no prompt positional when stdin is piped. Output-side-channel
   // is a TBD — `claude -p` emits to stdout; for now we rely on transcript
-  // capture. `roots` is a Codex-only primitive; Claude has no equivalent
-  // sandbox flag today, so it's accepted (for API symmetry) and ignored here.
+  // capture. Claude has no `--add-dir` equivalent today, so `roots` is
+  // accepted (for API symmetry) and ignored here.
   return {
     command,
     args: baseArgs,
@@ -123,24 +134,20 @@ export const buildExecCommand = (
 };
 
 /**
- * Swap Codex exec args to honor `roots` when provided:
- *  - Strip `--dangerously-bypass-approvals-and-sandbox` (if present).
- *  - Prepend `--sandbox workspace-write`.
+ * Extend exec args to honor `roots` for providers that support `--add-dir`:
  *  - Append one `--add-dir <path>` per root.
- * When `roots` is undefined or empty, args pass through unchanged (bypass
- * mode preserved — today's default).
+ * When `roots` is undefined or empty, args pass through unchanged.
  *
- * Exported for testability + reuse by buildResumeCommand.
+ * Exported for testability + reuse by Codex exec/resume and Kimi exec.
  */
 export const applyCodexRoots = (
   baseArgs: readonly string[],
   roots: readonly string[] | undefined,
 ): string[] => {
   if (!roots || roots.length === 0) return [...baseArgs];
-  const stripped = baseArgs.filter((a) => a !== "--dangerously-bypass-approvals-and-sandbox");
   const rootFlags: string[] = [];
   for (const r of roots) rootFlags.push("--add-dir", r);
-  return ["--sandbox", "workspace-write", ...stripped, ...rootFlags];
+  return [...baseArgs, ...rootFlags];
 };
 
 /**
@@ -150,15 +157,15 @@ export const applyCodexRoots = (
  *  - If `userRoots` is undefined or empty → return `undefined`. The terminal
  *    gets no `roots` field, preserving today's bypass-mode default. This is
  *    deliberate: silent policy-tightening is destructive (feedback
- *    `feedback_additive_not_destructive.md`), so bypass stays the default
- *    until the caller explicitly opts into sandbox mode via `--roots`.
+ *    `feedback_additive_not_destructive.md`), so bypass stays the default.
  *  - If `userRoots` is non-empty → the tentacle's project root is prepended
- *    as the baseline writable area (so Codex can touch the main repo from
- *    its worktree). User-supplied paths are APPENDED after the project
- *    root. Duplicates are removed while preserving first-seen order.
+ *    as the baseline writable area (so providers that honor `roots` can
+ *    touch the main repo from the worktree). User-supplied paths are
+ *    APPENDED after the project root. Duplicates are removed while
+ *    preserving first-seen order.
  *
- * Why project root is auto-included: a tentacle with sandbox engaged but
- * without its own project root in the roots list can't do useful work —
+ * Why project root is auto-included: a tentacle with explicit roots but
+ * without its own project root in the list can't do useful work —
  * git operations, package installs, anything touching the repo beyond the
  * worktree-dir workdir would fail. Making project root an invariant
  * baseline lets `--roots` do what callers actually want ("I need to write
@@ -248,6 +255,32 @@ export const buildResumeCommand = (
   // called directly). No resume primitive; fresh exec loses context. Roots
   // ignored for Claude (no equivalent sandbox flag).
   return buildExecCommand(effectiveProvider, prompt, outfile, roots);
+};
+
+export const supportsExecResume = (provider: string | undefined): boolean =>
+  resolveAgentProvider(provider ?? DEFAULT_AGENT_PROVIDER) === "codex";
+
+const resolveProviderEnvValue = (key: string, fallback: string): string => {
+  const raw = process.env[key]?.trim();
+  return raw && raw.length > 0 ? raw : fallback;
+};
+
+export const buildProviderEnvironmentOverrides = (
+  provider: string | undefined,
+): Record<string, string> | undefined => {
+  const effectiveProvider = resolveAgentProvider(provider ?? DEFAULT_AGENT_PROVIDER);
+  if (effectiveProvider !== "openclaw") {
+    return undefined;
+  }
+
+  return {
+    OPENCLAW_HIDE_BANNER: resolveProviderEnvValue("OPENCLAW_HIDE_BANNER", "1"),
+    OPENCLAW_SUPPRESS_NOTES: resolveProviderEnvValue("OPENCLAW_SUPPRESS_NOTES", "1"),
+    OPENCLAW_AGENT_HARNESS_FALLBACK: resolveProviderEnvValue(
+      "OPENCLAW_AGENT_HARNESS_FALLBACK",
+      "none",
+    ),
+  };
 };
 
 // Phase 10.9.7 — emergency auto-respawn kill switch.

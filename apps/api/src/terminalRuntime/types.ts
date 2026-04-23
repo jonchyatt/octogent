@@ -177,10 +177,11 @@ export type PersistedTerminal = {
   workspaceMode: TentacleWorkspaceMode;
   agentProvider?: TerminalAgentProvider;
   runtimeMode?: TerminalRuntimeMode;
-  // Codex-only: additional sandbox roots. Presence switches Codex exec from
-  // --dangerously-bypass-approvals-and-sandbox to --sandbox workspace-write
-  // with one --add-dir per root. Absent = bypass mode preserved (today's
-  // default). See packages/core/src/domain/agentRuntime.ts for rationale.
+  // Additional workspace roots. Providers that support `--add-dir`
+  // (currently Codex and Kimi) receive one flag per root; providers without
+  // an equivalent flag ignore this field. Absent = each provider's default
+  // launch posture is preserved. See packages/core/src/domain/agentRuntime.ts
+  // for rationale.
   roots?: TerminalRoots;
   // Exec-mode only: how many exec turns this terminal has run. 0 = initial
   // spawn pending; 1 = first turn started/done; 2+ = resumed turns. Incremented

@@ -19,7 +19,9 @@ describe("startup prerequisites", () => {
     const report = collectStartupPrerequisiteReport((command) => command === "git");
 
     expect(report.errors).toHaveLength(1);
-    expect(report.errors[0]?.summary).toContain("Neither `claude` nor `codex`");
+    expect(report.errors[0]?.summary).toContain(
+      "None of `claude`, `codex`, `kimi`, or `openclaw`",
+    );
     expect(report.warnings.map((issue) => issue.command)).toEqual(["gh", "curl"]);
   });
 
@@ -27,17 +29,42 @@ describe("startup prerequisites", () => {
     const report = collectStartupPrerequisiteReport((command) => command === "codex");
 
     expect(report.errors).toEqual([]);
-    expect(report.warnings.map((issue) => issue.command)).toEqual(["claude", "git", "gh", "curl"]);
+    expect(report.warnings.map((issue) => issue.command)).toEqual([
+      "claude",
+      "kimi",
+      "openclaw",
+      "git",
+      "gh",
+      "curl",
+    ]);
     expect(formatStartupPrerequisiteReport(report)).toEqual([
       "Octogent startup preflight:",
       "  Warning: `claude` is not installed.",
       "    Claude-backed terminals are unavailable. Install Claude Code and run `claude login` if you want the default Claude provider.",
+      "  Warning: `kimi` is not installed.",
+      "    Kimi-backed terminals are unavailable. Install Kimi CLI and run `kimi login` if you want Kimi terminals.",
+      "  Warning: `openclaw` is not installed.",
+      "    OpenClaw-backed terminals are unavailable. Install OpenClaw and configure the target OpenClaw agent/session if you want OpenClaw terminals.",
       "  Warning: `git` is not installed.",
       "    Worktree terminals and git lifecycle actions are unavailable. Install Git to enable branch/worktree flows.",
       "  Warning: `gh` is not installed.",
       "    GitHub pull request features are unavailable. Install GitHub CLI and run `gh auth login` to enable PR actions.",
       "  Warning: `curl` is not installed.",
       "    Claude hook command callbacks for SessionStart, UserPromptSubmit, and Stop are unavailable. Install curl to restore full Claude hook delivery.",
+    ]);
+  });
+
+  it("starts cleanly with Kimi as the only installed agent CLI", () => {
+    const report = collectStartupPrerequisiteReport((command) => command === "kimi");
+
+    expect(report.errors).toEqual([]);
+    expect(report.warnings.map((issue) => issue.command)).toEqual([
+      "claude",
+      "codex",
+      "openclaw",
+      "git",
+      "gh",
+      "curl",
     ]);
   });
 

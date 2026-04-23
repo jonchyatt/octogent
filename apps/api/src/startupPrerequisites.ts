@@ -10,7 +10,7 @@ export type StartupPrerequisiteIssue = {
 };
 
 export type StartupPrerequisiteAvailability = Record<
-  "claude" | "codex" | "git" | "gh" | "curl",
+  "claude" | "codex" | "kimi" | "openclaw" | "git" | "gh" | "curl",
   boolean
 >;
 
@@ -54,6 +54,8 @@ export const collectStartupPrerequisiteReport = (
   const availability: StartupPrerequisiteAvailability = {
     claude: isAvailable("claude"),
     codex: isAvailable("codex"),
+    kimi: isAvailable("kimi"),
+    openclaw: isAvailable("openclaw"),
     git: isAvailable("git"),
     gh: isAvailable("gh"),
     curl: isAvailable("curl"),
@@ -62,13 +64,18 @@ export const collectStartupPrerequisiteReport = (
   const errors: StartupPrerequisiteIssue[] = [];
   const warnings: StartupPrerequisiteIssue[] = [];
 
-  if (!availability.claude && !availability.codex) {
+  if (
+    !availability.claude &&
+    !availability.codex &&
+    !availability.kimi &&
+    !availability.openclaw
+  ) {
     errors.push({
-      command: "claude/codex",
+      command: "claude/codex/kimi/openclaw",
       severity: "error",
-      summary: "Neither `claude` nor `codex` is installed.",
+      summary: "None of `claude`, `codex`, `kimi`, or `openclaw` is installed.",
       guidance:
-        "Install at least one agent CLI before starting Octogent. Claude-backed terminals use `claude`; Codex-backed terminals use `codex`.",
+        "Install at least one agent CLI before starting Octogent. Claude-backed terminals use `claude`, Codex-backed terminals use `codex`, Kimi-backed terminals use `kimi`, and OpenClaw-backed terminals use `openclaw`.",
     });
   } else {
     if (!availability.claude) {
@@ -88,6 +95,26 @@ export const collectStartupPrerequisiteReport = (
         summary: "`codex` is not installed.",
         guidance:
           "Codex-backed terminals and Codex usage telemetry are unavailable. Install Codex CLI and run `codex login` if you want Codex terminals.",
+      });
+    }
+
+    if (!availability.kimi) {
+      warnings.push({
+        command: "kimi",
+        severity: "warning",
+        summary: "`kimi` is not installed.",
+        guidance:
+          "Kimi-backed terminals are unavailable. Install Kimi CLI and run `kimi login` if you want Kimi terminals.",
+      });
+    }
+
+    if (!availability.openclaw) {
+      warnings.push({
+        command: "openclaw",
+        severity: "warning",
+        summary: "`openclaw` is not installed.",
+        guidance:
+          "OpenClaw-backed terminals are unavailable. Install OpenClaw and configure the target OpenClaw agent/session if you want OpenClaw terminals.",
       });
     }
   }

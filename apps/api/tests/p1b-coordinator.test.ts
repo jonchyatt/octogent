@@ -129,6 +129,29 @@ describe("buildResumeCommand (MED-3 hard-coded argv)", () => {
     expect(result.args).toEqual(["-p", "--dangerously-skip-permissions"]);
     expect(result.stdin).toBe("msg");
   });
+
+  it("kimi: falls back to buildExecCommand shape until explicit resume support exists", () => {
+    const result = buildResumeCommand("kimi", "msg", "/tmp/out.json");
+    expect(result.command).toBe("kimi");
+    expect(result.args).toEqual(["--print"]);
+    expect(result.stdin).toBe("msg");
+  });
+
+  it("openclaw: falls back to buildExecCommand shape until explicit resume support exists", () => {
+    const result = buildResumeCommand("openclaw", "msg", "/tmp/out.json");
+    expect(result.command).toBe("openclaw");
+    expect(result.args).toEqual([
+      "agent",
+      "--json",
+      "--agent",
+      "octogent-kimi",
+      "--session-id",
+      "out",
+      "--message",
+      "msg",
+    ]);
+    expect(result.stdin).toBe("");
+  });
 });
 
 describe("execTurnCoordinator.handleExecSessionEnd", () => {
@@ -147,6 +170,24 @@ describe("execTurnCoordinator.handleExecSessionEnd", () => {
   it("MED-2: returns 'done' without draining for claude-code (no resume primitive)", () => {
     const { coordinator, drain, startSession } = makeCoordinatorHarness(
       makeTerminal({ agentProvider: "claude-code" }),
+    );
+    expect(coordinator.handleExecSessionEnd("terminal-1", "pty_exit")).toBe("done");
+    expect(drain).not.toHaveBeenCalled();
+    expect(startSession).not.toHaveBeenCalled();
+  });
+
+  it("returns 'done' without draining for kimi until resume support is wired", () => {
+    const { coordinator, drain, startSession } = makeCoordinatorHarness(
+      makeTerminal({ agentProvider: "kimi" }),
+    );
+    expect(coordinator.handleExecSessionEnd("terminal-1", "pty_exit")).toBe("done");
+    expect(drain).not.toHaveBeenCalled();
+    expect(startSession).not.toHaveBeenCalled();
+  });
+
+  it("returns 'done' without draining for openclaw until explicit resume support is wired", () => {
+    const { coordinator, drain, startSession } = makeCoordinatorHarness(
+      makeTerminal({ agentProvider: "openclaw" }),
     );
     expect(coordinator.handleExecSessionEnd("terminal-1", "pty_exit")).toBe("done");
     expect(drain).not.toHaveBeenCalled();
@@ -458,8 +499,14 @@ describe("execTurnCoordinator — Phase 10.8.7 checkpoint integration", () => {
   it("writes a checkpoint with next turn number on clean-exit respawn, BEFORE startSession", () => {
     const callOrder: string[] = [];
     const writeCheckpoint = vi.fn(
-      (args: { terminalId: string; turnNumber: number }) => {
-        callOrder.push(`write:${args.terminalId}:${args.turnNumber}`);
+      (args: {
+        terminalId: string;
+        turnNumber: number;
+        nextTurnNumber: number;
+        reason: "pty_exit" | "timeout_retry";
+        messageIds: string[];
+      }) => {
+        callOrder.push(`write:${args.terminalId}:${args.turnNumber}->${args.nextTurnNumber}`);
       },
     );
     const startSession = vi.fn((terminalId: string) => {
@@ -480,16 +527,20 @@ describe("execTurnCoordinator — Phase 10.8.7 checkpoint integration", () => {
 
     expect(coordinator.handleExecSessionEnd("terminal-1", "pty_exit")).toBe("respawn");
 
-    // Checkpoint fires with turnNumber=1 (the turn we're respawning into).
+    // Checkpoint captures the current turn plus the next turn we are about
+    // to start, along with the drained message ids that triggered the respawn.
     expect(writeCheckpoint).toHaveBeenCalledTimes(1);
     expect(writeCheckpoint).toHaveBeenCalledWith({
       terminalId: "terminal-1",
-      turnNumber: 1,
+      turnNumber: 0,
+      nextTurnNumber: 1,
+      reason: "pty_exit",
+      messageIds: ["msg-1"],
     });
     // Ordering guarantee: checkpoint is on disk BEFORE the new turn starts,
     // so a crash between write and startSession still leaves recoverable state.
     expect(callOrder).toEqual([
-      "write:terminal-1:1",
+      "write:terminal-1:0->1",
       "start:terminal-1",
     ]);
   });
@@ -530,7 +581,10 @@ describe("execTurnCoordinator — Phase 10.8.7 checkpoint integration", () => {
 
     expect(writeCheckpoint).toHaveBeenCalledWith({
       terminalId: "terminal-1",
-      turnNumber: 2,
+      turnNumber: 1,
+      nextTurnNumber: 2,
+      reason: "timeout_retry",
+      messageIds: [],
     });
     // Turn bumped to 2 in memory as well — checkpoint write and in-memory
     // state agree.

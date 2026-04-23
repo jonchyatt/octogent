@@ -80,7 +80,7 @@ export const DeckPrimaryView = ({
   const [availableSkills, setAvailableSkills] = useState<DeckAvailableSkill[]>([]);
   const [savingTentacleSkillsId, setSavingTentacleSkillsId] = useState<string | null>(null);
 
-  const [selectedAgent, setSelectedAgent] = useState<TerminalAgentProvider>("claude-code");
+  const [selectedAgent, setSelectedAgent] = useState<TerminalAgentProvider>("codex");
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const agentMenuRef = useRef<HTMLDivElement>(null);
   const [isLaunchingAgent, setIsLaunchingAgent] = useState(false);

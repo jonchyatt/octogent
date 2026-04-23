@@ -12,6 +12,7 @@ export const createShellEnvironment = (options?: {
   // them too (cheap), but the slash command itself is claude-only.
   octogentTentacleId?: string;
   octogentHandoffDir?: string;
+  extraEnv?: Record<string, string>;
 }) => {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
@@ -29,6 +30,11 @@ export const createShellEnvironment = (options?: {
   }
   if (options?.octogentHandoffDir) {
     env.OCTOGENT_HANDOFF_DIR = options.octogentHandoffDir;
+  }
+  if (options?.extraEnv) {
+    for (const [key, value] of Object.entries(options.extraEnv)) {
+      env[key] = value;
+    }
   }
   return env;
 };

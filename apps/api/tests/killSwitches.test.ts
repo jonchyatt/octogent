@@ -4,16 +4,13 @@ import {
   buildExecCommand,
   buildResumeCommand,
   isAutoRespawnDisabled,
-  isCodexDisabled,
   resolveAgentProvider,
 } from "../src/terminalRuntime/constants";
 import { createExecTurnCoordinator } from "../src/terminalRuntime/execTurnCoordinator";
 import type { PersistedTerminal } from "../src/terminalRuntime/types";
 
-// Phase 10.9.7 — kill switches for codex spawning + auto-respawn.
-// These are the emergency off-switches that protect against the S38 respawn
-// loop (stuck-detection + retry + quota-error-as-transient = infinite loop
-// that burned Jon's paid Codex Pro quota).
+// Phase 10.9.7: auto-respawn kill switch. Provider selection is explicit
+// and must not silently substitute Claude for Codex.
 
 const makeTerminal = (overrides: Partial<PersistedTerminal> = {}): PersistedTerminal =>
   ({
@@ -28,31 +25,21 @@ const makeTerminal = (overrides: Partial<PersistedTerminal> = {}): PersistedTerm
     ...overrides,
   }) as PersistedTerminal;
 
-describe("OCTOGENT_DISABLE_CODEX kill switch", () => {
+describe("Codex provider routing", () => {
   const original = process.env.OCTOGENT_DISABLE_CODEX;
   afterEach(() => {
     if (original === undefined) delete process.env.OCTOGENT_DISABLE_CODEX;
     else process.env.OCTOGENT_DISABLE_CODEX = original;
   });
 
-  it("isCodexDisabled is false when env var is unset", () => {
-    delete process.env.OCTOGENT_DISABLE_CODEX;
-    expect(isCodexDisabled()).toBe(false);
-  });
-
-  it("isCodexDisabled is true when env var is '1'", () => {
-    process.env.OCTOGENT_DISABLE_CODEX = "1";
-    expect(isCodexDisabled()).toBe(true);
-  });
-
-  it("resolveAgentProvider passes codex through when disabled=false", () => {
+  it("resolveAgentProvider passes codex through when legacy env var is unset", () => {
     delete process.env.OCTOGENT_DISABLE_CODEX;
     expect(resolveAgentProvider("codex")).toBe("codex");
   });
 
-  it("resolveAgentProvider remaps codex → claude-code when disabled=true", () => {
+  it("resolveAgentProvider still passes codex through when legacy env var is set", () => {
     process.env.OCTOGENT_DISABLE_CODEX = "1";
-    expect(resolveAgentProvider("codex")).toBe("claude-code");
+    expect(resolveAgentProvider("codex")).toBe("codex");
   });
 
   it("resolveAgentProvider never touches claude-code", () => {
@@ -60,26 +47,21 @@ describe("OCTOGENT_DISABLE_CODEX kill switch", () => {
     expect(resolveAgentProvider("claude-code")).toBe("claude-code");
   });
 
-  it("buildExecCommand uses claude argv when codex is disabled", () => {
+  it("buildExecCommand uses codex argv even when legacy env var is set", () => {
     process.env.OCTOGENT_DISABLE_CODEX = "1";
     const result = buildExecCommand("codex", "hello", "/tmp/out.json");
-    // With codex disabled, the request for provider="codex" is serviced by
-    // the claude-code exec path — no `--output-last-message` argv, no trailing
-    // `-` for stdin marker, no sandbox flags.
-    expect(result.command).toBe("claude");
-    expect(result.args).not.toContain("--output-last-message");
-    expect(result.args).not.toContain("-");
+    expect(result.command).toBe("codex");
+    expect(result.args).toContain("--output-last-message");
+    expect(result.args).toContain("-");
     expect(result.stdin).toBe("hello");
   });
 
-  it("buildResumeCommand uses claude fallback when codex is disabled", () => {
+  it("buildResumeCommand uses codex resume even when legacy env var is set", () => {
     process.env.OCTOGENT_DISABLE_CODEX = "1";
     const result = buildResumeCommand("codex", "hello", "/tmp/out.json", "abc-session-id");
-    // With codex disabled, resume falls through to the claude exec path
-    // (claude has no resume primitive — fresh exec is all we have).
-    expect(result.command).toBe("claude");
-    expect(result.args).not.toContain("resume");
-    expect(result.args).not.toContain("abc-session-id");
+    expect(result.command).toBe("codex");
+    expect(result.args).toContain("resume");
+    expect(result.args).toContain("abc-session-id");
     expect(result.stdin).toBe("hello");
   });
 

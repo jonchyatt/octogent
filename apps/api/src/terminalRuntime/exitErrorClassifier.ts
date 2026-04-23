@@ -39,9 +39,12 @@ const AUTH_PATTERNS: readonly RegExp[] = [
 
 const QUOTA_PATTERNS: readonly RegExp[] = [
   /quota\s+(exceeded|exhausted)/i,
+  /out\s+of\s+extra\s+usage/i,
+  /hit\s+(your\s+)?usage\s+limit/i,
   /usage\s+limit\s+(exceeded|reached)/i,
   /plan['']?s?\s+usage/i,
   /upgrade\s+to\s+(pro|plus|paid|premium)/i,
+  /purchase\s+more\s+credits/i,
   /monthly\s+limit/i,
   /insufficient\s+(quota|credits|balance)/i,
 ];

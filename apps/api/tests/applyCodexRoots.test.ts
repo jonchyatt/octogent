@@ -22,12 +22,17 @@ describe("applyCodexRoots", () => {
     ]);
   });
 
-  it("strips bypass flag and prepends workspace-write sandbox when roots present", () => {
+  it("preserves bypass flag and appends add-dir flags when roots present", () => {
     const result = applyCodexRoots(
       ["exec", "--dangerously-bypass-approvals-and-sandbox"],
       ["/path/to/visopscreen"],
     );
-    expect(result).toEqual(["--sandbox", "workspace-write", "exec", "--add-dir", "/path/to/visopscreen"]);
+    expect(result).toEqual([
+      "exec",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "--add-dir",
+      "/path/to/visopscreen",
+    ]);
   });
 
   it("emits one --add-dir per root, preserving order", () => {
@@ -36,9 +41,8 @@ describe("applyCodexRoots", () => {
       ["/a", "/b", "/c"],
     );
     expect(result).toEqual([
-      "--sandbox",
-      "workspace-write",
       "exec",
+      "--dangerously-bypass-approvals-and-sandbox",
       "--add-dir",
       "/a",
       "--add-dir",
@@ -50,7 +54,7 @@ describe("applyCodexRoots", () => {
 
   it("leaves args without bypass flag untouched except for root injection", () => {
     const result = applyCodexRoots(["exec", "--json"], ["/a"]);
-    expect(result).toEqual(["--sandbox", "workspace-write", "exec", "--json", "--add-dir", "/a"]);
+    expect(result).toEqual(["exec", "--json", "--add-dir", "/a"]);
   });
 });
 
@@ -63,22 +67,33 @@ describe("buildExecCommand", () => {
     expect(args.slice(-3)).toEqual(["--output-last-message", "/tmp/out.json", "-"]);
   });
 
-  it("switches to --sandbox workspace-write + --add-dir when roots present", () => {
+  it("keeps codex bypass mode and appends --add-dir when roots present", () => {
     const { command, args } = buildExecCommand("codex", "hello", "/tmp/out.json", ["/r1", "/r2"]);
     expect(command).toBe("codex");
-    expect(args).not.toContain("--dangerously-bypass-approvals-and-sandbox");
-    expect(args).toContain("--sandbox");
-    expect(args).toContain("workspace-write");
+    expect(args).toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(args).not.toContain("--sandbox");
+    expect(args).not.toContain("workspace-write");
     expect(args.filter((a) => a === "--add-dir").length).toBe(2);
     expect(args).toContain("/r1");
     expect(args).toContain("/r2");
     expect(args.slice(-3)).toEqual(["--output-last-message", "/tmp/out.json", "-"]);
   });
 
-  it("ignores roots for non-codex providers (claude-code has no equivalent flag)", () => {
+  it("ignores roots for claude-code, which has no equivalent flag today", () => {
     const { args: argsWithRoots } = buildExecCommand("claude-code", "hi", "/tmp/o.json", ["/r"]);
     const { args: argsWithout } = buildExecCommand("claude-code", "hi", "/tmp/o.json");
     expect(argsWithRoots).toEqual(argsWithout);
+  });
+
+  it("ignores roots for openclaw, which has no equivalent flag today", () => {
+    const { args: argsWithRoots } = buildExecCommand("openclaw", "hi", "/tmp/o.json", ["/r"]);
+    const { args: argsWithout } = buildExecCommand("openclaw", "hi", "/tmp/o.json");
+    expect(argsWithRoots).toEqual(argsWithout);
+  });
+
+  it("passes roots through to Kimi via --add-dir", () => {
+    const { args } = buildExecCommand("kimi", "hi", "/tmp/o.json", ["/r1", "/r2"]);
+    expect(args).toEqual(["--print", "--add-dir", "/r1", "--add-dir", "/r2"]);
   });
 });
 

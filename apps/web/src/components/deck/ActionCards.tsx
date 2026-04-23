@@ -4,8 +4,10 @@ import type { TerminalAgentProvider } from "../../app/types";
 import { OctopusGlyph } from "../EmptyOctopus";
 
 export const AGENT_PROVIDER_OPTIONS: { value: TerminalAgentProvider; label: string }[] = [
-  { value: "claude-code", label: "Claude Code" },
   { value: "codex", label: "Codex" },
+  { value: "claude-code", label: "Claude Code" },
+  { value: "kimi", label: "Kimi" },
+  { value: "openclaw", label: "OpenClaw" },
 ];
 
 export type ActionCardsProps = {

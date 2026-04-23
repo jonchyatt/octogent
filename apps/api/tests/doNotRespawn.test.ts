@@ -50,6 +50,11 @@ describe("classifyExitOutput", () => {
   it("classifies quota errors", () => {
     expectClass("Error: quota exceeded", "quota");
     expectClass("You've exceeded your plan's usage", "quota");
+    expectClass("You're out of extra usage · resets 11:30am (America/New_York)", "quota");
+    expectClass(
+      "ERROR: You've hit your usage limit. Upgrade to Pro, purchase more credits or try again at 1:38 PM.",
+      "quota",
+    );
     expectClass("Upgrade to Pro for more usage", "quota");
     expectClass("insufficient credits", "quota");
   });

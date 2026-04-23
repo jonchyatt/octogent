@@ -1,5 +1,9 @@
 import { logVerbose } from "../logging";
-import { TERMINAL_EXEC_MAX_TURNS, isAutoRespawnDisabled } from "./constants";
+import {
+  TERMINAL_EXEC_MAX_TURNS,
+  isAutoRespawnDisabled,
+  supportsExecResume,
+} from "./constants";
 import { classifyExitOutput } from "./exitErrorClassifier";
 import type { PersistedTerminal } from "./types";
 
@@ -14,8 +18,8 @@ import type { PersistedTerminal } from "./types";
  *                → (exec times out, retryCount>=1)                → DEAD (escalate)
  *                → (operator stop/kill — no flag)                 → DONE
  *   Guards:
- *     - agentProvider === "claude-code"                          → DONE
- *       (no resume primitive; respawn would lose context silently — MED-2)
+ *     - provider has no tested resume primitive                  → DONE
+ *       (respawn would lose context silently — MED-2)
  *     - nextTurnPrompt already set                               → SKIP
  *       (another respawn already in-flight — MED-4 re-entrancy guard)
  *     - turnNumber >= OCTOGENT_EXEC_MAX_TURNS                    → DEAD
@@ -271,12 +275,13 @@ export const createExecTurnCoordinator = (
       }
     }
 
-    // MED-2: claude-code has no resume primitive. Respawning would spawn a
-    // fresh subprocess with no memory of turn N, effectively lying about
-    // the turn counter. Until claude-code gains resume support, exec-mode
-    // workers with agentProvider=claude-code are single-turn only. Queued
-    // messages stay pending; the operator must manually respawn.
-    if (terminal.agentProvider === "claude-code") {
+    // MED-2: only Codex has tested resume semantics in Octogent today.
+    // Respawning any other provider would start a fresh subprocess with no
+    // guaranteed memory of turn N, effectively lying about the turn counter.
+    // Until Kimi or Claude are wired with explicit resume support, exec-mode
+    // workers for those providers are single-turn only. Queued messages stay
+    // pending; the operator must manually respawn.
+    if (!supportsExecResume(terminal.agentProvider)) {
       return "done";
     }
 
