@@ -4,7 +4,15 @@ import { dirname, join } from "node:path";
 
 const require = createRequire(import.meta.url);
 
-export const createShellEnvironment = (options?: { octogentSessionId?: string }) => {
+export const createShellEnvironment = (options?: {
+  octogentSessionId?: string;
+  // Phase 10.5.2 — handoff machinery. Both are injected for claude-code
+  // workers so the /handoff slash command can write into the canonical
+  // per-tentacle directory without re-deriving its path. Codex workers get
+  // them too (cheap), but the slash command itself is claude-only.
+  octogentTentacleId?: string;
+  octogentHandoffDir?: string;
+}) => {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (typeof value === "string") {
@@ -15,6 +23,12 @@ export const createShellEnvironment = (options?: { octogentSessionId?: string })
   env.COLORTERM = "truecolor";
   if (options?.octogentSessionId) {
     env.OCTOGENT_SESSION_ID = options.octogentSessionId;
+  }
+  if (options?.octogentTentacleId) {
+    env.OCTOGENT_TENTACLE_ID = options.octogentTentacleId;
+  }
+  if (options?.octogentHandoffDir) {
+    env.OCTOGENT_HANDOFF_DIR = options.octogentHandoffDir;
   }
   return env;
 };

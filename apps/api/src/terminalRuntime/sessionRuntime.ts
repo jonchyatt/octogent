@@ -56,6 +56,14 @@ type CreateSessionRuntimeOptions = {
     tentacleId: string;
   } | null;
   getTentacleWorkspaceCwd: (tentacleId: string) => string;
+  // Phase 10.5.2 — resolve the per-tentacle handoff directory so the runtime
+  // can inject OCTOGENT_HANDOFF_DIR into the worker's PTY environment. The
+  // implementation MUST mkdir -p the directory before returning; the worker's
+  // /handoff slash command will write into it without re-creating it.
+  // Optional for backwards compatibility — when absent, OCTOGENT_HANDOFF_DIR
+  // is omitted from the env and the slash command falls back to its
+  // `.octogent/handoffs/` cwd-relative default.
+  getTentacleHandoffDir?: (tentacleId: string) => string;
   isDebugPtyLogsEnabled: boolean;
   ptyLogDir: string;
   transcriptDirectoryPath: string;
@@ -153,6 +161,7 @@ export const createSessionRuntime = ({
   sessions,
   resolveTerminalSession,
   getTentacleWorkspaceCwd,
+  getTentacleHandoffDir,
   isDebugPtyLogsEnabled,
   ptyLogDir,
   transcriptDirectoryPath,
@@ -755,12 +764,25 @@ export const createSessionRuntime = ({
         throw new Error(`Unable to build exec command: ${toErrorMessage(error)}`);
       }
 
+      let handoffDirForExec: string | undefined;
+      if (getTentacleHandoffDir) {
+        try {
+          handoffDirForExec = getTentacleHandoffDir(tentacleId);
+        } catch {
+          // Best-effort — handoff dir creation failure must not block spawn.
+        }
+      }
+
       try {
         pty = spawnExecChild({
           command,
           args,
           cwd: tentacleCwd,
-          env: createShellEnvironment({ octogentSessionId: sessionId }),
+          env: createShellEnvironment({
+            octogentSessionId: sessionId,
+            octogentTentacleId: tentacleId,
+            ...(handoffDirForExec ? { octogentHandoffDir: handoffDirForExec } : {}),
+          }),
           stdin,
         });
       } catch (error) {
@@ -777,12 +799,25 @@ export const createSessionRuntime = ({
       ensureNodePtySpawnHelperExecutable();
       const shellLaunch = getShellLaunch();
 
+      let handoffDirForInteractive: string | undefined;
+      if (getTentacleHandoffDir) {
+        try {
+          handoffDirForInteractive = getTentacleHandoffDir(tentacleId);
+        } catch {
+          // Best-effort — handoff dir creation failure must not block spawn.
+        }
+      }
+
       try {
         pty = spawn(shellLaunch.command, shellLaunch.args, {
           cols: DEFAULT_PTY_COLS,
           rows: DEFAULT_PTY_ROWS,
           cwd: tentacleCwd,
-          env: createShellEnvironment({ octogentSessionId: sessionId }),
+          env: createShellEnvironment({
+            octogentSessionId: sessionId,
+            octogentTentacleId: tentacleId,
+            ...(handoffDirForInteractive ? { octogentHandoffDir: handoffDirForInteractive } : {}),
+          }),
           name: "xterm-256color",
         }) as unknown as TerminalProcessHandle;
       } catch (error) {

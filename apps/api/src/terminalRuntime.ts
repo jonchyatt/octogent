@@ -29,6 +29,12 @@ import {
   searchConversations,
 } from "./terminalRuntime/conversations";
 import { createGitOperations } from "./terminalRuntime/gitOperations";
+import {
+  composeInitialPromptWithPriorHandoff,
+  ensureTentacleHandoffDirectory,
+  getTentacleHandoffDirectoryPath,
+  readMostRecentHandoff,
+} from "./terminalRuntime/handoffTemplate";
 import { createHookProcessor } from "./terminalRuntime/hookProcessor";
 import {
   createTerminalRegistryPersistence,
@@ -322,6 +328,10 @@ export const createTerminalRuntime = ({
     sessions,
     resolveTerminalSession,
     getTentacleWorkspaceCwd: worktreeManager.getTentacleWorkspaceCwd,
+    // Phase 10.5.2 — every spawn ensures `.octogent/tentacles/<id>/`
+    // exists in the workspace and injects its absolute path into the PTY env.
+    getTentacleHandoffDir: (tentacleId: string) =>
+      ensureTentacleHandoffDirectory(workspaceCwd, tentacleId),
     isDebugPtyLogsEnabled,
     ptyLogDir,
     transcriptDirectoryPath,
@@ -523,6 +533,9 @@ export const createTerminalRuntime = ({
     persistRegistry,
     deliverChannelMessages: channelMessaging.deliverChannelMessages,
     releaseSessionKeepAlive: sessionRuntime.releaseSessionKeepAlive,
+    // Phase 10.5.2 — context-burn injection routes through writeInput so
+    // the synthetic "/handoff now" message lands in the worker's PTY.
+    writeInput: (terminalId: string, data: string) => sessionRuntime.writeInput(terminalId, data),
     onStateChange: broadcastTerminalStateChanged,
     checkpointStore,
     getTentacleWorkspaceCwd: worktreeManager.getTentacleWorkspaceCwd,
@@ -709,6 +722,32 @@ export const createTerminalRuntime = ({
     const tentacleId = requestedTentacleId ?? terminalId;
     const effectiveName = tentacleName ?? allocateDefaultTerminalName();
 
+    // Phase 10.5.2 — prior-handoff preamble. If this tentacle has handoff
+    // files from a prior worker, prepend the most recent one to the new
+    // worker's initial prompt so it resumes from the captured state instead
+    // of cold-starting. No-op when no prior handoff exists OR when no
+    // initial prompt is set (a non-prompted terminal won't render the
+    // preamble — there's nothing to attach it to). Codex-mode workers DO
+    // benefit from prior handoffs too: a fresh exec turn that knows the
+    // prior state is strictly better than one that doesn't, even though
+    // the slash command itself is claude-only.
+    let effectiveInitialPrompt = initialPrompt;
+    if (initialPrompt) {
+      try {
+        const handoffDir = getTentacleHandoffDirectoryPath(workspaceCwd, tentacleId);
+        const priorHandoff = readMostRecentHandoff(handoffDir);
+        if (priorHandoff) {
+          effectiveInitialPrompt = composeInitialPromptWithPriorHandoff(
+            initialPrompt,
+            priorHandoff,
+          );
+        }
+      } catch {
+        // Best-effort — handoff scan failure must not block terminal
+        // creation. The new worker just cold-starts.
+      }
+    }
+
     // Auto-allocate a unique worktreeId when creating a worktree terminal
     // so multiple worktree terminals can coexist (each gets its own directory).
     const worktreeId =
@@ -735,7 +774,7 @@ export const createTerminalRuntime = ({
       ...(effectiveRoots ? { roots: effectiveRoots } : {}),
       lifecycleState: "registered",
       lifecycleUpdatedAt: new Date().toISOString(),
-      ...(initialPrompt ? { initialPrompt } : {}),
+      ...(effectiveInitialPrompt ? { initialPrompt: effectiveInitialPrompt } : {}),
       ...(initialInputDraft ? { initialInputDraft } : {}),
       ...(initialPrompt ? { lastActiveAt: new Date().toISOString() } : {}),
       ...(parentTerminalId ? { parentTerminalId } : {}),
@@ -766,7 +805,7 @@ export const createTerminalRuntime = ({
       snapshot: toTerminalSnapshot(terminal),
     });
 
-    if (initialPrompt) {
+    if (effectiveInitialPrompt) {
       sessionRuntime.startSession(terminalId);
     }
 
