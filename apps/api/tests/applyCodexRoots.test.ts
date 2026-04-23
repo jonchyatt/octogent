@@ -83,17 +83,22 @@ describe("buildExecCommand", () => {
 });
 
 describe("buildResumeCommand", () => {
-  it("emits bypass-mode resume when roots absent", () => {
+  // Phase 10.9.7 — `codex exec resume` rejects `--sandbox` and
+  // `--dangerously-bypass-approvals-and-sandbox` ("unknown flag"). Resume
+  // inherits sandbox posture from the original session, so we don't pass
+  // either flag. This updates the contract the earlier tests codified.
+  it("codex resume without roots has NO sandbox / bypass flag", () => {
     const { command, args } = buildResumeCommand("codex", "go", "/tmp/out.json", "session-abc");
     expect(command).toBe("codex");
     expect(args).toContain("exec");
     expect(args).toContain("resume");
     expect(args).toContain("session-abc");
-    expect(args).toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(args).not.toContain("--dangerously-bypass-approvals-and-sandbox");
     expect(args).not.toContain("--sandbox");
+    expect(args).not.toContain("workspace-write");
   });
 
-  it("emits workspace-write + --add-dir resume when roots present", () => {
+  it("codex resume WITH roots emits --add-dir entries but NO --sandbox", () => {
     const { command, args } = buildResumeCommand(
       "codex",
       "go",
@@ -103,8 +108,8 @@ describe("buildResumeCommand", () => {
     );
     expect(command).toBe("codex");
     expect(args).not.toContain("--dangerously-bypass-approvals-and-sandbox");
-    expect(args).toContain("--sandbox");
-    expect(args).toContain("workspace-write");
+    expect(args).not.toContain("--sandbox");
+    expect(args).not.toContain("workspace-write");
     expect(args).toContain("--add-dir");
     expect(args).toContain("/cross-repo");
     expect(args).toContain("resume");

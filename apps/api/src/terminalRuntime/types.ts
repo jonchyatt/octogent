@@ -207,6 +207,30 @@ export type PersistedTerminal = {
   // attempt issued, second consecutive timeout escalates to DEAD. Reset to
   // 0 on any clean pty_exit (non-consecutive timeouts don't accumulate).
   retryCount?: number;
+  // Phase 10.9.7 — sticky non-retryable kill flag.
+  //
+  // Set to true by:
+  //   1. `POST /api/terminals/:id/kill` (operator manually killed) — so
+  //      respawn loops can't resurrect an operator-killed terminal.
+  //   2. The exec turn coordinator when classifyExitOutput returns a
+  //      non-retryable error class (rate_limit / quota / auth). These
+  //      errors retry-respawn into the same wall and burn paid quota.
+  //
+  // The exec turn coordinator checks this flag at the top of
+  // handleExecSessionEnd and returns "done" without respawning. Stuck
+  // detection treats the terminal as ineligible for TIER transitions
+  // once this is true.
+  //
+  // The flag is NOT cleared by startSession — once sticky, stays sticky
+  // until the operator deletes the terminal / tentacle, or manually
+  // clears it. That's the whole point: stopping a respawn loop requires
+  // a flag that outlives a respawn attempt.
+  doNotRespawn?: boolean;
+  // Last classified exit error for operator visibility. Populated by the
+  // exec coordinator before setting doNotRespawn. Values: "rate_limit",
+  // "quota", "auth", "operator_kill". Optional; null/undefined = normal
+  // exit or unclassified.
+  lastExitErrorClass?: string;
   // Stuck-detection tier (Phase 10.8.6). Undefined/HEALTHY = no active
   // escalation. STUCK_TIER_1 = @system status-check channel message has
   // been sent. STUCK_TIER_2 = @system replan channel message has been sent.

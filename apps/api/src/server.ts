@@ -1,5 +1,11 @@
 import { existsSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
 import { createApiServer } from "./createApiServer";
+import {
+  acquireDaemonSingletonLock,
+  defaultLockfilePath,
+  releaseDaemonSingletonLock,
+} from "./daemonSingleton";
 
 const parsePort = (value: string | undefined, fallback: number) => {
   if (!value) {
@@ -48,6 +54,35 @@ const validateStartupEnv = () => {
 
 validateStartupEnv();
 
+// Phase 10.9.7 — daemon singleton lock. Prevents the S38/S39 split-brain
+// case where two `pnpm dev` invocations each held live terminals and
+// respawn logic double-fired. If another daemon has the lock, refuse to
+// start instead of silently layering on top.
+//
+// Bypass: `OCTOGENT_SKIP_SINGLETON_LOCK=1` — for test rigs that spin up
+// multiple in-process API servers on different ports (no real-world lock
+// conflict).
+const skipLock = (process.env.OCTOGENT_SKIP_SINGLETON_LOCK ?? "").trim() === "1";
+const resolvedStateDir = projectStateDir ?? resolvePath(workspaceCwd, ".octogent", "state");
+const lockfilePath = defaultLockfilePath(resolvedStateDir);
+if (!skipLock) {
+  const lockResult = acquireDaemonSingletonLock({ lockfilePath });
+  if (lockResult.status === "blocked") {
+    console.error(
+      `[daemon-singleton] another Octogent daemon is already running (pid=${lockResult.activePid}, lockfile=${lockResult.lockfilePath}). Refusing to start.`,
+    );
+    console.error(
+      `  If you're certain no daemon is live, delete the lockfile manually: rm "${lockResult.lockfilePath}"`,
+    );
+    process.exit(1);
+  }
+  if (lockResult.priorPid !== undefined && lockResult.priorPid !== process.pid) {
+    console.log(`[daemon-singleton] acquired lock (prior pid=${lockResult.priorPid} was stale)`);
+  } else {
+    console.log(`[daemon-singleton] acquired lock at ${lockResult.lockfilePath}`);
+  }
+}
+
 const apiServer = createApiServer({
   workspaceCwd,
   projectStateDir,
@@ -57,9 +92,24 @@ const apiServer = createApiServer({
 });
 
 const shutdown = async () => {
-  await apiServer.stop();
+  try {
+    await apiServer.stop();
+  } finally {
+    if (!skipLock) {
+      releaseDaemonSingletonLock(lockfilePath);
+    }
+  }
   process.exit(0);
 };
+
+// Also release the lock on abrupt exits (pnpm kill, dev-server restart).
+// Best-effort: if the process crashes without running this, the next
+// startup's stale-lock detection handles it.
+process.on("exit", () => {
+  if (!skipLock) {
+    releaseDaemonSingletonLock(lockfilePath);
+  }
+});
 
 process.on("SIGINT", () => {
   void shutdown();

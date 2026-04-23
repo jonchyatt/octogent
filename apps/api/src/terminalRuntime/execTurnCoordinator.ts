@@ -1,5 +1,6 @@
 import { logVerbose } from "../logging";
 import { TERMINAL_EXEC_MAX_TURNS, isAutoRespawnDisabled } from "./constants";
+import { classifyExitOutput } from "./exitErrorClassifier";
 import type { PersistedTerminal } from "./types";
 
 /**
@@ -76,6 +77,19 @@ export type CreateExecTurnCoordinatorOptions = {
    */
   onTerminalDead?: (escalation: ExecTurnCoordinatorEscalation) => void;
   /**
+   * Phase 10.9.7 — classify the last exit output of the given terminal.
+   * Called right after session-end but BEFORE the coordinator picks a
+   * retry path. If the returned value is non-null, the coordinator marks
+   * the terminal doNotRespawn + escalates DEAD without attempting any
+   * respawn. Typical wiring reads the tail of the exec-output log and
+   * runs classifyExitOutput() on it.
+   *
+   * Optional. Omitting this preserves the pre-10.9.7 retry behavior
+   * (non-zero exits retry once; only the OCTOGENT_DISABLE_AUTO_RESPAWN
+   * kill switch prevents respawn). Tests usually pass a stub.
+   */
+  readExitOutput?: (terminalId: string) => string | null | undefined;
+  /**
    * Phase 10.8.7: write a checkpoint for the terminal at turn boundaries.
    * Called right before the respawn so the on-disk checkpoint reflects the
    * turn number we're ABOUT to start — if the respawn crashes the worker,
@@ -136,6 +150,7 @@ export const createExecTurnCoordinator = (
     startSession,
     persistTerminalChanges,
     onTerminalDead,
+    readExitOutput,
     writeCheckpoint,
     readCheckpoint,
     maxTurns,
@@ -202,6 +217,16 @@ export const createExecTurnCoordinator = (
       return "skip";
     }
 
+    // Phase 10.9.7 — sticky kill flag. Operator-killed terminals or ones
+    // that hit a non-retryable error class have doNotRespawn=true. Under
+    // no circumstance does the coordinator revive them.
+    if (terminal.doNotRespawn === true) {
+      logVerbose(
+        `[ExecTurnCoordinator] doNotRespawn=true; terminal=${terminalId} reason=${reason} lastExitErrorClass=${terminal.lastExitErrorClass ?? "unset"} → done`,
+      );
+      return "done";
+    }
+
     // Phase 10.9.7 — emergency kill switch.
     // When OCTOGENT_DISABLE_AUTO_RESPAWN=1, every session-end is terminal.
     // Operator must explicitly spawn a new session for each turn. This is
@@ -213,6 +238,37 @@ export const createExecTurnCoordinator = (
         `[ExecTurnCoordinator] auto-respawn DISABLED by OCTOGENT_DISABLE_AUTO_RESPAWN=1; terminal=${terminalId} reason=${reason} → done`,
       );
       return "done";
+    }
+
+    // Phase 10.9.7 — non-retryable error classification.
+    // Before ANY retry/respawn decision, scan the worker's exit output for
+    // rate-limit / quota / auth markers. These errors retry-respawn into
+    // the same wall and burn paid quota. When classified, set doNotRespawn
+    // + escalate DEAD. This fires for BOTH pty_exit and operator_kill so
+    // a worker that crashed with a 429 isn't revived on the next kill
+    // attempt either.
+    if (readExitOutput) {
+      try {
+        const output = readExitOutput(terminalId);
+        const errorClass = classifyExitOutput(output);
+        if (errorClass) {
+          terminal.doNotRespawn = true;
+          terminal.lastExitErrorClass = errorClass;
+          logVerbose(
+            `[ExecTurnCoordinator] non-retryable exit detected terminal=${terminalId} class=${errorClass} → dead (doNotRespawn set)`,
+          );
+          persistTerminalChanges?.();
+          onTerminalDead?.({
+            kind: "timeout",
+            terminalId,
+            turnNumber: terminal.turnNumber ?? 0,
+          });
+          return "dead";
+        }
+      } catch {
+        // Classifier is best-effort — never block the coordinator on a
+        // log-read failure. Falls through to normal retry logic.
+      }
     }
 
     // MED-2: claude-code has no resume primitive. Respawning would spawn a

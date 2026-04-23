@@ -194,6 +194,15 @@ export const createStuckDetector = (
         continue;
       }
 
+      // Phase 10.9.7 — skip terminals already marked non-retryable.
+      // doNotRespawn means "operator killed this" or "we hit a non-retryable
+      // error class." Firing TIER escalation channel messages at such a
+      // terminal could cause its worker to spawn children, which is the
+      // exact respawn-loop behavior the flag exists to prevent.
+      if (terminal.doNotRespawn === true) {
+        continue;
+      }
+
       // P1b.9 coordination: skip terminals whose retry budget has already
       // been consumed by the exec turn coordinator. The coordinator owns
       // the DEAD escalation for this terminal; double-firing would both

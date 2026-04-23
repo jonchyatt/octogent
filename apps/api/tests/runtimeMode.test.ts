@@ -94,7 +94,10 @@ describe("buildExecCommand", () => {
   it("builds Claude exec invocation with no positional prompt and stdin piped", () => {
     const result = buildExecCommand("claude-code", "hello", "/tmp/out.json");
     expect(result.command).toBe("claude");
-    expect(result.args).toEqual(["-p"]);
+    // S38 shipped `--dangerously-skip-permissions` in the claude exec
+    // default (77e0f68) — without it, `claude -p` hangs forever waiting
+    // for permission prompts no one can answer.
+    expect(result.args).toEqual(["-p", "--dangerously-skip-permissions"]);
     expect(result.stdin).toBe("hello");
   });
 

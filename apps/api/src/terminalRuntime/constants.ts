@@ -213,20 +213,29 @@ export const buildResumeCommand = (
   const effectiveProvider = resolveAgentProvider(provider);
   if (effectiveProvider === "codex") {
     const resumeTarget = sessionId && sessionId.length > 0 ? sessionId : "--last";
-    // Roots-honoring version of the canonical resume invocation. We NEVER parse
-    // OCTOGENT_CODEX_EXEC_CMD here (see comment above) — the resume invocation
-    // is hard-coded. Roots, when provided, follow the same applyCodexRoots
-    // transform as buildExecCommand.
-    const hardcodedArgs = roots && roots.length > 0
-      ? applyCodexRoots([], roots)
-      : ["--dangerously-bypass-approvals-and-sandbox"];
+    // Phase 10.9.7 — strip --sandbox / bypass flags from resume args.
+    //
+    // `codex exec resume` does not accept `--sandbox` or
+    // `--dangerously-bypass-approvals-and-sandbox`. Passing either causes
+    // codex to exit immediately with "unknown flag" (S38 A4/A5 manifest
+    // of this bug — both workers exited without commits, required manual
+    // intervention). Resume inherits sandbox posture from the original
+    // session, so we don't need to pass it anyway.
+    //
+    // Roots are still honored via --add-dir (accepted by resume). When
+    // roots are empty, no sandbox/bypass flag is added — codex resume
+    // uses its own default, which is the parent session's mode.
+    const rootFlags: string[] = [];
+    if (roots && roots.length > 0) {
+      for (const r of roots) rootFlags.push("--add-dir", r);
+    }
     return {
       command: "codex",
       args: [
         "exec",
         "resume",
         resumeTarget,
-        ...hardcodedArgs,
+        ...rootFlags,
         "--output-last-message",
         outfile,
         "-",

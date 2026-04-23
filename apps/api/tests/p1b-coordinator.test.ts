@@ -66,14 +66,17 @@ const makeCoordinatorHarness = (
 };
 
 describe("buildResumeCommand (MED-3 hard-coded argv)", () => {
-  it("codex + no sessionId: uses --last with canonical sandbox flag", () => {
+  // Phase 10.9.7 — `codex exec resume` rejects `--sandbox` and
+  // `--dangerously-bypass-approvals-and-sandbox`. These tests codify the
+  // post-fix contract: neither flag appears in resume args. Resume
+  // inherits sandbox posture from the parent session.
+  it("codex + no sessionId: uses --last without any sandbox flag", () => {
     const result = buildResumeCommand("codex", "queued msg", "/tmp/out.json");
     expect(result.command).toBe("codex");
     expect(result.args).toEqual([
       "exec",
       "resume",
       "--last",
-      "--dangerously-bypass-approvals-and-sandbox",
       "--output-last-message",
       "/tmp/out.json",
       "-",
@@ -81,7 +84,7 @@ describe("buildResumeCommand (MED-3 hard-coded argv)", () => {
     expect(result.stdin).toBe("queued msg");
   });
 
-  it("codex + sessionId: resumes the exact session (safe under shared cwd)", () => {
+  it("codex + sessionId: resumes the exact session without any sandbox flag", () => {
     const result = buildResumeCommand(
       "codex",
       "queued msg",
@@ -92,7 +95,6 @@ describe("buildResumeCommand (MED-3 hard-coded argv)", () => {
       "exec",
       "resume",
       "019db52e-a889-7660-ab1f-6e54ab56da0b",
-      "--dangerously-bypass-approvals-and-sandbox",
       "--output-last-message",
       "/tmp/out.json",
       "-",
@@ -122,7 +124,9 @@ describe("buildResumeCommand (MED-3 hard-coded argv)", () => {
   it("claude-code: falls back to buildExecCommand shape (no resume primitive)", () => {
     const result = buildResumeCommand("claude-code", "msg", "/tmp/out.json");
     expect(result.command).toBe("claude");
-    expect(result.args).toEqual(["-p"]);
+    // S38 shipped `--dangerously-skip-permissions` in the default claude
+    // exec cmd (77e0f68), so the fallback argv now includes that flag.
+    expect(result.args).toEqual(["-p", "--dangerously-skip-permissions"]);
     expect(result.stdin).toBe("msg");
   });
 });

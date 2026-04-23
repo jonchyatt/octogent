@@ -958,6 +958,14 @@ export const createTerminalRuntime = ({
         return null;
       }
 
+      // Phase 10.9.7 — operator stop = sticky "do not respawn" signal.
+      // Without this, the exec coordinator's auto-respawn path could
+      // resurrect the terminal on the next turn-boundary. The flag makes
+      // the kill permanent across all respawn paths (coordinator, stuck
+      // detection, swarm orchestrator).
+      terminal.doNotRespawn = true;
+      terminal.lastExitErrorClass = "operator_stop";
+
       const stoppedActiveSession = sessionRuntime.stopSession(terminalId);
       if (!stoppedActiveSession && isProcessAlive(terminal.processId)) {
         try {
@@ -982,6 +990,15 @@ export const createTerminalRuntime = ({
       if (!terminal) {
         return null;
       }
+
+      // Phase 10.9.7 — operator kill = sticky "do not respawn" signal.
+      // This is the load-bearing fix for the S38 respawn loop: operator
+      // kills via UI/API were getting un-done by the coordinator's retry
+      // path within seconds. Setting the flag here makes the kill
+      // permanent — coordinator + stuck detection both short-circuit on
+      // doNotRespawn and never revive the terminal.
+      terminal.doNotRespawn = true;
+      terminal.lastExitErrorClass = "operator_kill";
 
       const signal = "SIGKILL";
       const killedActiveSession = sessionRuntime.killSession(terminalId, signal);
