@@ -44,7 +44,7 @@ export const TERMINAL_BOOTSTRAP_COMMANDS: Record<string, string> = {
 // in to the sandboxed posture, safer AND necessary for cross-repo work
 // (Phase 0.01.3 — jarvis tentacle writing to Visopscreen, sidecar, etc).
 const DEFAULT_CODEX_EXEC_CMD = "codex exec --dangerously-bypass-approvals-and-sandbox";
-const DEFAULT_CLAUDE_EXEC_CMD = "claude -p";
+const DEFAULT_CLAUDE_EXEC_CMD = "claude -p --dangerously-skip-permissions";
 
 export const TERMINAL_EXEC_COMMANDS: Record<string, string> = {
   codex: process.env.OCTOGENT_CODEX_EXEC_CMD?.trim() || DEFAULT_CODEX_EXEC_CMD,
