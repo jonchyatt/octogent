@@ -758,11 +758,16 @@ export const createSessionRuntime = ({
       let command: string;
       let args: string[];
       let stdin: string;
+      let useShell: boolean | undefined;
       const roots = terminalRecord?.roots;
       try {
-        ({ command, args, stdin } = isResumeTurn
+        const built = isResumeTurn
           ? buildResumeCommand(provider, prompt, outfile, terminalRecord?.codexSessionId, roots)
-          : buildExecCommand(provider, prompt, outfile, roots));
+          : buildExecCommand(provider, prompt, outfile, roots);
+        command = built.command;
+        args = built.args;
+        stdin = built.stdin;
+        useShell = built.useShell;
       } catch (error) {
         throw new Error(`Unable to build exec command: ${toErrorMessage(error)}`);
       }
@@ -788,6 +793,7 @@ export const createSessionRuntime = ({
             extraEnv: buildProviderEnvironmentOverrides(provider),
           }),
           stdin,
+          ...(useShell !== undefined ? { useShell } : {}),
         });
       } catch (error) {
         throw new Error(`Unable to spawn exec worker (${command}): ${toErrorMessage(error)}`);

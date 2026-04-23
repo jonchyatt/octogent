@@ -132,8 +132,7 @@ describe("buildExecCommand", () => {
   it("builds OpenClaw exec invocation with stable agent + session ids", () => {
     process.env.OCTOGENT_OPENCLAW_AGENT_ID = "octogent-kimi";
     const result = buildExecCommand("openclaw", "hello", "/tmp/out.json");
-    expect(result.command).toBe("openclaw");
-    expect(result.args).toEqual([
+    const expectedOpenclawArgs = [
       "agent",
       "--json",
       "--agent",
@@ -142,8 +141,40 @@ describe("buildExecCommand", () => {
       "out",
       "--message",
       "hello",
-    ]);
+    ];
+
+    if (process.platform === "win32" && process.env.APPDATA) {
+      // Win32 .cmd-shim bypass: command → node.exe, mjs path prepended,
+      // useShell=false so cmd.exe never sees the argv.
+      expect(result.command).toBe(process.execPath);
+      expect(result.args.slice(1)).toEqual(expectedOpenclawArgs);
+      expect(result.args[0]).toMatch(/openclaw\.mjs$/);
+      expect(result.useShell).toBe(false);
+    } else {
+      expect(result.command).toBe("openclaw");
+      expect(result.args).toEqual(expectedOpenclawArgs);
+      expect(result.useShell).toBeUndefined();
+    }
     expect(result.stdin).toBe("");
+  });
+
+  it("respects OCTOGENT_OPENCLAW_MJS_PATH override on Windows", () => {
+    if (process.platform !== "win32" || !process.env.APPDATA) {
+      // Bypass only triggers on Windows — POSIX always uses the .cmd-free
+      // `openclaw` command directly.
+      return;
+    }
+    process.env.OCTOGENT_OPENCLAW_AGENT_ID = "octogent-kimi";
+    const customMjs = "D:\\custom\\install\\openclaw.mjs";
+    process.env.OCTOGENT_OPENCLAW_MJS_PATH = customMjs;
+    try {
+      const result = buildExecCommand("openclaw", "hello", "/tmp/out.json");
+      expect(result.command).toBe(process.execPath);
+      expect(result.args[0]).toBe(customMjs);
+      expect(result.useShell).toBe(false);
+    } finally {
+      delete process.env.OCTOGENT_OPENCLAW_MJS_PATH;
+    }
   });
 
   it("respects OCTOGENT_CODEX_EXEC_CMD override", () => {

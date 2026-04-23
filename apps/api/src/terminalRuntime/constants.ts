@@ -62,6 +62,17 @@ export const TERMINAL_EXEC_COMMANDS: Record<string, string> = {
   openclaw: process.env.OCTOGENT_OPENCLAW_EXEC_CMD?.trim() || DEFAULT_OPENCLAW_EXEC_CMD,
 };
 
+// Default resolution for openclaw.mjs on Windows — used by the .cmd-shim
+// bypass in the openclaw exec branch (see buildExecCommand below). Computed
+// at module load; undefined on non-Windows or if APPDATA is unset (which
+// means we skip the bypass and fall back to the .cmd argv path).
+const DEFAULT_OPENCLAW_MJS_PATH: string | undefined = (() => {
+  if (process.platform !== "win32") return undefined;
+  const appData = process.env.APPDATA;
+  if (!appData || appData.length === 0) return undefined;
+  return `${appData}\\npm\\node_modules\\openclaw\\openclaw.mjs`;
+})();
+
 // Build the argv for an exec-mode spawn. Returns `{ command, args, stdin }`
 // where `stdin` is the prompt string to write into the child's stdin.
 //
@@ -78,12 +89,18 @@ export const TERMINAL_EXEC_COMMANDS: Record<string, string> = {
 //                 + prompt piped on stdin
 //   claude-code — `claude -p <flags>` + prompt piped on stdin
 //   kimi        — `kimi --print <flags>` + prompt piped on stdin
+//   openclaw    — `openclaw agent --json --agent <id> --session-id <id>
+//                 --message <prompt>` via argv (no stdin support yet).
+//                 On Windows, bypasses the `openclaw.cmd` shim to avoid the
+//                 `%*` argv-reexpansion bug that tokenizes prompts with
+//                 spaces — spawns `node.exe openclaw.mjs ...` directly with
+//                 `useShell=false`. Caller must honor `useShell` override.
 export const buildExecCommand = (
   provider: string,
   prompt: string,
   outfile: string,
   roots?: readonly string[],
-): { command: string; args: string[]; stdin: string } => {
+): { command: string; args: string[]; stdin: string; useShell?: boolean } => {
   const effectiveProvider = resolveAgentProvider(provider);
   const prefix =
     TERMINAL_EXEC_COMMANDS[effectiveProvider] ??
@@ -115,9 +132,56 @@ export const buildExecCommand = (
   if (effectiveProvider === "openclaw") {
     const agentId = process.env.OCTOGENT_OPENCLAW_AGENT_ID?.trim() || "octogent-kimi";
     const sessionId = basename(outfile, extname(outfile));
+    const openclawArgs = [
+      ...baseArgs,
+      "--agent",
+      agentId,
+      "--session-id",
+      sessionId,
+      "--message",
+      prompt,
+    ];
+
+    // Windows .cmd-shim argv-quoting bypass.
+    //
+    // On Windows, `openclaw.cmd` is an npm shim that invokes node with `%*`
+    // re-expansion. cmd.exe's `%*` does NOT preserve the outer quoting Node
+    // placed on argv elements containing spaces — so a prompt like
+    // `"Reply with spaces"` arrives at commander as 3 positional args
+    // (`Reply`, `with`, `spaces`), and openclaw's `agent` subcommand rejects
+    // with "too many arguments for 'agent'" (S42/S43 smoke #3 failure).
+    //
+    // Fix: skip the .cmd shim entirely. Spawn node.exe directly against
+    // `openclaw.mjs` with `useShell=false` so cmd.exe is never involved in
+    // argv quoting. Requires `spawnExecChild` to honor `useShell` override.
+    //
+    // Only triggered when:
+    //   - process.platform === "win32"
+    //   - command is the default "openclaw" (user didn't override
+    //     OCTOGENT_OPENCLAW_EXEC_CMD with a custom path)
+    //   - DEFAULT_OPENCLAW_MJS_PATH resolved (APPDATA set)
+    //
+    // Override the default openclaw.mjs path via `OCTOGENT_OPENCLAW_MJS_PATH`
+    // for non-standard npm global install locations.
+    if (
+      process.platform === "win32" &&
+      command === "openclaw" &&
+      DEFAULT_OPENCLAW_MJS_PATH !== undefined
+    ) {
+      const mjsOverride = process.env.OCTOGENT_OPENCLAW_MJS_PATH?.trim();
+      const mjsPath =
+        mjsOverride && mjsOverride.length > 0 ? mjsOverride : DEFAULT_OPENCLAW_MJS_PATH;
+      return {
+        command: process.execPath,
+        args: [mjsPath, ...openclawArgs],
+        stdin: "",
+        useShell: false,
+      };
+    }
+
     return {
       command,
-      args: [...baseArgs, "--agent", agentId, "--session-id", sessionId, "--message", prompt],
+      args: openclawArgs,
       stdin: "",
     };
   }
@@ -216,7 +280,7 @@ export const buildResumeCommand = (
   outfile: string,
   sessionId?: string,
   roots?: readonly string[],
-): { command: string; args: string[]; stdin: string } => {
+): { command: string; args: string[]; stdin: string; useShell?: boolean } => {
   const effectiveProvider = resolveAgentProvider(provider);
   if (effectiveProvider === "codex") {
     const resumeTarget = sessionId && sessionId.length > 0 ? sessionId : "--last";

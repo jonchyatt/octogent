@@ -139,8 +139,7 @@ describe("buildResumeCommand (MED-3 hard-coded argv)", () => {
 
   it("openclaw: falls back to buildExecCommand shape until explicit resume support exists", () => {
     const result = buildResumeCommand("openclaw", "msg", "/tmp/out.json");
-    expect(result.command).toBe("openclaw");
-    expect(result.args).toEqual([
+    const expectedOpenclawArgs = [
       "agent",
       "--json",
       "--agent",
@@ -149,7 +148,18 @@ describe("buildResumeCommand (MED-3 hard-coded argv)", () => {
       "out",
       "--message",
       "msg",
-    ]);
+    ];
+
+    if (process.platform === "win32" && process.env.APPDATA) {
+      // Win32 .cmd-shim bypass (see buildExecCommand in constants.ts).
+      expect(result.command).toBe(process.execPath);
+      expect(result.args.slice(1)).toEqual(expectedOpenclawArgs);
+      expect(result.args[0]).toMatch(/openclaw\.mjs$/);
+      expect(result.useShell).toBe(false);
+    } else {
+      expect(result.command).toBe("openclaw");
+      expect(result.args).toEqual(expectedOpenclawArgs);
+    }
     expect(result.stdin).toBe("");
   });
 });

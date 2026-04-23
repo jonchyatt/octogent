@@ -24,6 +24,13 @@ type SpawnExecChildOptions = {
   // closed so the agent sees EOF and can proceed. Passing stdin avoids the
   // Windows argv-quoting problem for prompts with spaces / special chars.
   stdin?: string | undefined;
+  // Override the default shell selection. Default behavior:
+  //   win32 → shell:true (required to launch .cmd shims like codex.cmd)
+  //   else  → shell:false
+  // Callers that spawn an .exe directly (like node.exe against a resolved
+  // .mjs path) pass `useShell=false` to bypass cmd.exe entirely. Used by the
+  // openclaw Windows .cmd-shim argv-quoting bypass in `buildExecCommand`.
+  useShell?: boolean | undefined;
 };
 
 // Adapter that wraps a child_process and exposes the TerminalProcessHandle
@@ -45,7 +52,7 @@ export const spawnExecChild = (options: SpawnExecChildOptions): TerminalProcessH
   // Windows routes through `cmd.exe /d /s /c`; Node handles argv escaping
   // for CMD automatically (security-hardened since Node 18.20.2 /
   // CVE-2024-27980 patch).
-  const useShell = process.platform === "win32";
+  const useShell = options.useShell ?? process.platform === "win32";
   const wantsStdin = typeof options.stdin === "string" && options.stdin.length > 0;
   const child = spawnChild(options.command, options.args, {
     cwd: options.cwd,
