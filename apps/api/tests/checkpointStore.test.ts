@@ -30,9 +30,23 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   CheckpointStore,
+  type CheckpointWriteInput,
   digestJsonSafe,
   digestString,
 } from "../src/terminalRuntime/checkpointStore";
+import { createHookProcessor } from "../src/terminalRuntime/hookProcessor";
+import type { PersistedTerminal } from "../src/terminalRuntime/types";
+
+const makeTerminal = (overrides: Partial<PersistedTerminal> = {}): PersistedTerminal => ({
+  terminalId: "terminal-1",
+  tentacleId: "tentacle-alpha",
+  tentacleName: "Terminal 1",
+  createdAt: new Date().toISOString(),
+  workspaceMode: "worktree",
+  agentProvider: "claude-code",
+  runtimeMode: "interactive",
+  ...overrides,
+});
 
 describe("CheckpointStore", () => {
   let tmp: string;
@@ -47,7 +61,7 @@ describe("CheckpointStore", () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  const baseInput = (overrides: Record<string, unknown> = {}) => ({
+  const baseInput = (overrides: Partial<CheckpointWriteInput> = {}): CheckpointWriteInput => ({
     terminalId: "terminal-1",
     tentacleId: "tentacle-alpha",
     turnNumber: 2,
@@ -99,32 +113,43 @@ describe("CheckpointStore", () => {
     });
   });
 
-  it("(c) concurrent writes from parallel terminals isolate their files", () => {
-    // Simulate four different terminals writing their own checkpoints
-    // interleaved. Each file MUST end up with only its own terminal's data.
+  it("(c) concurrent writes from parallel terminals isolate their files", async () => {
+    // Simulate different terminals writing on separate event-loop turns. Each
+    // file MUST end up with only its own terminal's data.
     const ids = ["terminal-1", "terminal-2", "terminal-3", "terminal-4"];
 
-    for (let round = 0; round < 5; round += 1) {
-      for (const terminalId of ids) {
-        store.writeCheckpoint({
-          ...baseInput({
-            terminalId,
-            tentacleId: `tentacle-${terminalId}`,
-            turnNumber: round,
-            workingDir: `/tmp/work/${terminalId}`,
+    await Promise.all(
+      ids.map(
+        (terminalId, index) =>
+          new Promise<void>((resolve) => {
+            setImmediate(() => {
+              store.writeCheckpoint({
+                ...baseInput({
+                  terminalId,
+                  tentacleId: `tentacle-${terminalId}`,
+                  turnNumber: index,
+                  workingDir: `/tmp/work/${terminalId}`,
+                  lastToolCall: {
+                    name: `tool-${index}`,
+                    args_digest: digestJsonSafe({ terminalId, index }),
+                    result_digest: digestJsonSafe({ ok: true }),
+                    ts: "2026-04-22T12:34:56.000Z",
+                  },
+                }),
+              });
+              resolve();
+            });
           }),
-        });
-      }
-    }
+      ),
+    );
 
-    // Every terminal should have exactly its own file + the last written
-    // round (5 iterations → final turnNumber = 4).
-    for (const terminalId of ids) {
+    // Every terminal should have exactly its own file and turn number.
+    for (const [index, terminalId] of ids.entries()) {
       const loaded = store.readCheckpoint(terminalId);
       expect(loaded).not.toBeNull();
       expect(loaded?.terminalId).toBe(terminalId);
       expect(loaded?.tentacleId).toBe(`tentacle-${terminalId}`);
-      expect(loaded?.turnNumber).toBe(4);
+      expect(loaded?.turnNumber).toBe(index);
       expect(loaded?.workingDir).toBe(`/tmp/work/${terminalId}`);
     }
 
@@ -153,19 +178,26 @@ describe("CheckpointStore", () => {
     expect(store.readCheckpoint("bogus")).toBeNull();
   });
 
-  it("accepts a checkpoint with lastToolCall=null (turn-boundary writes from the coordinator)", () => {
+  it("accepts a synthetic lastToolCall for exec turn-boundary writes", () => {
+    const lastToolCall = {
+      name: "exec-turn-boundary",
+      args_digest: digestJsonSafe({ reason: "pty_exit", nextTurnNumber: 4 }),
+      result_digest: digestJsonSafe({ messageIds: [] }),
+      ts: "2026-04-22T12:34:56.000Z",
+    };
     const written = store.writeCheckpoint({
       terminalId: "t-exec",
       tentacleId: "tentacle-exec",
       turnNumber: 3,
       workingDir: "/tmp/exec",
+      lastToolCall,
       gitBranch: null,
       gitHead: null,
     });
 
     const loaded = store.readCheckpoint("t-exec");
     expect(loaded).not.toBeNull();
-    expect(loaded?.lastToolCall).toBeNull();
+    expect(loaded?.lastToolCall).toEqual(lastToolCall);
     expect(loaded?.gitBranch).toBeNull();
     expect(loaded?.gitHead).toBeNull();
     expect(loaded?.updatedAt).toBe(written.updatedAt);
@@ -212,6 +244,49 @@ describe("CheckpointStore", () => {
     expect(existsSync(nested)).toBe(false);
     s.writeCheckpoint({ ...baseInput() });
     expect(existsSync(nested)).toBe(true);
+  });
+
+  it("writes a checkpoint from the Claude PostToolUse hook", () => {
+    const terminals = new Map<string, PersistedTerminal>([
+      ["terminal-1", makeTerminal({ turnNumber: 3 })],
+    ]);
+    const processor = createHookProcessor({
+      terminals,
+      sessions: new Map(),
+      transcriptDirectoryPath: tmp,
+      getApiBaseUrl: () => "http://127.0.0.1:8787",
+      persistRegistry: () => {},
+      deliverChannelMessages: () => 0,
+      releaseSessionKeepAlive: () => false,
+      checkpointStore: store,
+      getTentacleWorkspaceCwd: () => tmp,
+    });
+
+    const result = processor.handleHook(
+      "post-tool-use",
+      {
+        tool_name: "Bash",
+        tool_input: { command: "pnpm test" },
+        tool_response: { output: "ok" },
+      },
+      "terminal-1",
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(store.readCheckpoint("terminal-1")).toEqual(
+      expect.objectContaining({
+        terminalId: "terminal-1",
+        tentacleId: "tentacle-alpha",
+        turnNumber: 3,
+        workingDir: tmp,
+        lastToolCall: {
+          name: "Bash",
+          args_digest: digestJsonSafe({ command: "pnpm test" }),
+          result_digest: digestJsonSafe({ output: "ok" }),
+          ts: expect.any(String),
+        },
+      }),
+    );
   });
 });
 

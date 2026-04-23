@@ -7,7 +7,11 @@ import type { WebSocket } from "ws";
 import { WebSocketServer } from "ws";
 
 import { createChannelMessaging } from "./terminalRuntime/channelMessaging";
-import { CheckpointStore, readGitBranchAndHead } from "./terminalRuntime/checkpointStore";
+import {
+  CheckpointStore,
+  digestJsonSafe,
+  readGitBranchAndHead,
+} from "./terminalRuntime/checkpointStore";
 import {
   DEFAULT_AGENT_PROVIDER,
   DEFAULT_TERMINAL_INACTIVITY_THRESHOLD_MS,
@@ -347,11 +351,8 @@ export const createTerminalRuntime = ({
         turnNumber: escalation.turnNumber,
       });
     },
-    // Phase 10.8.7: write a checkpoint right before every respawn so the
-    // on-disk state reflects which turn we're about to resume. Uses the
-    // terminal registry + worktree manager to resolve cwd for the git
-    // lookup.
-    writeCheckpoint: ({ terminalId, turnNumber }) => {
+    // Phase 10.8.7: write a checkpoint right before every exec respawn.
+    writeCheckpoint: ({ terminalId, turnNumber, nextTurnNumber, reason, messageIds }) => {
       const terminal = terminals.get(terminalId);
       if (!terminal) return;
       let workingDir = "";
@@ -372,6 +373,12 @@ export const createTerminalRuntime = ({
           tentacleId: terminal.tentacleId,
           turnNumber,
           workingDir,
+          lastToolCall: {
+            name: "exec-turn-boundary",
+            args_digest: digestJsonSafe({ reason, nextTurnNumber }),
+            result_digest: digestJsonSafe({ messageIds }),
+            ts: new Date().toISOString(),
+          },
           gitBranch,
           gitHead,
         });
