@@ -2,6 +2,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { logVerbose } from "../logging";
+import {
+  type CheckpointStore,
+  digestJsonSafe,
+  readGitBranchAndHead,
+} from "./checkpointStore";
 import { parseClaudeTranscript } from "./claudeTranscript";
 import { storeClaudeTranscriptTurns } from "./conversations";
 import { broadcastMessage } from "./protocol";
@@ -34,6 +39,18 @@ export const createHookProcessor = (deps: {
     state: TerminalSession["agentState"],
     toolName?: string,
   ) => void;
+  /**
+   * Phase 10.8.7: per-tool-call checkpoint writer. Optional so tests + older
+   * callers that don't care about restart-safety can omit it. When present,
+   * the PostToolUse hook writes a checkpoint for the originating terminal
+   * on every Claude-code tool call.
+   */
+  checkpointStore?: CheckpointStore;
+  /**
+   * Resolves a terminal's on-disk working directory (for the git lookup in
+   * the checkpoint payload). Required when `checkpointStore` is set.
+   */
+  getTentacleWorkspaceCwd?: (tentacleIdentifier: string) => string;
 }) => {
   const {
     terminals,
@@ -44,6 +61,8 @@ export const createHookProcessor = (deps: {
     deliverChannelMessages,
     releaseSessionKeepAlive,
     onStateChange,
+    checkpointStore,
+    getTentacleWorkspaceCwd,
   } = deps;
 
   const parseSettingsObject = (fileContents: string): Record<string, unknown> | null => {
@@ -138,6 +157,24 @@ export const createHookProcessor = (deps: {
               {
                 type: "http",
                 url: `${apiBaseUrl}/api/code-intel/events`,
+                headers: { "X-Octogent-Session": "$OCTOGENT_SESSION_ID" },
+                allowedEnvVars: ["OCTOGENT_SESSION_ID"],
+                timeout: 5,
+              },
+            ],
+          },
+          // Phase 10.8.7: per-tool-call checkpoint hook. Matches ALL tools
+          // so the checkpoint file reflects the latest tool boundary,
+          // regardless of whether Claude used Edit/Write/Bash/anything. The
+          // separate matcher intentionally lives alongside the code-intel
+          // entry above rather than replacing it — mergeHookEntries
+          // dedupes by serialized identity, so both fire on tool completion.
+          {
+            matcher: "*",
+            hooks: [
+              {
+                type: "http",
+                url: `${apiBaseUrl}/api/hooks/post-tool-use`,
                 headers: { "X-Octogent-Session": "$OCTOGENT_SESSION_ID" },
                 allowedEnvVars: ["OCTOGENT_SESSION_ID"],
                 timeout: 5,
@@ -277,6 +314,70 @@ export const createHookProcessor = (deps: {
         session.stateTracker.forceState("waiting_for_user");
         onStateChange?.(octogentSessionId, "waiting_for_user");
         broadcastMessage(session, { type: "state", state: "waiting_for_user" });
+      }
+
+      return { ok: true };
+    }
+
+    if (hookName === "post-tool-use") {
+      if (!octogentSessionId) {
+        return { ok: true };
+      }
+      if (!checkpointStore || !getTentacleWorkspaceCwd) {
+        return { ok: true };
+      }
+
+      const terminal = terminals.get(octogentSessionId);
+      if (!terminal) {
+        return { ok: true };
+      }
+
+      const toolName =
+        typeof hookPayloadRecord.tool_name === "string"
+          ? hookPayloadRecord.tool_name
+          : "unknown";
+      const toolInput = hookPayloadRecord.tool_input;
+      const toolResponse = hookPayloadRecord.tool_response;
+
+      let workingDir: string;
+      try {
+        workingDir = getTentacleWorkspaceCwd(terminal.worktreeId ?? terminal.tentacleId);
+      } catch {
+        // Working dir resolution failure is not worth aborting the hook for —
+        // fall back to a best-effort empty string so the checkpoint schema
+        // stays valid and the crash-recovery story still has SOMETHING on disk.
+        workingDir = "";
+      }
+
+      const { gitBranch, gitHead } =
+        workingDir.length > 0
+          ? readGitBranchAndHead(workingDir)
+          : { gitBranch: null, gitHead: null };
+
+      try {
+        checkpointStore.writeCheckpoint({
+          terminalId: terminal.terminalId,
+          tentacleId: terminal.tentacleId,
+          turnNumber: terminal.turnNumber ?? 0,
+          workingDir,
+          lastToolCall: {
+            name: toolName,
+            args_digest: digestJsonSafe(toolInput),
+            result_digest: digestJsonSafe(toolResponse),
+            ts: new Date().toISOString(),
+          },
+          gitBranch,
+          gitHead,
+        });
+      } catch (error) {
+        // Checkpoint write failures must never fail the tool call. Log
+        // verbose and move on — the checkpoint is best-effort restart aid,
+        // not a hard correctness requirement.
+        logVerbose(
+          `[Hook] post-tool-use checkpoint write failed for ${octogentSessionId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
       }
 
       return { ok: true };
