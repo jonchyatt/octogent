@@ -1,10 +1,42 @@
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { TENTACLE_WORKTREE_BRANCH_PREFIX, TENTACLE_WORKTREE_RELATIVE_PATH } from "./constants";
 import { toErrorMessage } from "./systemClients";
 import type { GitClient, PersistedTerminal } from "./types";
 import { RuntimeInputError } from "./types";
+
+// Phase 10.9.8 — detect git errors that indicate metadata is already gone
+// (so the dir can be safely rm -rf'd). These messages are stable across
+// recent git versions on Windows + POSIX. A match means "git no longer
+// knows about this worktree" — the correct cleanup is to delete the dir
+// directly and move on, not fail the whole operation.
+const GIT_METADATA_GONE_PATTERNS: readonly RegExp[] = [
+  /is not a working tree/i,
+  /not a working tree/i,
+  /no such file or directory/i,
+  /does not exist/i,
+  /already exists.*[\n]*.*is not a working tree/i,
+];
+
+const isGitMetadataGone = (error: unknown): boolean => {
+  const msg = toErrorMessage(error);
+  return GIT_METADATA_GONE_PATTERNS.some((pattern) => pattern.test(msg));
+};
+
+// Phase 10.9.8 — branch errors that indicate the branch is already gone.
+// Same idea: don't fail cleanup when the deletion target is already deleted.
+const GIT_BRANCH_GONE_PATTERNS: readonly RegExp[] = [
+  /branch.*not found/i,
+  /not found:/i,
+  /error:.*branch.*doesn['']t exist/i,
+  /no such branch/i,
+];
+
+const isGitBranchGone = (error: unknown): boolean => {
+  const msg = toErrorMessage(error);
+  return GIT_BRANCH_GONE_PATTERNS.some((pattern) => pattern.test(msg));
+};
 
 type CreateWorktreeManagerOptions = {
   workspaceCwd: string;
@@ -102,12 +134,36 @@ export const createWorktreeManager = ({
           path: worktreePath,
         });
       } catch (error) {
-        if (bestEffort) {
+        // Phase 10.9.8 — if git says "not a working tree" or the metadata
+        // is already gone, the correct cleanup is still to delete the dir.
+        // This happens when a worktree was created via `git worktree add`
+        // but the daemon was killed before registering it, OR when a
+        // prior `git worktree prune` already removed metadata. Without
+        // this fallback, stale dirs accumulate forever and the UI's
+        // DELETE ALL button fails with a cryptic git error (S39 live
+        // failure: Jon hit "Failed to delete" because terminal-3/4 dirs
+        // existed on disk but git had no metadata for them).
+        if (isGitMetadataGone(error)) {
+          try {
+            rmSync(worktreePath, { recursive: true, force: true });
+          } catch {
+            // If even rm fails, the dir is locked or permission-blocked.
+            // In bestEffort mode, return cleanly; otherwise bubble up
+            // the ORIGINAL git error so the operator sees the true cause.
+            if (bestEffort) return;
+            throw new RuntimeInputError(
+              `Unable to remove worktree for ${tentacleId}: ${toErrorMessage(error)}`,
+            );
+          }
+          // rm succeeded. Fall through to branch cleanup — the branch
+          // likely also needs removing if git metadata was stale.
+        } else if (bestEffort) {
           return;
+        } else {
+          throw new RuntimeInputError(
+            `Unable to remove worktree for ${tentacleId}: ${toErrorMessage(error)}`,
+          );
         }
-        throw new RuntimeInputError(
-          `Unable to remove worktree for ${tentacleId}: ${toErrorMessage(error)}`,
-        );
       }
     }
 
@@ -117,6 +173,12 @@ export const createWorktreeManager = ({
         branchName,
       });
     } catch (error) {
+      // Phase 10.9.8 — branch-gone errors should not fail cleanup. If the
+      // branch is already deleted (operator used `git branch -D`, or a
+      // prior removeWorktree ran both halves already), we're done.
+      if (isGitBranchGone(error)) {
+        return;
+      }
       if (bestEffort) {
         return;
       }
