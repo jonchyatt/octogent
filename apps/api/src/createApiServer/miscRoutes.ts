@@ -116,7 +116,7 @@ export const handleUiStateRoute: ApiRouteHandler = async (
 };
 
 const HOOK_PATH_PATTERN =
-  /^\/api\/hooks\/(session-start|user-prompt-submit|pre-tool-use|notification|stop)$/;
+  /^\/api\/hooks\/(session-start|user-prompt-submit|pre-tool-use|post-tool-use|notification|stop)$/;
 
 export const handleHookRoute: ApiRouteHandler = async (
   { request, response, requestUrl, corsOrigin },

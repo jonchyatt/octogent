@@ -449,3 +449,127 @@ describe("execTurnCoordinator.handleExecSessionEnd", () => {
     expect(terminals.get("terminal-1")?.turnNumber).toBe(4);
   });
 });
+
+describe("execTurnCoordinator — Phase 10.8.7 checkpoint integration", () => {
+  it("writes a checkpoint with next turn number on clean-exit respawn, BEFORE startSession", () => {
+    const callOrder: string[] = [];
+    const writeCheckpoint = vi.fn(
+      (args: { terminalId: string; turnNumber: number }) => {
+        callOrder.push(`write:${args.terminalId}:${args.turnNumber}`);
+      },
+    );
+    const startSession = vi.fn((terminalId: string) => {
+      callOrder.push(`start:${terminalId}`);
+      return true;
+    });
+    const { coordinator, drain } = makeCoordinatorHarness(
+      makeTerminal({ turnNumber: 0 }),
+      {
+        writeCheckpoint,
+        startSession,
+      },
+    );
+    drain.mockReturnValue({
+      prompt: "[Channel message from peer]: ping",
+      messageIds: ["msg-1"],
+    });
+
+    expect(coordinator.handleExecSessionEnd("terminal-1", "pty_exit")).toBe("respawn");
+
+    // Checkpoint fires with turnNumber=1 (the turn we're respawning into).
+    expect(writeCheckpoint).toHaveBeenCalledTimes(1);
+    expect(writeCheckpoint).toHaveBeenCalledWith({
+      terminalId: "terminal-1",
+      turnNumber: 1,
+    });
+    // Ordering guarantee: checkpoint is on disk BEFORE the new turn starts,
+    // so a crash between write and startSession still leaves recoverable state.
+    expect(callOrder).toEqual([
+      "write:terminal-1:1",
+      "start:terminal-1",
+    ]);
+  });
+
+  it("reads prior checkpoint on respawn (log-only; does not seed prompt)", () => {
+    const readCheckpoint = vi.fn((_terminalId: string) => ({
+      turnNumber: 0,
+      updatedAt: "2026-04-22T00:00:00.000Z",
+    }));
+    const writeCheckpoint = vi.fn();
+    const { coordinator, drain, terminals } = makeCoordinatorHarness(
+      makeTerminal({ turnNumber: 0 }),
+      {
+        writeCheckpoint,
+        readCheckpoint,
+      },
+    );
+    drain.mockReturnValue({ prompt: "real prompt", messageIds: ["m"] });
+
+    coordinator.handleExecSessionEnd("terminal-1", "pty_exit");
+
+    // readCheckpoint was consulted.
+    expect(readCheckpoint).toHaveBeenCalledWith("terminal-1");
+    // But the prompt coming down stays the real drained prompt — checkpoint
+    // is log-only, NOT seeded into nextTurnPrompt.
+    expect(terminals.get("terminal-1")?.nextTurnPrompt).toBe("real prompt");
+  });
+
+  it("writes checkpoint on the first-timeout retry path too", () => {
+    const writeCheckpoint = vi.fn();
+    const { coordinator, drain, terminals } = makeCoordinatorHarness(
+      makeTerminal({ turnNumber: 1, killedByTimeout: true }),
+      { writeCheckpoint },
+    );
+    drain.mockReturnValue(null);
+
+    expect(coordinator.handleExecSessionEnd("terminal-1", "operator_kill")).toBe("respawn");
+
+    expect(writeCheckpoint).toHaveBeenCalledWith({
+      terminalId: "terminal-1",
+      turnNumber: 2,
+    });
+    // Turn bumped to 2 in memory as well — checkpoint write and in-memory
+    // state agree.
+    expect(terminals.get("terminal-1")?.turnNumber).toBe(2);
+  });
+
+  it("does NOT write a checkpoint on paths that don't respawn (done / skip / dead)", () => {
+    const writeCheckpoint = vi.fn();
+    const { coordinator, drain, onTerminalDead } = makeCoordinatorHarness(
+      makeTerminal({ turnNumber: 0 }),
+      { writeCheckpoint },
+    );
+    drain.mockReturnValue(null);
+
+    // Queue empty → "done" path.
+    expect(coordinator.handleExecSessionEnd("terminal-1", "pty_exit")).toBe("done");
+    expect(writeCheckpoint).not.toHaveBeenCalled();
+
+    // DEAD on max-turns.
+    const maxOut = makeCoordinatorHarness(
+      makeTerminal({ turnNumber: 3 }),
+      { writeCheckpoint, maxTurns: 3 },
+    );
+    expect(maxOut.coordinator.handleExecSessionEnd("terminal-1", "pty_exit")).toBe("dead");
+    expect(writeCheckpoint).not.toHaveBeenCalled();
+    expect(onTerminalDead).not.toHaveBeenCalled(); // different harness; closure unaffected
+  });
+
+  it("checkpoint write failure does not block the respawn (swallowed)", () => {
+    const writeCheckpoint = vi.fn(() => {
+      throw new Error("disk full");
+    });
+    const startSession = vi.fn(() => true);
+    const { coordinator, drain, terminals } = makeCoordinatorHarness(
+      makeTerminal({ turnNumber: 0 }),
+      { writeCheckpoint, startSession },
+    );
+    drain.mockReturnValue({ prompt: "p", messageIds: ["m"] });
+
+    // Coordinator still respawns despite the checkpoint throw.
+    expect(coordinator.handleExecSessionEnd("terminal-1", "pty_exit")).toBe("respawn");
+    expect(startSession).toHaveBeenCalledWith("terminal-1");
+    expect(terminals.get("terminal-1")?.turnNumber).toBe(1);
+  });
+});
+

@@ -7,6 +7,7 @@ import type { WebSocket } from "ws";
 import { WebSocketServer } from "ws";
 
 import { createChannelMessaging } from "./terminalRuntime/channelMessaging";
+import { CheckpointStore, readGitBranchAndHead } from "./terminalRuntime/checkpointStore";
 import {
   DEFAULT_AGENT_PROVIDER,
   DEFAULT_TERMINAL_INACTIVITY_THRESHOLD_MS,
@@ -93,6 +94,8 @@ export const createTerminalRuntime = ({
   const ptyLogDir = process.env.OCTOGENT_DEBUG_PTY_LOG_DIR ?? join(stateDir, "logs");
   const transcriptDirectoryPath = join(stateDir, "state", "transcripts");
   const execOutputDirectoryPath = join(stateDir, "state", "exec-output");
+  const checkpointsDirectoryPath = join(stateDir, "state", "checkpoints");
+  const checkpointStore = new CheckpointStore({ checkpointsDir: checkpointsDirectoryPath });
   const configuredMaxConcurrentSessions = (() => {
     if (maxConcurrentSessions !== undefined) {
       return maxConcurrentSessions;
@@ -344,6 +347,44 @@ export const createTerminalRuntime = ({
         turnNumber: escalation.turnNumber,
       });
     },
+    // Phase 10.8.7: write a checkpoint right before every respawn so the
+    // on-disk state reflects which turn we're about to resume. Uses the
+    // terminal registry + worktree manager to resolve cwd for the git
+    // lookup.
+    writeCheckpoint: ({ terminalId, turnNumber }) => {
+      const terminal = terminals.get(terminalId);
+      if (!terminal) return;
+      let workingDir = "";
+      try {
+        workingDir = worktreeManager.getTentacleWorkspaceCwd(
+          terminal.worktreeId ?? terminal.tentacleId,
+        );
+      } catch {
+        workingDir = "";
+      }
+      const { gitBranch, gitHead } =
+        workingDir.length > 0
+          ? readGitBranchAndHead(workingDir)
+          : { gitBranch: null, gitHead: null };
+      try {
+        checkpointStore.writeCheckpoint({
+          terminalId,
+          tentacleId: terminal.tentacleId,
+          turnNumber,
+          workingDir,
+          gitBranch,
+          gitHead,
+        });
+      } catch {
+        // Checkpoint failure must not block respawn.
+      }
+    },
+    readCheckpoint: (terminalId) => {
+      const snapshot = checkpointStore.readCheckpoint(terminalId);
+      return snapshot
+        ? { turnNumber: snapshot.turnNumber, updatedAt: snapshot.updatedAt }
+        : null;
+    },
   });
 
   const hookProcessor = createHookProcessor({
@@ -355,6 +396,8 @@ export const createTerminalRuntime = ({
     deliverChannelMessages: channelMessaging.deliverChannelMessages,
     releaseSessionKeepAlive: sessionRuntime.releaseSessionKeepAlive,
     onStateChange: broadcastTerminalStateChanged,
+    checkpointStore,
+    getTentacleWorkspaceCwd: worktreeManager.getTentacleWorkspaceCwd,
   });
 
   reconcilePersistedLifecycle();

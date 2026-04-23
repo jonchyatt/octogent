@@ -1,3 +1,4 @@
+import { logVerbose } from "../logging";
 import { TERMINAL_EXEC_MAX_TURNS } from "./constants";
 import type { PersistedTerminal } from "./types";
 
@@ -75,6 +76,32 @@ export type CreateExecTurnCoordinatorOptions = {
    */
   onTerminalDead?: (escalation: ExecTurnCoordinatorEscalation) => void;
   /**
+   * Phase 10.8.7: write a checkpoint for the terminal at turn boundaries.
+   * Called right before the respawn so the on-disk checkpoint reflects the
+   * turn number we're ABOUT to start — if the respawn crashes the worker,
+   * the next operator-triggered respawn can read the checkpoint and know
+   * where the session was. Optional: tests omit it.
+   *
+   * The coordinator does not construct a payload itself — it delegates to
+   * this callback so the caller can decide which fields to populate (cwd,
+   * git info, etc). The coordinator only knows about turn numbers.
+   */
+  writeCheckpoint?: (args: {
+    terminalId: string;
+    turnNumber: number;
+    nextTurnNumber: number;
+    reason: "pty_exit" | "timeout_retry";
+    messageIds: string[];
+  }) => void;
+  /**
+   * Phase 10.8.7: read the last checkpoint for a terminal, used for the
+   * resume log on respawn. Returning `null` means "no checkpoint" — the log
+   * just notes "no prior checkpoint" in that case.
+   */
+  readCheckpoint?: (
+    terminalId: string,
+  ) => { turnNumber: number; updatedAt: string } | null;
+  /**
    * Override the default max-turn ceiling (for tests). Falls back to the
    * OCTOGENT_EXEC_MAX_TURNS env-derived constant.
    */
@@ -109,8 +136,55 @@ export const createExecTurnCoordinator = (
     startSession,
     persistTerminalChanges,
     onTerminalDead,
+    writeCheckpoint,
+    readCheckpoint,
     maxTurns,
   } = options;
+
+  /**
+   * Log + write a checkpoint right before a respawn. Wrapped in try/catch so
+   * a checkpoint failure (disk full, permissions, etc.) never blocks the
+   * restart itself — the checkpoint is best-effort restart aid, not a hard
+   * correctness gate.
+   */
+  const logAndCheckpointRespawn = (args: {
+    terminalId: string;
+    currentTurn: number;
+    nextTurn: number;
+    reason: "pty_exit" | "timeout_retry";
+    messageIds: string[];
+  }): void => {
+    const { terminalId, currentTurn, nextTurn, reason, messageIds } = args;
+    if (readCheckpoint) {
+      try {
+        const prior = readCheckpoint(terminalId);
+        if (prior) {
+          logVerbose(
+            `[ExecTurnCoordinator] respawn terminal=${terminalId} resumingFromCheckpointTurn=${prior.turnNumber} priorUpdatedAt=${prior.updatedAt} nextTurn=${nextTurn}`,
+          );
+        } else {
+          logVerbose(
+            `[ExecTurnCoordinator] respawn terminal=${terminalId} noPriorCheckpoint nextTurn=${nextTurn}`,
+          );
+        }
+      } catch {
+        // Checkpoint read is best-effort; swallow.
+      }
+    }
+    if (writeCheckpoint) {
+      try {
+        writeCheckpoint({
+          terminalId,
+          turnNumber: currentTurn,
+          nextTurnNumber: nextTurn,
+          reason,
+          messageIds,
+        });
+      } catch {
+        // Checkpoint write failure must not block respawn.
+      }
+    }
+  };
   const maxTurnsCeiling =
     typeof maxTurns === "number" && Number.isFinite(maxTurns) && maxTurns > 0
       ? Math.floor(maxTurns)
@@ -194,6 +268,17 @@ export const createExecTurnCoordinator = (
       terminal.turnNumber = currentTurn + 1;
       terminal.retryCount = currentRetries + 1;
       delete terminal.killedByTimeout;
+
+      // Phase 10.8.7: checkpoint the new turn number before respawning.
+      // Survives even if the respawn fails — the next operator-triggered
+      // resume can see we were at turn N+1 with retryCount=1.
+      logAndCheckpointRespawn({
+        terminalId,
+        currentTurn,
+        nextTurn: currentTurn + 1,
+        reason: "timeout_retry",
+        messageIds: drainedRetry?.messageIds ?? [],
+      });
 
       let respawnOk = false;
       try {
@@ -281,6 +366,15 @@ export const createExecTurnCoordinator = (
     // below succeeds. Persist after startSession returns success.
     terminal.nextTurnPrompt = drained.prompt;
     terminal.turnNumber = currentTurn + 1;
+
+    // Phase 10.8.7: checkpoint the new turn number before respawning.
+    logAndCheckpointRespawn({
+      terminalId,
+      currentTurn,
+      nextTurn: currentTurn + 1,
+      reason: "pty_exit",
+      messageIds: drained.messageIds,
+    });
 
     let respawnOk = false;
     try {
