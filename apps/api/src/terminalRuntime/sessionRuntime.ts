@@ -14,10 +14,20 @@ import {
   TERMINAL_MAX_CONCURRENT_SESSIONS,
   TERMINAL_SCROLLBACK_MAX_BYTES,
   TERMINAL_SESSION_IDLE_GRACE_MS,
+  TERMINAL_STUCK_DEAD_MS,
+  TERMINAL_STUCK_POLL_INTERVAL_MS,
+  TERMINAL_STUCK_THRESHOLD_MS,
+  TERMINAL_STUCK_TIER2_MS,
   buildExecCommand,
   buildResumeCommand,
 } from "./constants";
 import { spawnExecChild } from "./execSessionAdapter";
+import {
+  type StuckDetectionThresholds,
+  type StuckEscalationExhausted,
+  type StuckTier,
+  createStuckDetector,
+} from "./stuckDetection";
 import {
   type ConversationTranscriptEvent,
   type ConversationTranscriptEventPayload,
@@ -57,6 +67,46 @@ type CreateSessionRuntimeOptions = {
   scrollbackMaxBytes?: number;
   maxConcurrentSessions?: number;
   execTimeoutMs?: number;
+  /** Stuck-detection thresholds (Phase 10.8.6). Override for tests. */
+  stuckDetection?: {
+    tier1Ms?: number;
+    tier2Ms?: number;
+    deadMs?: number;
+    /**
+     * Poll interval in ms. Set to 0 to disable the wall-clock timer
+     * entirely (tests drive runStuckCheckNow manually).
+     */
+    pollIntervalMs?: number;
+  };
+  /**
+   * Send an @system channel message to the stuck terminal. Wire to
+   * channelMessaging.sendSystemChannelMessage(toTerminalId, content).
+   * Stuck detection is a no-op if this is omitted.
+   */
+  sendSystemChannelMessage?: (terminalId: string, content: string) => void;
+  /**
+   * Produce the TIER_2 replan summary for a stuck terminal. Short text
+   * (few hundred chars). Called from the poller only on TIER_2 entry.
+   * Omitting this yields "(summary unavailable)".
+   */
+  composeStuckSummary?: (terminalId: string) => string;
+  /**
+   * Persist in-memory PersistedTerminal mutations (stuckTier fields).
+   * Wire to the outer runtime's debounced `persistRegistry`. If omitted,
+   * tier transitions are still observed via onStuckTierChange but the
+   * stuckTier field won't make it to disk.
+   */
+  persistStuckTierChanges?: () => void;
+  /**
+   * Tier transition observer. `tier === undefined` means recovery to
+   * HEALTHY. Used for logging / broadcast fan-out.
+   */
+  onStuckTierChange?: (terminalId: string, tier: StuckTier | undefined) => void;
+  /**
+   * DEAD threshold crossed. Caller should flip lifecycleState to "dead"
+   * and fire a terminal-state-changed broadcast for operator attention.
+   */
+  onStuckEscalationExhausted?: (info: StuckEscalationExhausted) => void;
   onStateChange?: (terminalId: string, state: AgentRuntimeState, toolName?: string) => void;
   onSessionStart?: (terminalId: string, details: TerminalSessionStartDetails) => void;
   onSessionEnd?: (terminalId: string, details: TerminalSessionEndDetails) => void;
@@ -86,6 +136,16 @@ const ANSI_ESCAPE = String.fromCharCode(0x1b);
 const BROKEN_OSC_TAIL_RE = new RegExp(
   `^\\][^${ANSI_BEL}${ANSI_ESCAPE}]*(?:${ANSI_BEL}|${ANSI_ESCAPE}\\\\)`,
 );
+const TOOL_CALL_OUTPUT_PATTERNS = [
+  /"type"\s*:\s*"tool_use"/i,
+  /"type"\s*:\s*"function_call"/i,
+  /"tool_name"\s*:/i,
+  /\btool_use\b/i,
+  /\bfunction_call\b/i,
+];
+
+const looksLikeToolCallOutput = (chunk: string): boolean =>
+  TOOL_CALL_OUTPUT_PATTERNS.some((pattern) => pattern.test(chunk));
 
 export const createSessionRuntime = ({
   websocketServer,
@@ -101,6 +161,12 @@ export const createSessionRuntime = ({
   scrollbackMaxBytes = TERMINAL_SCROLLBACK_MAX_BYTES,
   maxConcurrentSessions = TERMINAL_MAX_CONCURRENT_SESSIONS,
   execTimeoutMs,
+  stuckDetection,
+  sendSystemChannelMessage,
+  composeStuckSummary,
+  persistStuckTierChanges,
+  onStuckTierChange,
+  onStuckEscalationExhausted,
   onStateChange,
   onSessionStart,
   onSessionEnd,
@@ -115,6 +181,25 @@ export const createSessionRuntime = ({
     typeof execTimeoutMs === "number" && Number.isFinite(execTimeoutMs) && execTimeoutMs > 0
       ? Math.floor(execTimeoutMs)
       : TERMINAL_EXEC_TIMEOUT_MS;
+
+  const positiveOr = (value: number | undefined, fallback: number): number =>
+    typeof value === "number" && Number.isFinite(value) && value > 0
+      ? Math.floor(value)
+      : fallback;
+  const stuckThresholds: StuckDetectionThresholds = {
+    tier1Ms: positiveOr(stuckDetection?.tier1Ms, TERMINAL_STUCK_THRESHOLD_MS),
+    tier2Ms: positiveOr(stuckDetection?.tier2Ms, TERMINAL_STUCK_TIER2_MS),
+    deadMs: positiveOr(stuckDetection?.deadMs, TERMINAL_STUCK_DEAD_MS),
+  };
+  // Poll interval uses >=0 semantics (0 disables the setInterval so tests
+  // can drive the state machine manually). Env/constant default is 30s.
+  const stuckPollIntervalMs = (() => {
+    const requested = stuckDetection?.pollIntervalMs;
+    if (typeof requested !== "number" || !Number.isFinite(requested) || requested < 0) {
+      return TERMINAL_STUCK_POLL_INTERVAL_MS;
+    }
+    return Math.floor(requested);
+  })();
 
   const getShellLaunch = () => {
     if (process.platform === "win32") {
@@ -733,6 +818,7 @@ export const createSessionRuntime = ({
       }
     }
 
+    const sessionStartedAt = Date.now();
     const session: TerminalSession = {
       terminalId: sessionId,
       tentacleId,
@@ -749,6 +835,11 @@ export const createSessionRuntime = ({
       transcriptEventCount: 0,
       pendingInput: "",
       hasTranscriptEnded: false,
+      // Anchor stuck detection at session start so a freshly-spawned worker
+      // gets the full tier1Ms grace window before escalation. lastToolCallAt
+      // is seeded identically; hooks or output-side tool-call markers move it.
+      lastActivityAt: sessionStartedAt,
+      lastToolCallAt: sessionStartedAt,
       keepAliveWithoutClients: isExecMode ? false : Boolean(terminalRecord?.initialPrompt),
     };
     if (debugLog) {
@@ -782,7 +873,12 @@ export const createSessionRuntime = ({
       appendDebugLog(session, `pty-output session=${sessionId} chunk=${JSON.stringify(chunk)}`);
       appendScrollback(session, chunk);
       session.execOutputLog?.write(chunk);
-      const nextState = session.stateTracker.observeChunk(chunk, Date.now());
+      const observedAt = Date.now();
+      session.lastActivityAt = observedAt;
+      if (looksLikeToolCallOutput(chunk)) {
+        session.lastToolCallAt = observedAt;
+      }
+      const nextState = session.stateTracker.observeChunk(chunk, observedAt);
       broadcastMessage(session, {
         type: "output",
         data: chunk,
@@ -1088,6 +1184,70 @@ export const createSessionRuntime = ({
     return true;
   };
 
+  // Stuck-detection wiring (Phase 10.8.6). The detector reads `sessions` +
+  // `terminals` on each tick, so constructing it here — after both maps are
+  // populated and all per-session mutators (killSession in particular) are
+  // declared — avoids any Temporal Dead Zone surprises if a tick fires
+  // immediately.
+  //
+  // `persistTerminalChanges` is routed through the onStuckTierChange hook
+  // so the outer terminalRuntime handles actual registry persistence (it
+  // owns the debounce). The detector's own persist hook is a no-op that
+  // keeps the internal contract explicit.
+  const stuckDetector = createStuckDetector({
+    terminals,
+    sessions,
+    thresholds: stuckThresholds,
+    sendSystemChannelMessage: (terminalId: string, content: string) => {
+      if (sendSystemChannelMessage) {
+        sendSystemChannelMessage(terminalId, content);
+      }
+    },
+    composeStuckSummary: (terminalId: string) =>
+      composeStuckSummary ? composeStuckSummary(terminalId) : "(summary unavailable)",
+    killSession: (terminalId: string) => {
+      killSession(terminalId);
+    },
+    persistTerminalChanges: () => {
+      if (persistStuckTierChanges) {
+        persistStuckTierChanges();
+      }
+    },
+    onStuckTierChange: (terminalId, tier) => {
+      onStuckTierChange?.(terminalId, tier);
+    },
+    onStuckEscalationExhausted: (info) => {
+      onStuckEscalationExhausted?.(info);
+    },
+  });
+
+  const runStuckCheckNow = (now: number = Date.now()): void => {
+    stuckDetector.runCheck(now);
+  };
+
+  let stuckPollTimer: ReturnType<typeof setInterval> | undefined;
+  if (stuckPollIntervalMs > 0) {
+    stuckPollTimer = setInterval(() => {
+      try {
+        stuckDetector.runCheck(Date.now());
+      } catch {
+        // Swallow — the next tick gets another shot.
+      }
+    }, stuckPollIntervalMs);
+    // Prevent the poller from blocking process exit in tests / short-lived CLI.
+    if (typeof stuckPollTimer.unref === "function") {
+      stuckPollTimer.unref();
+    }
+  }
+
+  const closeAll = () => {
+    if (stuckPollTimer) {
+      clearInterval(stuckPollTimer);
+      stuckPollTimer = undefined;
+    }
+    close();
+  };
+
   return {
     closeSession,
     stopSession,
@@ -1098,7 +1258,8 @@ export const createSessionRuntime = ({
     writeInput,
     resizeSession,
     releaseSessionKeepAlive,
-    close,
+    close: closeAll,
+    runStuckCheckNow,
     getSessionCapacity: () => ({
       active: sessions.size,
       max: sessionLimit,

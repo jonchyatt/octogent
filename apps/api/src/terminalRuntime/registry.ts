@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 
 import { TERMINAL_REGISTRY_VERSION } from "./constants";
 
+import { isStuckTier } from "./stuckDetection";
 import { toErrorMessage } from "./systemClients";
 import type {
   PersistedTerminal,
@@ -294,6 +295,12 @@ const parseV3Terminals = (
       entry.retryCount >= 0
     ) {
       terminal.retryCount = entry.retryCount;
+    }
+    if (isStuckTier(entry.stuckTier)) {
+      terminal.stuckTier = entry.stuckTier;
+    }
+    if (typeof entry.stuckTierEnteredAt === "string") {
+      terminal.stuckTierEnteredAt = entry.stuckTierEnteredAt;
     }
     if (typeof entry.initialPrompt === "string") terminal.initialPrompt = entry.initialPrompt;
     if (typeof entry.initialInputDraft === "string") {
