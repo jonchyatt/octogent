@@ -235,6 +235,34 @@ export const TERMINAL_EXEC_TIMEOUT_MS =
 export const TERMINAL_EXEC_MAX_TURNS =
   Number.parseInt(process.env.OCTOGENT_EXEC_MAX_TURNS ?? "", 10) || 50;
 
+// Phase 10.8.6 — stuck detection thresholds.
+//
+// A RUNNING terminal with no tool-call activity for this many ms enters
+// TIER_1 (synthetic @system status-check channel message). If no activity
+// resumes within an additional `STUCK_TIER2_MS`, the terminal advances to
+// TIER_2 (@system replan message). If still no activity after another
+// `STUCK_DEAD_MS`, the lifecycle flips to DEAD and killSession fires.
+//
+// All three values are env-overridable so the test harness can drive the
+// state machine deterministically without real-time sleeps. A poller
+// interval of 0 disables the wall-clock setInterval entirely — tests
+// invoke runStuckCheckNow(now) directly with injected timestamps.
+export const TERMINAL_STUCK_THRESHOLD_MS =
+  Number.parseInt(process.env.OCTOGENT_STUCK_THRESHOLD_MS ?? "", 10) || 120_000;
+export const TERMINAL_STUCK_TIER2_MS =
+  Number.parseInt(
+    process.env.OCTOGENT_STUCK_TIER2_MS ?? process.env.OCTOGENT_STUCK_TIER_2_MS ?? "",
+    10,
+  ) || 60_000;
+export const TERMINAL_STUCK_DEAD_MS =
+  Number.parseInt(process.env.OCTOGENT_STUCK_DEAD_MS ?? "", 10) || 120_000;
+export const TERMINAL_STUCK_POLL_INTERVAL_MS = (() => {
+  const raw = process.env.OCTOGENT_STUCK_POLL_INTERVAL_MS;
+  if (raw === undefined) return 30_000;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 30_000;
+})();
+
 export const TERMINAL_SESSION_IDLE_GRACE_MS = 5 * 60 * 1000;
 export const TERMINAL_SCROLLBACK_MAX_BYTES = 512 * 1024;
 export const TERMINAL_MAX_CONCURRENT_SESSIONS = 32;

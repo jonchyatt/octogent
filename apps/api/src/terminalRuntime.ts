@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import type { IncomingMessage } from "node:http";
 import { join } from "node:path";
 import type { Duplex } from "node:stream";
@@ -164,6 +165,8 @@ export const createTerminalRuntime = ({
 
     terminal.lifecycleState = "running";
     terminal.lifecycleReason = undefined;
+    delete terminal.stuckTier;
+    delete terminal.stuckTierEnteredAt;
     terminal.lifecycleUpdatedAt = startedAt;
     terminal.startedAt = startedAt;
     terminal.endedAt = undefined;
@@ -220,8 +223,8 @@ export const createTerminalRuntime = ({
 
   const markTerminalDead = (
     terminalId: string,
-    reason: "timeout" | "max_turns",
-    details: { turnNumber: number },
+    reason: "timeout" | "max_turns" | "stuck_escalation_exhausted",
+    details: { turnNumber?: number },
   ) => {
     const terminal = terminals.get(terminalId);
     if (!terminal) {
@@ -229,10 +232,13 @@ export const createTerminalRuntime = ({
     }
 
     terminal.lifecycleState = "dead";
-    terminal.lifecycleReason =
-      reason === "timeout"
-        ? `exec_timeout_turn_${details.turnNumber}`
-        : `exec_max_turns_${details.turnNumber}`;
+    if (reason === "timeout") {
+      terminal.lifecycleReason = `exec_timeout_turn_${details.turnNumber ?? 0}`;
+    } else if (reason === "max_turns") {
+      terminal.lifecycleReason = `exec_max_turns_${details.turnNumber ?? 0}`;
+    } else {
+      terminal.lifecycleReason = "stuck_escalation_exhausted";
+    }
     terminal.lifecycleUpdatedAt = new Date().toISOString();
     persistRegistry();
     broadcastTerminalStateChanged(terminalId, "dead");
@@ -303,6 +309,12 @@ export const createTerminalRuntime = ({
   // Late-bind the coordinator via a mutable holder so we can wire it after
   // channelMessaging is constructed.
   let execTurnCoordinator: ExecTurnCoordinator | undefined;
+  // channelMessaging is also constructed AFTER sessionRuntime (same cycle),
+  // but stuck detection needs sendChannelMessage. Late-bind via a mutable
+  // holder that resolves at call time.
+  let sendSystemChannelMessageRef:
+    | ((terminalId: string, content: string) => void)
+    | undefined;
 
   const sessionRuntime = createSessionRuntime({
     websocketServer,
@@ -318,6 +330,24 @@ export const createTerminalRuntime = ({
     onStateChange: broadcastTerminalStateChanged,
     onSessionStart: markTerminalRunning,
     onSessionEnd: markTerminalEnded,
+    sendSystemChannelMessage: (terminalId, content) => {
+      if (sendSystemChannelMessageRef) {
+        sendSystemChannelMessageRef(terminalId, content);
+      }
+    },
+    composeStuckSummary: (terminalId) => composeStuckSummary(terminalId),
+    persistStuckTierChanges: persistRegistry,
+    onStuckTierChange: (terminalId, _tier) => {
+      const terminal = terminals.get(terminalId);
+      if (!terminal) return;
+      broadcastTerminalEvent({
+        type: "terminal-updated",
+        snapshot: toTerminalSnapshot(terminal),
+      });
+    },
+    onStuckEscalationExhausted: ({ terminalId }) => {
+      markTerminalDead(terminalId, "stuck_escalation_exhausted", {});
+    },
     // Returns coordinator's decision so teardownSession can suppress the
     // subsequent onSessionEnd broadcast on respawn (LOW-2). If coordinator
     // isn't wired yet (brief construction window — LOW-1), default to
@@ -325,6 +355,84 @@ export const createTerminalRuntime = ({
     onExecSessionEnd: (terminalId, reason) =>
       execTurnCoordinator?.handleExecSessionEnd(terminalId, reason) ?? "done",
   });
+
+  // Compose the TIER_2 replan summary from the exec-output log tail (or
+  // scrollback fallback for interactive terminals) + git status + cwd.
+  // Kept short (~1KB ceiling) so the channel message delivery stays cheap.
+  function composeStuckSummary(terminalId: string): string {
+    const terminal = terminals.get(terminalId);
+    if (!terminal) {
+      return "(terminal unknown)";
+    }
+    const parts: string[] = [];
+    let cwd: string | undefined;
+    try {
+      cwd = worktreeManager.getTentacleWorkspaceCwd(
+        terminal.worktreeId ?? terminal.tentacleId,
+      );
+    } catch {
+      cwd = undefined;
+    }
+    if (cwd) {
+      parts.push(`cwd=${cwd}`);
+    } else {
+      parts.push("cwd=(unavailable)");
+    }
+    if (typeof terminal.turnNumber === "number") {
+      parts.push(`turn=${terminal.turnNumber}`);
+    }
+    // Last 10 lines of exec-output log when available.
+    let didAddOutput = false;
+    try {
+      const execLogPath = join(execOutputDirectoryPath, `${terminalId}.log`);
+      if (existsSync(execLogPath)) {
+        const lines = readFileSync(execLogPath, "utf8").trim().split(/\r?\n/).slice(-10).join("\n");
+        if (lines.length > 0) {
+          parts.push(`last_output:\n${lines}`);
+          didAddOutput = true;
+        }
+      } else {
+        const session = sessions.get(terminalId);
+        if (session && session.scrollbackChunks.length > 0) {
+          const combined = session.scrollbackChunks.join("");
+          const tail = combined.slice(Math.max(0, combined.length - 1024));
+          const lines = tail.trim().split(/\r?\n/).slice(-10).join("\n");
+          if (lines.length > 0) {
+            parts.push(`last_output:\n${lines}`);
+            didAddOutput = true;
+          }
+        }
+      }
+    } catch {
+      // Summary is best-effort — any fs error just omits the log tail.
+    }
+    if (!didAddOutput) {
+      parts.push("last_output=(none)");
+    }
+    // Best-effort git status. Swallow errors — we don't want a bad git
+    // exec to break the channel message.
+    if (cwd) {
+      try {
+        const status = gitClient.readWorktreeStatus({ cwd });
+        const files = status.changedFiles.slice(0, 10).join(", ");
+        parts.push(
+          [
+            `git_status: branch=${status.branchName}`,
+            `dirty=${status.isDirty}`,
+            `ahead=${status.aheadCount}`,
+            `behind=${status.behindCount}`,
+            `changed=${status.changedFiles.length}`,
+            files.length > 0 ? `files=${files}` : "files=(none)",
+          ].join(" "),
+        );
+      } catch {
+        parts.push("git_status=(unavailable)");
+      }
+    } else {
+      parts.push("git_status=(unavailable)");
+    }
+    return parts.join("\n");
+  }
 
   const gitOps = createGitOperations({
     terminals,
@@ -338,6 +446,19 @@ export const createTerminalRuntime = ({
     writeInput: (terminalId: string, data: string) => sessionRuntime.writeInput(terminalId, data),
     dbPath: join(stateDir, "state", "channels.db"),
   });
+
+  // Bind the late-bound @system sender used by stuck detection. Phase
+  // 10.8.6 routes TIER_1 + TIER_2 channel messages through the same
+  // SQLite-backed delivery path as normal agent-to-agent messages; the
+  // sender is the literal "@system" string (the outbound @mention
+  // parser runs only on agent-produced text, so this label never loops).
+  sendSystemChannelMessageRef = (terminalId, content) => {
+    try {
+      channelMessaging.sendSystemChannelMessage(terminalId, content);
+    } catch {
+      // Stuck detection must never throw — swallow and continue.
+    }
+  };
 
   execTurnCoordinator = createExecTurnCoordinator({
     terminals,

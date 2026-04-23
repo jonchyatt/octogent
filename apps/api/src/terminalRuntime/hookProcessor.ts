@@ -305,6 +305,10 @@ export const createHookProcessor = (deps: {
 
       logVerbose(`[Hook] pre-tool-use: tool=${toolName} session=${octogentSessionId}`);
 
+      const observedAt = Date.now();
+      session.lastActivityAt = observedAt;
+      session.lastToolCallAt = observedAt;
+
       if (toolName) {
         session.lastToolName = toolName;
       }

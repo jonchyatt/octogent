@@ -20,6 +20,9 @@ import {
 import type { WebSocket } from "ws";
 
 import type { AgentRuntimeState, AgentStateTracker } from "../agentStateDetection";
+import { StuckTier } from "./stuckDetection";
+
+export { StuckTier } from "./stuckDetection";
 
 export type TerminalStateMessage = {
   type: "state";
@@ -107,6 +110,16 @@ export type TerminalSession = {
   transcriptEventCount?: number;
   pendingInput?: string;
   hasTranscriptEnded?: boolean;
+  // Epoch ms timestamp of last observed output/activity. Updated on every
+  // pty onData chunk (interactive + exec). A response after a stuck prompt
+  // recovers the terminal to HEALTHY. Not persisted: updated too frequently
+  // for disk writes, and session restart clears it.
+  lastActivityAt?: number;
+  // Epoch ms timestamp of last observed tool-call event. Updated by Claude
+  // PreToolUse hooks and best-effort Codex/Claude output pattern detection.
+  // Read by the stuck-detection poller (Phase 10.8.6): no tool calls for
+  // OCTOGENT_STUCK_THRESHOLD_MS escalates TIER_1 → TIER_2 → DEAD.
+  lastToolCallAt?: number;
   initialPrompt?: string;
   isInitialPromptSent?: boolean;
   initialInputDraft?: string;
@@ -194,6 +207,18 @@ export type PersistedTerminal = {
   // attempt issued, second consecutive timeout escalates to DEAD. Reset to
   // 0 on any clean pty_exit (non-consecutive timeouts don't accumulate).
   retryCount?: number;
+  // Stuck-detection tier (Phase 10.8.6). Undefined/HEALTHY = no active
+  // escalation. STUCK_TIER_1 = @system status-check channel message has
+  // been sent. STUCK_TIER_2 = @system replan channel message has been sent.
+  // Reaching the DEAD threshold flips lifecycleState to "dead" and clears
+  // this field.
+  // Persisted so operator UI sees escalation state across API restarts,
+  // though on restart the associated session is gone and the poller will
+  // not re-enter the machine until a new session starts.
+  stuckTier?: StuckTier;
+  // ISO timestamp of the most recent stuckTier transition (TIER_1 or
+  // TIER_2 entry). Cleared on recovery to HEALTHY or on DEAD escalation.
+  stuckTierEnteredAt?: string;
   initialPrompt?: string;
   initialInputDraft?: string;
   lastActiveAt?: string;

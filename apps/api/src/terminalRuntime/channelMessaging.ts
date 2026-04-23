@@ -20,6 +20,8 @@ import type { ChannelMessage, PersistedTerminal, TerminalSession } from "./types
  *   - Status counts for diagnostics
  */
 
+export const SYSTEM_CHANNEL_SENDER = "@system";
+
 export type CreateChannelMessagingOptions = {
   terminals: Map<string, PersistedTerminal>;
   sessions: Map<string, TerminalSession>;
@@ -87,12 +89,11 @@ export const createChannelMessaging = (deps: CreateChannelMessagingOptions) => {
     return claimed.length;
   };
 
-  return {
-    sendChannelMessage(
-      toTerminalId: string,
-      fromTerminalId: string,
-      content: string,
-    ): ChannelMessage | null {
+  const sendChannelMessage = (
+    toTerminalId: string,
+    fromTerminalId: string,
+    content: string,
+  ): ChannelMessage | null => {
       if (!terminals.has(toTerminalId)) {
         return null;
       }
@@ -133,6 +134,13 @@ export const createChannelMessaging = (deps: CreateChannelMessagingOptions) => {
       }
 
       return message;
+  };
+
+  return {
+    sendChannelMessage,
+
+    sendSystemChannelMessage(toTerminalId: string, content: string): ChannelMessage | null {
+      return sendChannelMessage(toTerminalId, SYSTEM_CHANNEL_SENDER, content);
     },
 
     listChannelMessages(terminalId: string): ChannelMessage[] {
