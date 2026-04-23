@@ -881,6 +881,41 @@
   background: rgba(212, 160, 23, 0.1);
 }
 
+/* Phase 10.9.5 — live terminal state badges. These override the static
+ * operator-intent badges (idle/active/blocked/review) when the tentacle
+ * has at least one attached terminal. They reflect runtime reality so an
+ * operator can see at a glance whether a tile's worker is actually doing
+ * anything or failing. RUNNING green, FAILED red with amber "running with
+ * errors" warning, INACTIVE/STALE muted gray. */
+.deck-pod-status--running {
+  color: #4ec9b0;
+  background: rgba(78, 201, 176, 0.18);
+  font-weight: 600;
+}
+
+.deck-pod-status--running-errors {
+  color: #d4a017;
+  background: rgba(224, 85, 85, 0.2);
+  font-weight: 600;
+  text-shadow: 0 0 4px rgba(224, 85, 85, 0.4);
+}
+
+.deck-pod-status--failed {
+  color: #ff6b6b;
+  background: rgba(224, 85, 85, 0.22);
+  font-weight: 600;
+}
+
+.deck-pod-status--stale {
+  color: #b8860b;
+  background: rgba(184, 134, 11, 0.1);
+}
+
+.deck-pod-status--inactive {
+  color: #6a7080;
+  background: #1a1d24;
+}
+
 .deck-pod-identity-text {
   display: flex;
   flex-direction: column;

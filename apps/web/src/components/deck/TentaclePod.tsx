@@ -13,6 +13,35 @@ export const STATUS_LABELS: Record<DeckTentacleSummary["status"], string> = {
   "needs-review": "review",
 };
 
+// Phase 10.9.5 — derive the badge the UI actually shows, preferring the
+// live terminal state (running / failed / stale / inactive) over the stored
+// operator-intent status (idle / active / blocked / needs-review). The
+// stored status still renders when no terminals are attached — otherwise the
+// live rollup wins because that's what the operator needs to see to kill a
+// runaway worker before it burns quota.
+export const deriveDisplayStatus = (
+  tentacle: DeckTentacleSummary,
+): { label: string; stateClass: string } => {
+  const live = tentacle.liveTerminal;
+  if (live && live.state !== null) {
+    switch (live.state) {
+      case "running":
+        return { label: live.label, stateClass: "running" };
+      case "running-with-errors":
+        return { label: live.label, stateClass: "running-errors" };
+      case "failed":
+        return { label: live.label, stateClass: "failed" };
+      case "stale":
+        return { label: live.label, stateClass: "stale" };
+      case "inactive":
+        return { label: live.label, stateClass: "inactive" };
+      default:
+        return { label: STATUS_LABELS[tentacle.status], stateClass: tentacle.status };
+    }
+  }
+  return { label: STATUS_LABELS[tentacle.status], stateClass: tentacle.status };
+};
+
 // ─── TodoList ────────────────────────────────────────────────────────────────
 
 export const TodoList = ({
@@ -127,6 +156,7 @@ export const TentaclePod = ({
     <article
       className={`deck-pod${isFocused ? " deck-pod--focused" : ""}`}
       data-status={tentacle.status}
+      data-live-state={tentacle.liveTerminal?.state ?? "none"}
       style={{ borderColor: "var(--accent-primary)" }}
     >
       <header className="deck-pod-header">
@@ -191,9 +221,14 @@ export const TentaclePod = ({
       </header>
 
       <div className="deck-pod-body">
-        <span className={`deck-pod-status deck-pod-status--${tentacle.status}`}>
-          {STATUS_LABELS[tentacle.status]}
-        </span>
+        {(() => {
+          const display = deriveDisplayStatus(tentacle);
+          return (
+            <span className={`deck-pod-status deck-pod-status--${display.stateClass}`}>
+              {display.label}
+            </span>
+          );
+        })()}
         <div className="deck-pod-identity">
           <div className="deck-pod-octopus-col">
             <div className="deck-pod-octopus">

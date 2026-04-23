@@ -13,6 +13,7 @@ import {
   toggleTodoItem,
   updateDeckTentacleSuggestedSkills,
 } from "../deck/readDeckTentacles";
+import { deriveAllTentacleLiveStates } from "../deck/deriveTentacleLiveState";
 import { detectCycle, parseTodoNeeds } from "@octogent/core";
 
 import { resolvePrompt } from "../prompts";
@@ -76,13 +77,29 @@ const buildSingleTodoWorkerPrompt = async ({
 
 export const handleDeckTentaclesRoute: ApiRouteHandler = async (
   { request, response, requestUrl, corsOrigin },
-  { workspaceCwd, projectStateDir },
+  { runtime, workspaceCwd, projectStateDir },
 ) => {
   if (requestUrl.pathname !== "/api/deck/tentacles") return false;
 
   if (request.method === "GET") {
     const tentacles = readDeckTentacles(workspaceCwd, projectStateDir);
-    writeJson(response, 200, tentacles, corsOrigin);
+    // Phase 10.9.5 — enrich each tentacle with a live rolled-up state of
+    // its attached terminals so the UI tile can show RUNNING / FAILED /
+    // INACTIVE accurately instead of a static "IDLE" that doesn't reflect
+    // runtime reality. Derivation is pure — runtime.listTerminalSnapshots
+    // is cheap (iterates in-memory Map), and deriveAllTentacleLiveStates
+    // is O(tentacles × terminals).
+    const allTerminals = runtime.listTerminalSnapshots();
+    const liveStates = deriveAllTentacleLiveStates(
+      tentacles.map((t) => t.tentacleId),
+      allTerminals,
+    );
+    const enriched = tentacles.map((t) => {
+      const live = liveStates.get(t.tentacleId);
+      if (!live || live.state === null) return t;
+      return { ...t, liveTerminal: live };
+    });
+    writeJson(response, 200, enriched, corsOrigin);
     return true;
   }
 

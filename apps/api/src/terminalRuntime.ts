@@ -611,6 +611,13 @@ export const createTerminalRuntime = ({
       ...(terminal.endedAt ? { endedAt: terminal.endedAt } : {}),
       ...(terminal.exitCode !== undefined ? { exitCode: terminal.exitCode } : {}),
       ...(terminal.exitSignal !== undefined ? { exitSignal: terminal.exitSignal } : {}),
+      // Phase 10.9.7/10.9.5 — propagate respawn-control state into the
+      // snapshot so the DECK tile derivation can correctly label failed /
+      // operator-killed terminals instead of showing a generic "IDLE".
+      ...(terminal.doNotRespawn === true ? { doNotRespawn: true } : {}),
+      ...(terminal.lastExitErrorClass !== undefined
+        ? { lastExitErrorClass: terminal.lastExitErrorClass }
+        : {}),
     };
   };
 
