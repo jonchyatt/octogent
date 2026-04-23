@@ -52,6 +52,23 @@ export const buildTerminalSnapshotsUrl = (runtimeBaseUrl = readRuntimeBaseUrl())
   return buildAbsoluteUrl(runtimeBaseUrl, "/api/terminal-snapshots");
 };
 
+// Phase 10.9.6 — exec-output endpoints used by the CONVERSATIONS tab to
+// render raw worker logs for exec-mode terminals (interactive-mode
+// transcripts remain in /api/conversations).
+export const buildExecOutputsListUrl = (runtimeBaseUrl = readRuntimeBaseUrl()) => {
+  if (!runtimeBaseUrl) return "/api/exec-outputs";
+  return buildAbsoluteUrl(runtimeBaseUrl, "/api/exec-outputs");
+};
+
+export const buildExecOutputItemUrl = (
+  terminalId: string,
+  runtimeBaseUrl = readRuntimeBaseUrl(),
+) => {
+  const encoded = encodeURIComponent(terminalId);
+  if (!runtimeBaseUrl) return `/api/exec-outputs/${encoded}`;
+  return buildAbsoluteUrl(runtimeBaseUrl, `/api/exec-outputs/${encoded}`);
+};
+
 export const buildTerminalEventsSocketUrl = (
   runtimeBaseUrl = readRuntimeBaseUrl(),
   location: LocationLike = window.location,

@@ -703,3 +703,162 @@
   outline: 1px solid #ff9a9a;
   outline-offset: 1px;
 }
+
+/* Phase 10.9.6 — sub-tabs inside the CONVERSATIONS view: transcripts +
+ * exec-output logs. Both tabs live in the same view, swapping both the
+ * sidebar list AND the main pane. */
+.conversations-sidebar-with-tabs {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.conversations-tab-switcher {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid #2a2d36;
+  flex-shrink: 0;
+}
+
+.conversations-tab {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  background: transparent;
+  color: #8f95a6;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.conversations-tab:hover {
+  background: #1a1d24;
+  color: #c8cdd8;
+}
+
+.conversations-tab--active {
+  background: #1e2128;
+  color: #e5e7eb;
+  border-color: #3a3d46;
+  font-weight: 600;
+}
+
+.exec-outputs-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.exec-outputs-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #2a2d36;
+}
+
+.exec-outputs-sidebar-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8f95a6;
+}
+
+.exec-outputs-refresh {
+  background: transparent;
+  color: #c8cdd8;
+  border: 1px solid #3a3d46;
+  border-radius: 3px;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.exec-outputs-refresh:hover {
+  background: #2a2d36;
+}
+
+.exec-outputs-refresh:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.exec-outputs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.exec-outputs-item {
+  border-bottom: 1px solid #1a1d24;
+}
+
+.exec-outputs-item-button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  align-items: flex-start;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.exec-outputs-item-button:hover {
+  background: #1a1d24;
+}
+
+.exec-outputs-item--selected .exec-outputs-item-button {
+  background: #1e2128;
+  border-left: 2px solid #4ec9b0;
+}
+
+.exec-outputs-item-id {
+  color: #e5e7eb;
+  font-size: 0.85rem;
+  font-weight: 500;
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+.exec-outputs-item-meta {
+  color: #8f95a6;
+  font-size: 0.7rem;
+}
+
+.exec-outputs-empty,
+.exec-outputs-error {
+  color: #8f95a6;
+  font-size: 0.85rem;
+  padding: 0.75rem;
+  margin: 0;
+}
+
+.exec-outputs-error {
+  color: #ff6b6b;
+}
+
+.exec-outputs-content {
+  margin: 0;
+  padding: 1rem;
+  overflow: auto;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #c8cdd8;
+  background: #0f1115;
+  white-space: pre;
+  flex: 1;
+  min-height: 0;
+}
