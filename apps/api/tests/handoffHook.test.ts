@@ -25,6 +25,7 @@ import {
   CONTEXT_BURN_PROMPT,
   CONTEXT_BURN_PROMPT_TEXT,
   HANDOFF_AUTO_COMPACT_PERCENT,
+  HANDOFF_DISABLE_AUTOCOMPACT,
   HANDOFF_SLASH_COMMAND_BODY,
   HANDOFF_SLASH_COMMAND_FILENAME,
   composeInitialPromptWithPriorHandoff,
@@ -266,9 +267,10 @@ describe("hookProcessor — slash command + PreCompact installation", () => {
     const innerCommand = preCompactEntries[0]?.hooks?.[0]?.command ?? "";
     expect(innerCommand).toContain("/api/hooks/pre-compact");
     expect(innerCommand).toContain("OCTOGENT_SESSION_ID");
-    // The env override moves Claude Code auto-compact down to the configured
-    // percent so PreCompact fires near "30%" instead of the default ~95%.
+    // Phase 10.9.9a — override + disable-flag together make Claude Code's
+    // auto-compact effectively dead. Handoff moves to external monitoring.
     expect(parsed.env?.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).toBe(HANDOFF_AUTO_COMPACT_PERCENT);
+    expect(parsed.env?.DISABLE_AUTOCOMPACT).toBe(HANDOFF_DISABLE_AUTOCOMPACT);
   });
 
   it("merges with existing settings.json without dropping unrelated keys", () => {
@@ -299,6 +301,7 @@ describe("hookProcessor — slash command + PreCompact installation", () => {
     expect(merged.hooks?.PreCompact?.length).toBeGreaterThan(0);
     expect(merged.env?.EXISTING).toBe("yes");
     expect(merged.env?.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).toBe(HANDOFF_AUTO_COMPACT_PERCENT);
+    expect(merged.env?.DISABLE_AUTOCOMPACT).toBe(HANDOFF_DISABLE_AUTOCOMPACT);
   });
 });
 

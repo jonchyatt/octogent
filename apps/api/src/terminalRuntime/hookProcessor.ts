@@ -13,6 +13,7 @@ import {
   CONTEXT_BURN_PROMPT_TEXT,
   CONTEXT_BURN_PROMPT,
   HANDOFF_AUTO_COMPACT_PERCENT,
+  HANDOFF_DISABLE_AUTOCOMPACT,
   HANDOFF_SLASH_COMMAND_BODY,
   HANDOFF_SLASH_COMMAND_FILENAME,
 } from "./handoffTemplate";
@@ -356,6 +357,7 @@ export const createHookProcessor = (deps: {
       mergedSettings.hooks = mergedHooks;
       mergedSettings.env = mergeEnvSettings(mergedSettings.env, {
         CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: HANDOFF_AUTO_COMPACT_PERCENT,
+        DISABLE_AUTOCOMPACT: HANDOFF_DISABLE_AUTOCOMPACT,
       });
       writeFileSync(targetSettingsPath, `${JSON.stringify(mergedSettings, null, 2)}\n`, "utf8");
     } catch {

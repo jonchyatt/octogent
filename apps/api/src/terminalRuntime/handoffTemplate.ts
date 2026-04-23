@@ -2,7 +2,25 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node
 import { join } from "node:path";
 
 export const HANDOFF_SLASH_COMMAND_FILENAME = "handoff.md";
-export const HANDOFF_AUTO_COMPACT_PERCENT = "30";
+
+// Phase 10.9.9a — auto-compact is ALWAYS destructive in a multi-turn
+// worker (ratified Jarvis-side, see
+// `memory/feedback/feedback_auto_compact_is_always_destructive.md`).
+//
+// Previously "30" which told Claude Code to auto-compact at 30% used, pairing
+// with the PreCompact hook that injected `/handoff`. Problem: the auto-compact
+// step itself scrambled the context window BEFORE the hook ran — the handoff
+// was written from a compacted, lossy snapshot. S38/S39 Phase 10.8/10.9 Octogent
+// commits shipped under this regime are drift-suspect.
+//
+// Fix: set the override to "99" so Claude's auto-compact effectively never
+// fires, plus set `DISABLE_AUTOCOMPACT=1` (the canonical kill-switch Claude
+// Code honors end-to-end). Worker handoffs move to external context-window
+// monitoring (Phase 10.9.9c, pending). Until 10.9.9c lands, workers run until
+// the full 1M window saturates OR the exec timeout fires — both are less
+// destructive than a mid-turn compact.
+export const HANDOFF_AUTO_COMPACT_PERCENT = "99";
+export const HANDOFF_DISABLE_AUTOCOMPACT = "1";
 export const CONTEXT_BURN_PROMPT_TEXT =
   "CONTEXT BURN THRESHOLD REACHED. Invoke /handoff now and exit.";
 export const CONTEXT_BURN_PROMPT = `${CONTEXT_BURN_PROMPT_TEXT}\n`;
