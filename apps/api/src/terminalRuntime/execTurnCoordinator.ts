@@ -1,5 +1,5 @@
 import { logVerbose } from "../logging";
-import { TERMINAL_EXEC_MAX_TURNS } from "./constants";
+import { TERMINAL_EXEC_MAX_TURNS, isAutoRespawnDisabled } from "./constants";
 import type { PersistedTerminal } from "./types";
 
 /**
@@ -200,6 +200,19 @@ export const createExecTurnCoordinator = (
     }
     if (terminal.runtimeMode !== "exec") {
       return "skip";
+    }
+
+    // Phase 10.9.7 — emergency kill switch.
+    // When OCTOGENT_DISABLE_AUTO_RESPAWN=1, every session-end is terminal.
+    // Operator must explicitly spawn a new session for each turn. This is
+    // the S38 respawn-loop circuit-breaker — quota/rate-limit errors were
+    // being treated as transient, causing infinite respawn + paid quota
+    // burn. See `feedback_respawn_loops_burn_paid_quotas.md`.
+    if (isAutoRespawnDisabled()) {
+      logVerbose(
+        `[ExecTurnCoordinator] auto-respawn DISABLED by OCTOGENT_DISABLE_AUTO_RESPAWN=1; terminal=${terminalId} reason=${reason} → done`,
+      );
+      return "done";
     }
 
     // MED-2: claude-code has no resume primitive. Respawning would spawn a

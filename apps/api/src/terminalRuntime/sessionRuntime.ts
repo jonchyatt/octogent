@@ -20,6 +20,7 @@ import {
   TERMINAL_STUCK_TIER2_MS,
   buildExecCommand,
   buildResumeCommand,
+  resolveAgentProvider,
 } from "./constants";
 import { spawnExecChild } from "./execSessionAdapter";
 import {
@@ -656,7 +657,8 @@ export const createSessionRuntime = ({
       return;
     }
 
-    const provider = terminal?.agentProvider ?? DEFAULT_AGENT_PROVIDER;
+    const rawProvider = terminal?.agentProvider ?? DEFAULT_AGENT_PROVIDER;
+    const provider = resolveAgentProvider(rawProvider);
 
     const bootstrapCommand =
       TERMINAL_BOOTSTRAP_COMMANDS[provider] ?? TERMINAL_BOOTSTRAP_COMMANDS[DEFAULT_AGENT_PROVIDER];

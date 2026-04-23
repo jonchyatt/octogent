@@ -6,6 +6,25 @@ export const TENTACLE_WORKTREE_RELATIVE_PATH = ".octogent/worktrees";
 export const TENTACLE_WORKTREE_BRANCH_PREFIX = "octogent/";
 export const DEFAULT_AGENT_PROVIDER = "claude-code" as const;
 
+// Emergency kill switch: when `OCTOGENT_DISABLE_CODEX=1`, every codex
+// agent-provider request is transparently remapped to claude-code at the
+// provider-resolution choke points (build*Command + interactive bootstrap).
+// Stored terminal.agentProvider state is NOT mutated, so restarting the
+// daemon without the env var restores codex routing.
+//
+// Why: S38 respawn-loop bug burned Jon's paid Codex Pro quota — stuck
+// detection + retry + treating rate-limit/quota errors as transient =
+// infinite respawn. Until the root-cause circuit-breaker ships (Task
+// 10.9.7: quota/rate-limit errors non-retryable + operator_kill sets
+// do-not-respawn flag), this env var is the hard off-switch that
+// prevents ANY codex spawn regardless of how it was requested (operator
+// CLI, dashboard UI, swarm orchestrator, auto-respawn replan).
+export const isCodexDisabled = (): boolean =>
+  (process.env.OCTOGENT_DISABLE_CODEX ?? "").trim() === "1";
+
+export const resolveAgentProvider = (provider: string): string =>
+  isCodexDisabled() && provider === "codex" ? "claude-code" : provider;
+
 // Bootstrap commands per provider. The Codex default mirrors how Jon runs it
 // locally — full authority, no approval prompts. Claude's equivalent is
 // `--dangerously-skip-permissions` which most interactive users enable globally;
@@ -72,17 +91,18 @@ export const buildExecCommand = (
   outfile: string,
   roots?: readonly string[],
 ): { command: string; args: string[]; stdin: string } => {
+  const effectiveProvider = resolveAgentProvider(provider);
   const prefix =
-    TERMINAL_EXEC_COMMANDS[provider] ??
+    TERMINAL_EXEC_COMMANDS[effectiveProvider] ??
     TERMINAL_EXEC_COMMANDS[DEFAULT_AGENT_PROVIDER] ??
     DEFAULT_CLAUDE_EXEC_CMD;
   const parts = prefix.split(/\s+/).filter((part) => part.length > 0);
   if (parts.length === 0) {
-    throw new Error(`buildExecCommand: empty command prefix for provider "${provider}".`);
+    throw new Error(`buildExecCommand: empty command prefix for provider "${effectiveProvider}".`);
   }
   const [command, ...baseArgs] = parts as [string, ...string[]];
 
-  if (provider === "codex") {
+  if (effectiveProvider === "codex") {
     const withRoots = applyCodexRoots(baseArgs, roots);
     return {
       command,
@@ -190,7 +210,8 @@ export const buildResumeCommand = (
   sessionId?: string,
   roots?: readonly string[],
 ): { command: string; args: string[]; stdin: string } => {
-  if (provider === "codex") {
+  const effectiveProvider = resolveAgentProvider(provider);
+  if (effectiveProvider === "codex") {
     const resumeTarget = sessionId && sessionId.length > 0 ? sessionId : "--last";
     // Roots-honoring version of the canonical resume invocation. We NEVER parse
     // OCTOGENT_CODEX_EXEC_CMD here (see comment above) — the resume invocation
@@ -217,8 +238,30 @@ export const buildResumeCommand = (
   // Claude fallback (unreachable from coordinator post-MED-2 but safe if
   // called directly). No resume primitive; fresh exec loses context. Roots
   // ignored for Claude (no equivalent sandbox flag).
-  return buildExecCommand(provider, prompt, outfile, roots);
+  return buildExecCommand(effectiveProvider, prompt, outfile, roots);
 };
+
+// Phase 10.9.7 — emergency auto-respawn kill switch.
+//
+// When `OCTOGENT_DISABLE_AUTO_RESPAWN=1`, the exec turn coordinator will NOT
+// auto-start a new session after a turn ends or after operator_kill. Each
+// turn must be explicitly started by an operator. Channel messaging still
+// works, but the coordinator treats every worker as single-shot.
+//
+// Why: S38 shipped stuck-detection + per-tool checkpointing + retry-replan
+// logic (Phases 10.8.6 / 10.8.7). Combined, these created an unbreakable
+// respawn loop — killing a worker immediately triggered replan → new
+// spawn → same quota error → same replan → infinite. Jon needs a hard
+// off-switch to run Octogent safely while the root-cause circuit-breaker
+// (quota/rate-limit errors non-retryable + operator_kill sets
+// do-not-respawn) is designed + shipped.
+//
+// Scope: this switch disables the auto-respawn that follows a natural turn
+// boundary OR a stuck-detection escalation OR an operator_kill. Manual
+// startSession() calls still work — the switch just removes the
+// coordinator's autonomous restart trigger.
+export const isAutoRespawnDisabled = (): boolean =>
+  (process.env.OCTOGENT_DISABLE_AUTO_RESPAWN ?? "").trim() === "1";
 
 // Hard ceiling on exec-mode worker runtime. Protects against hung workers
 // (network stall, runaway model, broken prompt) that would otherwise hold

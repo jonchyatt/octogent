@@ -1,4 +1,5 @@
 import { logVerbose } from "../logging";
+import { isAutoRespawnDisabled } from "./constants";
 import type { PersistedTerminal, TerminalSession } from "./types";
 
 /**
@@ -167,6 +168,17 @@ export const createStuckDetector = (
   } = options;
 
   const runCheck = (now: number): void => {
+    // Phase 10.9.7 — emergency kill switch. When OCTOGENT_DISABLE_AUTO_RESPAWN=1,
+    // stuck-detection is a no-op. TIER_1/TIER_2 synthetic messages can trigger
+    // workers to spawn child terminals (swarm-style), which is exactly the
+    // respawn-loop behavior the switch exists to prevent. Skipping the entire
+    // check loop stops ALL tier transitions, including DEAD escalation — the
+    // exec turn coordinator's own disabled-guard will keep terminals from
+    // reviving after natural exits, so nothing leaks.
+    if (isAutoRespawnDisabled()) {
+      return;
+    }
+
     // Collect ids first; a DEAD transition mutates `sessions` (via killSession
     // → teardown → sessions.delete) which would invalidate the iterator.
     const sessionIds = [...sessions.keys()];
