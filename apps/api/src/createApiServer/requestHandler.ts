@@ -41,6 +41,10 @@ import {
   handleWorkspaceSetupRoute,
 } from "./miscRoutes";
 import {
+  handleExecOutputItemRoute,
+  handleExecOutputsCollectionRoute,
+} from "./execOutputRoutes";
+import {
   handleMonitorConfigRoute,
   handleMonitorFeedRoute,
   handleMonitorRefreshRoute,
@@ -134,6 +138,7 @@ const API_ROUTE_MAP: ReadonlyMap<string, readonly ApiRouteHandler[]> = new Map([
   ["github", [handleGithubSummaryRoute]],
   ["setup", [handleWorkspaceSetupRoute]],
   ["workspace-info", [handleWorkspaceInfoRoute]],
+  ["exec-outputs", [handleExecOutputsCollectionRoute, handleExecOutputItemRoute]],
   ["ui-state", [handleUiStateRoute]],
   ["monitor", [handleMonitorConfigRoute, handleMonitorFeedRoute, handleMonitorRefreshRoute]],
   [
