@@ -24,6 +24,40 @@ import { parseUiStatePatch } from "./uiStateParsers";
 
 const WORKSPACE_SETUP_PATH = "/api/setup";
 const WORKSPACE_SETUP_STEP_PATH_PATTERN = /^\/api\/setup\/steps\/([^/]+)$/;
+const WORKSPACE_INFO_PATH = "/api/workspace-info";
+
+/**
+ * Phase 10.9.1 — reports the ACTIVE workspace info. External tools (eg
+ * Boardroom CLI in the jarvis repo) need this to resolve paths that the
+ * daemon wrote, like worktree dirs under .octogent/worktrees/. Reading
+ * ~/.octogent/projects.json is not sufficient because the daemon can be
+ * bound to a project that isn't registered there, and "lastOpenedAt"
+ * doesn't always match the running bind point.
+ *
+ * Response shape is stable — adding fields is OK, renaming is not.
+ */
+export const handleWorkspaceInfoRoute: ApiRouteHandler = async (
+  { request, response, requestUrl, corsOrigin },
+  { workspaceCwd, projectStateDir },
+) => {
+  if (requestUrl.pathname !== WORKSPACE_INFO_PATH) return false;
+
+  if (request.method !== "GET") {
+    writeMethodNotAllowed(response, corsOrigin);
+    return true;
+  }
+
+  writeJson(
+    response,
+    200,
+    {
+      workspaceCwd,
+      projectStateDir,
+    },
+    corsOrigin,
+  );
+  return true;
+};
 
 const isWorkspaceSetupStepId = (value: string): value is WorkspaceSetupStepId =>
   value === "initialize-workspace" ||
