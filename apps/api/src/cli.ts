@@ -829,7 +829,7 @@ const main = async () => {
 
   octogent tentacle create <name>      Create a tentacle (Octogent must be running)
     --description, -d                  Tentacle description
-    --agent-provider                   codex (default) | claude-code | kimi | openclaw
+    --agent-provider                   claude-code (default) | codex | kimi | openclaw
   octogent tentacle list               List tentacles
   octogent terminal create [options]   Create a terminal
     --name, -n                         Terminal display name
@@ -841,7 +841,7 @@ const main = async () => {
     --parent-terminal-id               Parent terminal ID for child terminals
     --prompt-template                  Prompt template name
     --prompt-variables                 JSON object of prompt template variables
-    --agent-provider                   codex (default) | claude-code | kimi | openclaw
+    --agent-provider                   claude-code (default) | codex | kimi | openclaw
     --runtime-mode                     interactive (default) | exec
                                        exec mode spawns the agent as a direct
                                        child_process with prompt as argv — no

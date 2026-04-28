@@ -6,18 +6,19 @@ export const TERMINAL_REGISTRY_RELATIVE_PATH = ".octogent/state/tentacles.json";
 export const TERMINAL_TRANSCRIPT_RELATIVE_PATH = ".octogent/state/transcripts";
 export const TENTACLE_WORKTREE_RELATIVE_PATH = ".octogent/worktrees";
 export const TENTACLE_WORKTREE_BRANCH_PREFIX = "octogent/";
-export const DEFAULT_AGENT_PROVIDER = "codex" as const;
+export const DEFAULT_AGENT_PROVIDER = "claude-code" as const;
 
 // Provider resolution must never silently change one model family into another.
 // Codex-labelled workers must run Codex, not a hidden Claude fallback.
 export const resolveAgentProvider = (provider: string): string => provider;
 
-// Bootstrap commands per provider. The Codex default mirrors how Jon runs it
-// locally — full authority, no approval prompts. Claude's equivalent is
-// `--dangerously-skip-permissions` which most interactive users enable globally;
-// Codex's is `--dangerously-bypass-approvals-and-sandbox`. Workers spawned
-// inside Octogent inherit this mode so they act autonomously instead of
-// stalling on approval prompts that no one is there to answer.
+// Bootstrap commands per provider. Claude Code is the default worker runtime —
+// it's the boss. Codex is a co-worker reserved for adversarial review,
+// dual-model critique, and parallel proposals. Claude's authority flag is
+// `--dangerously-skip-permissions`; Codex's is `--dangerously-bypass-approvals-
+// and-sandbox`. Workers spawned inside Octogent inherit this mode so they act
+// autonomously instead of stalling on approval prompts that no one is there
+// to answer.
 //
 // Override per-host via env:
 //   OCTOGENT_CODEX_CMD="codex --full-auto"        ← sandboxed auto-exec
