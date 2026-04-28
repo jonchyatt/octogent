@@ -529,7 +529,7 @@ export const App = () => {
                   body: JSON.stringify({
                     name: "tentacle-planner",
                     workspaceMode: "shared",
-                    agentProvider: "codex",
+                    agentProvider: "claude-code",
                     promptTemplate: "tentacle-planner",
                   }),
                 });
