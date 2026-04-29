@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import type { IncomingMessage } from "node:http";
 import { join } from "node:path";
 import type { Duplex } from "node:stream";
@@ -584,8 +584,50 @@ export const createTerminalRuntime = ({
 
   reconcilePersistedLifecycle();
 
+  // S56 — Codex HIGH-#1: monotonic terminal IDs, never reuse.
+  //
+  // Old code started searching from 1 every call. Combined with the new
+  // orphan-reaping in reconcilePersistedLifecycle, this would allocate
+  // terminal-1 over and over (because the registry is empty after boot,
+  // and worktrees might have been auto-pruned by spawn-worker.sh).
+  // Reuse causes channel-data confusion: terminal-1 from yesterday and
+  // terminal-1 from today share a channel namespace.
+  //
+  // Fix: scan ALL persistent sources of terminal-N artifacts to find the
+  // high-water mark, then start at N+1. Sources:
+  //   - in-memory `terminals` map (current-session allocations)
+  //   - in-memory `sessions` map (active PTY sessions)
+  //   - worktree dirs on disk (worktreeManager-managed, may or may not be
+  //     pruned by wrapper)
+  //   - transcript files on disk (NEVER auto-pruned, the most reliable
+  //     monotonicity backstop — every terminal that ever ran left one)
+  //
+  // The skip-if-exists checks below the high-water mark remain as a
+  // safety net (they should rarely fire post-fix).
+  const computeTerminalIdHighWaterMark = (): number => {
+    const extractNumber = (id: string): number => {
+      const match = /^terminal-(\d+)/.exec(id);
+      return match ? Number(match[1]) : 0;
+    };
+    let maxN = 0;
+    for (const id of terminals.keys()) {
+      maxN = Math.max(maxN, extractNumber(id));
+    }
+    for (const id of sessions.keys()) {
+      maxN = Math.max(maxN, extractNumber(id));
+    }
+    try {
+      for (const file of readdirSync(transcriptDirectoryPath)) {
+        maxN = Math.max(maxN, extractNumber(file));
+      }
+    } catch {
+      // Transcripts dir might not exist on first run; ignore.
+    }
+    return maxN;
+  };
+
   const allocateTerminalId = () => {
-    let candidateNumber = 1;
+    let candidateNumber = computeTerminalIdHighWaterMark() + 1;
     while (candidateNumber < Number.MAX_SAFE_INTEGER) {
       const candidateId = `${TERMINAL_ID_PREFIX}${candidateNumber}`;
       if (terminals.has(candidateId)) {
