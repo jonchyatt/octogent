@@ -406,11 +406,23 @@ export const TERMINAL_STUCK_TIER2_MS =
   ) || 60_000;
 export const TERMINAL_STUCK_DEAD_MS =
   Number.parseInt(process.env.OCTOGENT_STUCK_DEAD_MS ?? "", 10) || 120_000;
+// S56 — default flipped from 30000 to 0. The @system stuck-check poll was
+// the #1 token-bleed vector across S43-S55: every poll cycle delivers a
+// "Status check: are you stuck?" message into a worker's channel, which
+// (when the worker had auto-respawn enabled and a paid-quota error class)
+// triggered 1 worker turn per poll, multiplied by N idle workers. Codex
+// HIGH-#3 from S55 architecture review.
+//
+// Polling is now OPT-IN: set OCTOGENT_STUCK_POLL_INTERVAL_MS=30000 (or any
+// positive ms value) to re-enable. The recommended replacement is the
+// productive-output heartbeat in scripts/spawn-with-hardcap.mjs which
+// watches git HEAD + --watch-path file mtime instead of asking workers
+// to self-report. Both can co-exist; productive-output is non-intrusive.
 export const TERMINAL_STUCK_POLL_INTERVAL_MS = (() => {
   const raw = process.env.OCTOGENT_STUCK_POLL_INTERVAL_MS;
-  if (raw === undefined) return 30_000;
+  if (raw === undefined) return 0;
   const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 30_000;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 })();
 
 export const TERMINAL_SESSION_IDLE_GRACE_MS = 5 * 60 * 1000;
