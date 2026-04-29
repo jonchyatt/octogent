@@ -255,19 +255,60 @@ export const createTerminalRuntime = ({
   };
 
   const reconcilePersistedLifecycle = () => {
+    // S56 — Codex HIGH-#2: orphan reaping is now adopt-or-kill, then prune.
+    //
+    // Old behavior (still preserved for non-running entries that need to
+    // remain visible): mark `running` terminals as `stale` with reason
+    // `orphaned_process` / `missing_process`. This left ghost entries in the
+    // registry that confused operators and racked up token cost when click-
+    // to-revive in the dashboard restarted dead workers under their old IDs.
+    //
+    // New behavior:
+    //   1. For each `running` entry, decide adopt-or-kill:
+    //      - process alive → SIGTERM (we can't reliably resume an interactive
+    //        PTY without its session object; killing is honest, leaving it
+    //        running is dishonest because the daemon has no handle to it)
+    //      - process dead → no kill needed
+    //   2. Then PURGE all non-running entries from the registry. Operator
+    //      stopped, PTY exited, hit timeout, hit max-turns, etc. — none of
+    //      these need to persist beyond the daemon lifecycle. Transcripts
+    //      remain on disk for audit.
+    //
+    // Net effect: a fresh daemon boots with a registry containing ONLY the
+    // terminals it can verifiably control. No ghosts. No "stop terminal-N
+    // and 2s later it's back with a new PID" mystery.
+    //
+    // Operators who want long-running stale-tentacle visibility should rely
+    // on transcripts/ + spawn-log.jsonl, which are NOT touched here.
     let didChange = false;
-    const now = new Date().toISOString();
 
+    const toPurge: string[] = [];
     for (const terminal of terminals.values()) {
-      if (terminal.lifecycleState !== "running") {
+      if (terminal.lifecycleState === "running") {
+        // Adopt-or-kill the orphan process before marking the entry for
+        // purge. SIGTERM (not SIGKILL) so the worker has a chance to flush
+        // its transcript / commit-on-exit hook.
+        if (isProcessAlive(terminal.processId)) {
+          try {
+            process.kill(terminal.processId as number, "SIGTERM");
+          } catch {
+            // Process may already be exiting / belong to a different uid.
+            // Either way, we'd rather drop the registry entry than keep an
+            // unreachable ghost.
+          }
+        }
+        toPurge.push(terminal.terminalId);
         continue;
       }
 
-      terminal.lifecycleState = "stale";
-      terminal.lifecycleReason = isProcessAlive(terminal.processId)
-        ? "orphaned_process"
-        : "missing_process";
-      terminal.lifecycleUpdatedAt = now;
+      // Non-running entries (stopped, exited, dead, stale, registered) —
+      // purge as well. Registered = create-but-never-started, also safe to
+      // drop because the operator has to re-issue createTerminal anyway.
+      toPurge.push(terminal.terminalId);
+    }
+
+    for (const terminalId of toPurge) {
+      terminals.delete(terminalId);
       didChange = true;
     }
 
