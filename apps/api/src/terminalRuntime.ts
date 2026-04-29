@@ -877,6 +877,10 @@ export const createTerminalRuntime = ({
   };
 
   return {
+    // S56 — exposed for the OctoBoss channel inbox path resolution in
+    // miscRoutes.handleChannelMessagesRoute. Read-only.
+    workspaceCwd,
+
     listTerminalSnapshots(): TerminalSnapshot[] {
       const snapshots: TerminalSnapshot[] = [];
       for (const terminal of terminals.values()) {

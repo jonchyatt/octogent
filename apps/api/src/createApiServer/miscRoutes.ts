@@ -1,3 +1,6 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join as joinPath } from "node:path";
+
 import type { WorkspaceSetupStepId } from "@octogent/core";
 
 import {
@@ -21,6 +24,18 @@ import {
   writeNoContent,
 } from "./routeHelpers";
 import { parseUiStatePatch } from "./uiStateParsers";
+
+// S56 — OctoBoss endpoint constant. Workers send `channel send octoboss <msg>`
+// uniformly via the channel API; this route translates the special target to
+// a filesystem write under <workspace>/.octogent/octoboss-inbox/. OctoBoss
+// reads the inbox on session-start (or on demand) and acts on the messages.
+//
+// Codex MEDIUM-#4 from S55 architecture review. Pre-S56, send-to-octoboss
+// returned 404 because OctoBoss is a standalone Claude session, not a
+// registered terminal. Workers had to improvise filesystem handoffs ad-hoc.
+// Now the protocol is formal: channel send octoboss → inbox file.
+const OCTOBOSS_TERMINAL_ID = "octoboss";
+const OCTOBOSS_INBOX_DIRNAME = "octoboss-inbox";
 
 const WORKSPACE_SETUP_PATH = "/api/setup";
 const WORKSPACE_SETUP_STEP_PATH_PATTERN = /^\/api\/setup\/steps\/([^/]+)$/;
@@ -336,6 +351,49 @@ export const handleChannelMessagesRoute: ApiRouteHandler = async (
 
   if (content.length === 0) {
     writeJson(response, 400, { error: "Message content cannot be empty." }, corsOrigin);
+    return true;
+  }
+
+  // Special target: octoboss. OctoBoss is a standalone Claude session, not a
+  // registered terminal in the daemon's tentacle registry, so we can't deliver
+  // via runtime.sendChannelMessage. Translate to a filesystem inbox write.
+  if (terminalId === OCTOBOSS_TERMINAL_ID) {
+    try {
+      const inboxDir = joinPath(runtime.workspaceCwd, ".octogent", OCTOBOSS_INBOX_DIRNAME);
+      mkdirSync(inboxDir, { recursive: true });
+      const ts = new Date().toISOString().replace(/[:.]/g, "-");
+      const fromSlug = (fromTerminalId || "anonymous").replace(/[^A-Za-z0-9_.-]/g, "_");
+      const filename = `${ts}-${fromSlug}.md`;
+      const filePath = joinPath(inboxDir, filename);
+      const fileBody = [
+        `# Worker → OctoBoss`,
+        ``,
+        `- From: ${fromTerminalId || "(anonymous)"}`,
+        `- At:   ${new Date().toISOString()}`,
+        ``,
+        `---`,
+        ``,
+        content,
+        ``,
+      ].join("\n");
+      writeFileSync(filePath, fileBody, "utf8");
+      const message = {
+        messageId: `octoboss-inbox-${ts}-${fromSlug}`,
+        toTerminalId: OCTOBOSS_TERMINAL_ID,
+        fromTerminalId: fromTerminalId || null,
+        content,
+        deliveredVia: "filesystem-inbox",
+        inboxPath: filePath,
+      };
+      writeJson(response, 201, message, corsOrigin);
+    } catch (error) {
+      writeJson(
+        response,
+        500,
+        { error: `Failed to write OctoBoss inbox file: ${(error as Error).message}` },
+        corsOrigin,
+      );
+    }
     return true;
   }
 
